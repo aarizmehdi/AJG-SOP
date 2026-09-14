@@ -1,0 +1,17 @@
+{
+  "name": "aziz-jan-sop-knowledge",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/web"],
+  "scripts": {
+    "dev": "npm run dev --workspace @ajt/web",
+    "build": "npm run build --workspace @ajt/web",
+    "typecheck": "npm run typecheck --workspace @ajt/web",
+    "lint": "npm run lint --workspace @ajt/web",
+    "format:check": "npm run format:check --workspace @ajt/web",
+    "test": "npm run test --workspace @ajt/web"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
