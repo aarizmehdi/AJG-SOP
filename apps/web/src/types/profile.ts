@@ -11,3 +11,5 @@ export const profileSchema = z.object({
   organizational_roles: z.array(z.string()),
   preferred_language: z.string().nullable(),
 });
+
+export type Profile = z.infer<typeof profileSchema>;

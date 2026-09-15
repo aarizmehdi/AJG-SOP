@@ -10,11 +10,11 @@ export function configureAccessTokenProvider(
   accessTokenProvider = provider;
 }
 
-async function authorizedHeaders(path: string, supplied?: HeadersInit) {
+async function authorizedHeaders(supplied?: HeadersInit) {
   const headers = new Headers(supplied);
   if ((import.meta.env.VITE_APP_MODE ?? 'fixture') === 'fixture') {
-    const fixtureIdentity =
-      window.localStorage.getItem('ajt-fixture-identity') ?? 'employee';
+    const fixtureIdentity = window.localStorage.getItem('ajt-fixture-identity');
+    if (!fixtureIdentity) throw new ApiError('Authentication required', 401);
     headers.set('Authorization', `Fixture ${fixtureIdentity}`);
   } else {
     const token = await accessTokenProvider();
@@ -37,7 +37,7 @@ export async function apiRequest<T>(
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
-  const headers = await authorizedHeaders(path, init?.headers);
+  const headers = await authorizedHeaders(init?.headers);
   if (!(init?.body instanceof FormData))
     headers.set('Content-Type', 'application/json');
   const response = await fetch(`${apiUrl}${path}`, { ...init, headers });
@@ -54,7 +54,7 @@ export async function apiRequest<T>(
 
 export async function apiBlob(path: string): Promise<Blob> {
   const response = await fetch(`${apiUrl}${path}`, {
-    headers: await authorizedHeaders(path),
+    headers: await authorizedHeaders(),
   });
   if (!response.ok)
     throw new ApiError('Source preview unavailable', response.status);

@@ -1,146 +1,246 @@
 import { useMutation } from '@tanstack/react-query';
-import { ArrowUp, BookOpenText, ShieldCheck } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowUp, BookOpenText } from 'lucide-react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type SyntheticEvent,
+  type KeyboardEvent,
+} from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
-import { ErrorState } from '../../components/feedback/StatePanel';
+import { BrandMark } from '../../components/ui/BrandMark';
 import {
   verifiedAnswerSchema,
   type VerifiedAnswer,
 } from '../../types/assistant';
 import { useLanguage } from '../language/useLanguage';
 
-type Turn = { question: string; result: VerifiedAnswer };
+type Turn = {
+  id: string;
+  question: string;
+  result?: VerifiedAnswer;
+  failed?: boolean;
+};
+type Request = {
+  id: string;
+  question: string;
+  responseLanguage: 'english' | 'urdu' | 'roman_urdu';
+};
 
 export default function AssistantPage() {
   const [question, setQuestion] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const bottom = useRef<HTMLDivElement>(null);
+  const composing = useRef(false);
+  const inFlight = useRef(false);
+  const followBottom = useRef(true);
   const answer = useMutation({
-    mutationFn: (value: string) =>
-      apiRequest('/assistant/answer', verifiedAnswerSchema, {
-        method: 'POST',
-        body: JSON.stringify({
-          question: value,
-          language,
-          session_id: sessionId,
-        }),
-      }),
-    onSuccess: (result, asked) => {
+    mutationFn: async (request: Request) => {
+      const result = await apiRequest(
+        '/assistant/answer',
+        verifiedAnswerSchema,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            question: request.question,
+            language: request.responseLanguage,
+            session_id: sessionId,
+          }),
+        },
+      );
+      if (result.language !== request.responseLanguage)
+        throw new Error('Assistant response language did not match preference');
+      return result;
+    },
+    onSuccess: (result, request) => {
       setSessionId(result.session_id);
-      setTurns((current) => [...current, { question: asked, result }]);
-      setQuestion('');
+      setTurns((current) =>
+        current.map((turn) =>
+          turn.id === request.id ? { ...turn, result } : turn,
+        ),
+      );
+      textarea.current?.focus();
+    },
+    onError: (_error, request) => {
+      setTurns((current) =>
+        current.map((turn) =>
+          turn.id === request.id ? { ...turn, failed: true } : turn,
+        ),
+      );
+    },
+    onSettled: () => {
+      inFlight.current = false;
     },
   });
-  const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
+
+  useEffect(() => {
+    textarea.current?.focus();
+  }, []);
+  useEffect(() => {
+    const updateFollow = () => {
+      followBottom.current =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 260;
+    };
+    window.addEventListener('scroll', updateFollow, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', updateFollow);
+    };
+  }, []);
+  useEffect(() => {
+    if (!followBottom.current || !turns.length) return;
+    const frame = window.requestAnimationFrame(() => {
+      bottom.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+        block: 'end',
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [turns, answer.isPending]);
+
+  const resizeComposer = () => {
+    const field = textarea.current;
+    if (!field) return;
+    field.style.height = 'auto';
+    field.style.height = `${Math.min(field.scrollHeight, 144).toString()}px`;
+  };
+  const send = () => {
+    const trimmed = question.trim();
+    if (!trimmed || inFlight.current || answer.isPending || composing.current)
+      return;
+    inFlight.current = true;
+    followBottom.current = true;
+    const id = crypto.randomUUID();
+    setTurns((current) => [...current, { id, question: trimmed }]);
+    setQuestion('');
+    if (textarea.current) textarea.current.style.height = 'auto';
+    answer.mutate({ id, question: trimmed, responseLanguage: language });
+  };
+  const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (question.trim().length > 1) answer.mutate(question.trim());
+    send();
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing ||
+      composing.current
+    )
+      return;
+    event.preventDefault();
+    send();
   };
   return (
-    <main
-      className={`page assistant-page${language === 'urdu' ? ' urdu' : ''}`}
-    >
+    <main className="page assistant-page">
       <header className="assistant-heading">
         <div>
-          <span className="eyebrow">Grounded guidance</span>
-          <h1>SOP Assistant</h1>
-          <p>Ask a question and inspect the verified source.</p>
+          <span className="eyebrow">{t('assistantEyebrow')}</span>
+          <h1>{t('assistantTitle')}</h1>
+          <p>{t('assistantLead')}</p>
         </div>
-        <span className="verified-label">
-          <ShieldCheck />
-          Verified before display
-        </span>
       </header>
       <section className="conversation" aria-live="polite">
         {!turns.length && (
           <div className="assistant-welcome">
-            <span className="assistant-mark">AJ</span>
-            <h2>How can I help with an SOP?</h2>
-            <p>
-              I will answer only from published policy sections available to
-              you.
-            </p>
+            <BrandMark />
+            <h2>{t('assistantWelcome')}</h2>
+            <p>{t('assistantWelcomeDetail')}</p>
           </div>
         )}
         {turns.map((turn) => (
-          <div
-            className="turn"
-            key={`${turn.result.session_id}-${turn.question}`}
-          >
-            <div className="user-message">{turn.question}</div>
-            <div className="assistant-message">
-              <span className="assistant-mark">AJ</span>
-              <div>
-                <span className="answer-label">Answer</span>
-                <p>{turn.result.answer}</p>
-                {turn.result.citations.length > 0 && (
-                  <div className="answer-sources">
-                    <strong>Sources</strong>
-                    {turn.result.citations.map((citation) => (
-                      <Link
-                        key={citation.chunk_id}
-                        to={`/policies/${citation.policy_id}?section=${citation.section_id}`}
-                      >
-                        <BookOpenText />
-                        <span>
-                          <b>{citation.policy_title}</b>
-                          <small>
-                            {citation.heading_path.join(' → ')}
-                            {citation.source.page_start
-                              ? ` · Page ${String(citation.source.page_start)}`
-                              : ''}
-                          </small>
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
+          <div className="turn" key={turn.id}>
+            <div className="user-message" dir="auto">
+              {turn.question}
             </div>
+            {turn.result && (
+              <div className="assistant-message">
+                <BrandMark compact />
+                <div>
+                  <span className="answer-label">{t('assistantAnswer')}</span>
+                  <p dir={language === 'urdu' ? 'rtl' : 'ltr'}>
+                    {turn.result.answer}
+                  </p>
+                  {turn.result.citations.length > 0 && (
+                    <div className="answer-sources">
+                      <strong>{t('assistantSources')}</strong>
+                      {turn.result.citations.map((citation) => (
+                        <Link
+                          key={citation.chunk_id}
+                          to={`/policies/${citation.policy_id}?section=${citation.section_id}`}
+                        >
+                          <BookOpenText aria-hidden="true" />
+                          <span>
+                            <b dir="auto">{citation.policy_title}</b>
+                            <small dir="auto">
+                              {citation.heading_path.join(' → ')}
+                              {citation.source.page_start
+                                ? ` · ${t('assistantSourcePage')} ${String(citation.source.page_start)}`
+                                : ''}
+                            </small>
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {turn.failed && (
+              <div className="assistant-failure" role="alert">
+                <strong>{t('assistantNoAnswer')}</strong>
+                <p>{t('assistantErrorDetail')}</p>
+              </div>
+            )}
           </div>
         ))}
         {answer.isPending && (
-          <div className="assistant-message pending">
-            <span className="assistant-mark">AJ</span>
+          <div className="assistant-message pending" role="status">
+            <BrandMark compact />
             <div>
-              <div className="thinking-line">
-                <span />
-                <span />
-                <span />
-              </div>
-              <small>
-                Retrieving authorized evidence and verifying the answer…
-              </small>
+              <span className="pending-bar" aria-hidden="true" />
+              <small>{t('assistantPending')}</small>
             </div>
           </div>
         )}
-        {answer.isError && (
-          <ErrorState
-            title="No answer was released"
-            detail={answer.error.message}
-          />
-        )}
+        <div ref={bottom} />
       </section>
       <form className="composer surface" onSubmit={submit}>
         <textarea
-          aria-label="Ask the SOP Assistant"
-          rows={2}
+          ref={textarea}
+          aria-label={t('assistantInput')}
+          dir="auto"
+          rows={1}
           value={question}
           onChange={(event) => {
             setQuestion(event.target.value);
+            resizeComposer();
           }}
-          placeholder="Ask about a policy or procedure…"
+          onKeyDown={onKeyDown}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
+          placeholder={t('assistantPlaceholder')}
         />
         <button
-          aria-label="Send question"
-          disabled={answer.isPending || question.trim().length < 2}
+          type="submit"
+          aria-label={t('assistantSend')}
+          disabled={answer.isPending || !question.trim()}
         >
-          <ArrowUp />
+          <ArrowUp aria-hidden="true" />
         </button>
-        <small>
-          Answers are limited to your authorized, published SOP evidence.
-        </small>
+        <small>{t('assistantComposerNote')}</small>
       </form>
     </main>
   );

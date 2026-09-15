@@ -11,7 +11,10 @@ function LiveAuthGuard({ children }: PropsWithChildren) {
 }
 
 export function AuthGuard({ children }: PropsWithChildren) {
-  if ((import.meta.env.VITE_APP_MODE ?? 'fixture') === 'fixture')
+  if ((import.meta.env.VITE_APP_MODE ?? 'fixture') === 'fixture') {
+    const identity = window.localStorage.getItem('ajt-fixture-identity');
+    if (!identity) return <Navigate to="/login" replace />;
     return children;
+  }
   return <LiveAuthGuard>{children}</LiveAuthGuard>;
 }

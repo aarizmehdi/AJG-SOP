@@ -5,8 +5,10 @@ import { apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import { policyReaderSchema } from '../../types/retrieval';
+import { useLanguage } from '../language/useLanguage';
 
 export default function PolicyPage() {
+  const { t } = useLanguage();
   const { policyId = '' } = useParams();
   const [searchParams] = useSearchParams();
   const selectedSection = searchParams.get('section');
@@ -18,8 +20,8 @@ export default function PolicyPage() {
   if (policy.isError || !policy.data)
     return (
       <ErrorState
-        title="Policy unavailable"
-        detail="The policy does not exist or is outside your current access scope."
+        title={t('policyUnavailable')}
+        detail={t('policyErrorDetail')}
       />
     );
   return (
@@ -27,35 +29,36 @@ export default function PolicyPage() {
       <header className="reader-heading">
         <div>
           <span className="eyebrow">
-            Published policy · {policy.data.version_label}
+            {t('publishedPolicy')} · {policy.data.version_label}
           </span>
-          <h1>{policy.data.title}</h1>
-          <p>{policy.data.category}</p>
+          <h1 dir="auto">{policy.data.title}</h1>
+          <p dir="auto">{policy.data.category}</p>
+          <p className="source-fidelity-note">{t('originalSourceNote')}</p>
         </div>
         <span className="source-lock">
           {policy.data.original_download_allowed ? (
             <>
               <Download />
-              Full source authorized
+              {t('fullSource')}
             </>
           ) : (
             <>
               <LockKeyhole />
-              Canonical sections only
+              {t('canonicalOnly')}
             </>
           )}
         </span>
       </header>
       <div className="reader-layout">
         <aside className="surface reader-toc">
-          <strong>On this page</strong>
+          <strong>{t('onThisPage')}</strong>
           {policy.data.sections.map((section) => (
             <a
               className={section.section_id === selectedSection ? 'active' : ''}
               href={`#${section.section_id}`}
               key={section.section_id}
             >
-              {section.heading}
+              <span dir="auto">{section.heading}</span>
             </a>
           ))}
         </aside>
@@ -69,18 +72,20 @@ export default function PolicyPage() {
               key={section.section_id}
             >
               <p className="section-number">{section.policy_number}</p>
-              <h2>{section.heading}</h2>
+              <h2 dir="auto">{section.heading}</h2>
               <div className="policy-copy">
                 {section.content.split('\n').map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
+                  <p key={paragraph} dir="auto">
+                    {paragraph}
+                  </p>
                 ))}
               </div>
               <small>
                 {section.source.page_start
-                  ? `Source page ${String(section.source.page_start)}`
+                  ? `${t('sourcePage')} ${String(section.source.page_start)}`
                   : section.source.sheet_name
                     ? `${section.source.sheet_name} · ${section.source.cell_range ?? ''}`
-                    : 'Canonical source section'}
+                    : t('canonicalSection')}
               </small>
             </section>
           ))}

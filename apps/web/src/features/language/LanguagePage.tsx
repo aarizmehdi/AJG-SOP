@@ -20,23 +20,41 @@ const choices = [
 ] as const;
 
 export default function LanguagePage() {
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const [selected, setSelected] = useState(language);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
   const navigate = useNavigate();
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(false);
+    try {
+      await setLanguage(selected);
+      void navigate('/home', { replace: true });
+    } catch {
+      setError(true);
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <main className="centered-page">
       <section className="language-card">
-        <span className="eyebrow">Your experience</span>
-        <h1>Choose your language</h1>
-        <p>
-          The assistant will keep answering in this language until you change
-          it.
-        </p>
-        <div className="language-grid">
+        <span className="eyebrow">{t('languageEyebrow')}</span>
+        <h1>{t('languageTitle')}</h1>
+        <p>{t('languageDetail')}</p>
+        <div
+          className="language-grid"
+          role="group"
+          aria-label={t('languageTitle')}
+        >
           {choices.map((choice) => (
             <button
               key={choice.id}
+              type="button"
               dir={choice.dir}
+              aria-pressed={selected === choice.id}
               className={`language-option${selected === choice.id ? ' selected' : ''}`}
               onClick={() => {
                 setSelected(choice.id);
@@ -47,13 +65,18 @@ export default function LanguagePage() {
             </button>
           ))}
         </div>
+        {error && (
+          <p className="language-error" role="alert">
+            {t('languageError')}
+          </p>
+        )}
         <Button
+          disabled={saving}
           onClick={() => {
-            setLanguage(selected);
-            void navigate('/home');
+            void save();
           }}
         >
-          Save and continue
+          {saving ? t('languageSaving') : t('languageSave')}
         </Button>
       </section>
     </main>

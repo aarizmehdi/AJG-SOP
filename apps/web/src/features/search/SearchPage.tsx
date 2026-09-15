@@ -9,7 +9,7 @@ import { useLanguage } from '../language/useLanguage';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const search = useMutation({
     mutationFn: (value: string) =>
       apiRequest('/search', searchResponseSchema, {
@@ -19,50 +19,57 @@ export default function SearchPage() {
   });
   const submit = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (query.trim().length > 1) search.mutate(query.trim());
+    if (query.trim() && !search.isPending) search.mutate(query.trim());
   };
   return (
     <main className="page search-page">
-      <span className="eyebrow">Authorized policies</span>
-      <h1>Search SOPs</h1>
-      <p className="lead">
-        Search by question, policy number, phrase, English, Urdu, or Roman Urdu.
-      </p>
+      <span className="eyebrow">{t('searchEyebrow')}</span>
+      <h1>{t('searchTitle')}</h1>
+      <p className="lead">{t('searchLead')}</p>
       <form className="search-box surface" onSubmit={submit}>
         <Search aria-hidden="true" />
         <input
-          aria-label="Search SOPs"
+          aria-label={t('searchNav')}
+          dir="auto"
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
           }}
-          placeholder="What should I do with damaged stock?"
+          placeholder={t('searchPlaceholder')}
         />
-        <button>Search</button>
+        <button disabled={search.isPending || !query.trim()}>
+          {t('searchButton')}
+        </button>
       </form>
       {search.isPending && (
-        <div className="result-skeletons" aria-busy="true">
+        <div
+          className="result-skeletons"
+          aria-busy="true"
+          aria-label={t('searchLoading')}
+        >
           <div className="skeleton result-skeleton" />
           <div className="skeleton result-skeleton" />
         </div>
       )}
       {search.isError && (
         <ErrorState
-          title="Search is temporarily unavailable"
-          detail="Your policy reader remains available. Try the search again shortly."
+          title={t('searchUnavailable')}
+          detail={t('searchErrorDetail')}
         />
       )}
       {search.isSuccess && !search.data.results.length && (
         <EmptyState
-          title="No guidance found"
-          detail="No matching guidance was found in the published SOPs available to you."
+          title={t('searchEmptyTitle')}
+          detail={t('searchEmptyDetail')}
         />
       )}
       {search.data?.results.length ? (
         <section className="results" aria-live="polite">
           <div className="results-heading">
-            <strong>{search.data.results.length} relevant sections</strong>
-            <span>Only authorized published content</span>
+            <strong>
+              {search.data.results.length} {t('searchRelevant')}
+            </strong>
+            <span>{t('searchAuthorized')}</span>
           </div>
           {search.data.results.map((evidence) => (
             <SourceCitation evidence={evidence} key={evidence.chunk_id} />

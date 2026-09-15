@@ -3,15 +3,19 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import { profileSchema } from '../../types/profile';
+import { ProfileMenu } from './ProfileMenu';
+import { BrandMark } from '../ui/BrandMark';
+import { useLanguage } from '../../features/language/useLanguage';
 
 const links = [
-  { to: '/home', label: 'Home', icon: BookOpen },
-  { to: '/search', label: 'Search SOPs', icon: Search },
-  { to: '/assistant', label: 'SOP Assistant', icon: MessageCircle },
-  { to: '/admin', label: 'Policy Library', icon: Library },
-];
+  { to: '/home', key: 'home', icon: BookOpen },
+  { to: '/search', key: 'searchNav', icon: Search },
+  { to: '/assistant', key: 'assistantNav', icon: MessageCircle },
+  { to: '/admin', key: 'libraryNav', icon: Library },
+] as const;
 
 export function AppShell() {
+  const { t } = useLanguage();
   const profile = useQuery({
     queryKey: ['profile'],
     queryFn: () => apiRequest('/profile/me', profileSchema),
@@ -23,21 +27,20 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <NavLink
-          to="/home"
-          className="brand"
-          aria-label="Aziz Jan Trust SOP Knowledge home"
-        >
-          <img src="/brand/aziz-jan-trust-logo.png" alt="Aziz Jan Trust" />
+        <NavLink to="/home" className="brand" aria-label={t('brandName')}>
+          <BrandMark compact />
           <span>
-            <strong>SOP Knowledge</strong>
-            <small>Aziz Jan Trust</small>
+            <strong>{t('brandTitle')}</strong>
+            <small>{t('brandName')}</small>
           </span>
         </NavLink>
-        <nav aria-label="Main navigation">
+        <nav
+          className={isAdmin ? 'nav--admin' : undefined}
+          aria-label={t('brandTitle')}
+        >
           {links
             .filter((link) => link.to !== '/admin' || isAdmin)
-            .map(({ to, label, icon: Icon }) => (
+            .map(({ to, key, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -46,25 +49,21 @@ export function AppShell() {
                 }
               >
                 <Icon size={19} aria-hidden="true" />
-                <span>{label}</span>
+                <span>{t(key)}</span>
               </NavLink>
             ))}
         </nav>
-        <div className="sidebar-foot">
-          <span className="status-dot" />
-          Secure {import.meta.env.VITE_APP_MODE ?? 'fixture'} workspace
-        </div>
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <span>{profile.data?.display_name ?? 'Aziz Jan Trust'}</span>
-          <button className="avatar" aria-label="Open profile menu">
-            {profile.data?.display_name
-              .split(' ')
-              .map((part) => part[0])
-              .join('')
-              .slice(0, 2) ?? 'AJ'}
-          </button>
+          <span className="mobile-brand">
+            <BrandMark compact />
+            <strong>{t('brandTitle')}</strong>
+          </span>
+          <span className="topbar-name" dir="auto">
+            {profile.data?.display_name ?? t('brandName')}
+          </span>
+          <ProfileMenu profile={profile.data} />
         </header>
         <Outlet />
       </div>
