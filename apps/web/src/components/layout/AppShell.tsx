@@ -53,18 +53,18 @@ export function AppShell() {
               </NavLink>
             ))}
         </nav>
+        <div className="sidebar-profile">
+          <ProfileMenu profile={profile.data} />
+        </div>
       </aside>
       <div className="workspace">
-        <header className="topbar">
-          <span className="mobile-brand">
+        <div className="mobile-shell-bar">
+          <NavLink to="/home" className="mobile-brand">
             <BrandMark compact />
             <strong>{t('brandTitle')}</strong>
-          </span>
-          <span className="topbar-name" dir="auto">
-            {profile.data?.display_name ?? t('brandName')}
-          </span>
+          </NavLink>
           <ProfileMenu profile={profile.data} />
-        </header>
+        </div>
         <Outlet />
       </div>
     </div>

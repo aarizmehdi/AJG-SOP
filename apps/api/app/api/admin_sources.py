@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from apps.api.app.auth.dependencies import CurrentProfile
-from apps.api.app.auth.permissions import require_admin, require_management_scope
+from apps.api.app.auth.permissions import can_manage_scope, require_admin, require_management_scope
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.policy_service import PolicyService
 from apps.api.app.services.storage_service import ArtifactStore
@@ -15,6 +15,18 @@ from packages.contracts.source import SourceDocument, SourceFormat
 from services.ingestion.pipeline import DuplicateSourceError, IngestionPipeline
 
 router = APIRouter(prefix="/admin/sources", tags=["admin-sources"])
+
+
+def _require_source_content_scope(
+    store: FoundationStore, source_id: str, version_id: str, profile: CurrentProfile
+) -> None:
+    canonical = store.canonicals.get(source_id)
+    if canonical and (
+        canonical.organization_id != profile.organization_id
+        or canonical.version_id != version_id
+        or any(not can_manage_scope(profile, section.access) for section in canonical.sections)
+    ):
+        raise HTTPException(status_code=403, detail="Source exceeds your management scope")
 
 
 class PasteSourceRequest(BaseModel):
@@ -137,6 +149,7 @@ async def get_review(
     if not version:
         raise HTTPException(status_code=404, detail="Policy version not found")
     require_management_scope(profile, version.access)
+    _require_source_content_scope(store, source_id, version.id, profile)
     return {
         "source": source.model_dump(mode="json"),
         "canonical": canonical.model_dump(mode="json") if canonical else None,
@@ -145,9 +158,7 @@ async def get_review(
 
 
 @router.get("/{source_id}/original")
-async def get_original(
-    request: Request, source_id: str, profile: CurrentProfile
-) -> Response:
+async def get_original(request: Request, source_id: str, profile: CurrentProfile) -> Response:
     require_admin(profile)
     store = cast(FoundationStore, request.app.state.foundation_store)
     source = store.sources.get(source_id)
@@ -157,6 +168,7 @@ async def get_original(
     if not version:
         raise HTTPException(status_code=404, detail="Policy version not found")
     require_management_scope(profile, version.access)
+    _require_source_content_scope(store, source_id, version.id, profile)
     artifacts = cast(ArtifactStore, request.app.state.artifact_store)
     content = await artifacts.get(profile.organization_id, source.original_artifact_uri)
     return Response(content=content, media_type=source.media_type)
@@ -175,6 +187,7 @@ async def update_review(
     if not version:
         raise HTTPException(status_code=404, detail="Policy version not found")
     require_management_scope(profile, version.access)
+    _require_source_content_scope(store, source_id, version.id, profile)
     if version.status in {VersionStatus.PUBLISHED, VersionStatus.SUPERSEDED}:
         raise HTTPException(status_code=409, detail="Published versions are immutable")
     pipeline = cast(IngestionPipeline, request.app.state.ingestion_pipeline)
@@ -188,9 +201,7 @@ async def update_review(
 
 
 @router.get("/{source_id}/job")
-async def get_job(
-    request: Request, source_id: str, profile: CurrentProfile
-) -> IngestionJob:
+async def get_job(request: Request, source_id: str, profile: CurrentProfile) -> IngestionJob:
     require_admin(profile)
     store = cast(FoundationStore, request.app.state.foundation_store)
     source = store.sources.get(source_id)
@@ -200,18 +211,14 @@ async def get_job(
     if not version:
         raise HTTPException(status_code=404, detail="Policy version not found")
     require_management_scope(profile, version.access)
-    job = next(
-        (item for item in store.jobs.values() if item.source_document_id == source_id), None
-    )
+    job = next((item for item in store.jobs.values() if item.source_document_id == source_id), None)
     if not job:
         raise HTTPException(status_code=404, detail="Ingestion job not found")
     return job
 
 
 @router.post("/{source_id}/retry")
-async def retry_source(
-    request: Request, source_id: str, profile: CurrentProfile
-) -> SourceDocument:
+async def retry_source(request: Request, source_id: str, profile: CurrentProfile) -> SourceDocument:
     require_admin(profile)
     store = cast(FoundationStore, request.app.state.foundation_store)
     source = store.sources.get(source_id)
@@ -221,6 +228,7 @@ async def retry_source(
     if not version:
         raise HTTPException(status_code=404, detail="Policy version not found")
     require_management_scope(profile, version.access)
+    _require_source_content_scope(store, source_id, version.id, profile)
     if version.status in {VersionStatus.PUBLISHED, VersionStatus.SUPERSEDED}:
         raise HTTPException(status_code=409, detail="Published versions are immutable")
     try:

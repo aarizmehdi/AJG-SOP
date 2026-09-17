@@ -18,7 +18,9 @@ async def seed_fixture_data(app: FastAPI) -> None:
         departments=AccessDimension(
             mode=AccessMode.SELECTED, values=frozenset({"store"})
         ),
-        locations=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(
+            mode=AccessMode.SELECTED, values=frozenset({"peshawar-main"})
+        ),
         roles=AccessDimension(
             mode=AccessMode.SELECTED, values=frozenset({"store_keeper"})
         ),

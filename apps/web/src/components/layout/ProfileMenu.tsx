@@ -117,8 +117,12 @@ export function ProfileMenu({ profile }: { profile: Profile | undefined }) {
           }
         }}
       >
-        <span>{initials}</span>
-        <ChevronDown size={14} aria-hidden="true" />
+        <span className="avatar-initials">{initials}</span>
+        <span className="avatar-copy">
+          <strong dir="auto">{profile?.display_name ?? t('brandName')}</strong>
+          <small>{role}</small>
+        </span>
+        <ChevronDown className="avatar-chevron" size={14} aria-hidden="true" />
       </button>
       {open && (
         <div

@@ -8,6 +8,7 @@ import {
   AddSOP,
   Admin,
   AdminLibrary,
+  AdminPolicyDetail,
   Assistant,
   ExtractionReview,
   Home,
@@ -44,7 +45,18 @@ export const router = createBrowserRouter([
             path: '/admin',
             element: loading(<Admin />),
             children: [
-              { index: true, element: loading(<AdminLibrary />) },
+              {
+                index: true,
+                element: <Navigate to="/admin/policies" replace />,
+              },
+              {
+                path: 'policies',
+                element: loading(<AdminLibrary key="library" />),
+              },
+              {
+                path: 'review-queue',
+                element: loading(<AdminLibrary key="review-queue" />),
+              },
               { path: 'add', element: loading(<AddSOP />) },
               {
                 path: 'review/:sourceId',
@@ -52,6 +64,10 @@ export const router = createBrowserRouter([
               },
               {
                 path: 'policies/:policyId',
+                element: loading(<AdminPolicyDetail />),
+              },
+              {
+                path: 'workflow/:policyId',
                 element: loading(<PolicyWorkflow />),
               },
             ],

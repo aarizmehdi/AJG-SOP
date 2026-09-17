@@ -12,6 +12,9 @@ export const Admin = lazy(() => import('../features/admin/AdminPage'));
 export const AdminLibrary = lazy(
   () => import('../features/admin/AdminLibraryPage'),
 );
+export const AdminPolicyDetail = lazy(
+  () => import('../features/admin/AdminPolicyDetailPage'),
+);
 export const AddSOP = lazy(() => import('../features/admin/AddSOPPage'));
 export const ExtractionReview = lazy(
   () => import('../features/admin/ExtractionReviewPage'),
