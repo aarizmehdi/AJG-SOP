@@ -1,4 +1,9 @@
 {
   "name": "ajg-sop",
-  "pages_build_output_dir": "dist"
+  "compatibility_date": "2026-09-17",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "single-page-application"
+  }
 }
