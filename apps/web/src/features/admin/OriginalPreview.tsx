@@ -3,6 +3,7 @@ import { FileCheck2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { apiBlob } from '../../api/client';
 import type { reviewPayloadSchema } from '../../types/source';
+import { useAdminCopy } from './adminCopy';
 
 type Review = ReturnType<typeof reviewPayloadSchema.parse>;
 
@@ -10,10 +11,12 @@ function BlobPreview({
   blob,
   mediaType,
   title,
+  originalSource,
 }: {
   blob: Blob;
   mediaType: string;
   title: string;
+  originalSource: string;
 }) {
   const [url] = useState(() => URL.createObjectURL(blob));
   useEffect(
@@ -27,7 +30,7 @@ function BlobPreview({
       <img
         className="source-image"
         src={url}
-        alt={`Original source: ${title}`}
+        alt={`${originalSource}: ${title}`}
       />
     );
   return (
@@ -35,7 +38,7 @@ function BlobPreview({
       className="source-object"
       data={url}
       type={mediaType}
-      aria-label={`Original source: ${title}`}
+      aria-label={`${originalSource}: ${title}`}
     />
   );
 }
@@ -49,6 +52,7 @@ export function OriginalPreview({
   source: Review['source'];
   raw: Review['raw'];
 }) {
+  const { copy } = useAdminCopy();
   const preview = useQuery({
     queryKey: ['source-original', sourceId],
     queryFn: async () => {
@@ -69,8 +73,8 @@ export function OriginalPreview({
     return (
       <div className="source-preview">
         <FileCheck2 />
-        <strong>Preview unavailable</strong>
-        <p>The private original could not be loaded for this administrator.</p>
+        <strong>{copy.originalUnavailable}</strong>
+        <p>{copy.previewUnavailable}</p>
       </div>
     );
   if (preview.data.text !== null)
@@ -85,12 +89,13 @@ export function OriginalPreview({
           blob={preview.data.blob}
           mediaType={source.media_type}
           title={source.file_name}
+          originalSource={copy.originalSource}
         />
       </div>
     );
   return (
     <div className="source-preview source-preview--structured">
-      <strong>Original structured view</strong>
+      <strong>{copy.originalStructuredView}</strong>
       {raw?.blocks.map((block, index) =>
         block.table_cells.length ? (
           <div

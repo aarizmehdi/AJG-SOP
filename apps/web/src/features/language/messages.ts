@@ -23,6 +23,7 @@ const english = {
   loginDevAccess: 'Development access',
   loginEmployee: 'Continue as employee',
   loginAdmin: 'Continue as administrator',
+  loginSystemAdmin: 'Continue as system administrator',
   languageEyebrow: 'Your experience',
   languageTitle: 'Choose your language',
   languageDetail:
@@ -91,6 +92,12 @@ const english = {
   assistantSend: 'Send question',
   assistantComposerNote: 'Enter to send · Shift + Enter for a new line',
   assistantSourcePage: 'Page',
+  voiceStart: 'Start voice input',
+  voiceStop: 'Stop recording',
+  voiceCancel: 'Cancel recording',
+  voiceListening: 'Listening… Press stop when finished or Escape to cancel.',
+  voiceTranscribing: 'Preparing the transcript in your selected language…',
+  voiceError: 'Voice input is unavailable. You can still type your question.',
   loadingPage: 'Loading your workspace…',
 } as const;
 
@@ -119,6 +126,7 @@ const urdu: Record<MessageKey, string> = {
   loginDevAccess: 'ترقیاتی رسائی',
   loginEmployee: 'ملازم کے طور پر جاری رکھیں',
   loginAdmin: 'منتظم کے طور پر جاری رکھیں',
+  loginSystemAdmin: 'سسٹم منتظم کے طور پر جاری رکھیں',
   languageEyebrow: 'آپ کا تجربہ',
   languageTitle: 'اپنی زبان منتخب کریں',
   languageDetail:
@@ -184,6 +192,13 @@ const urdu: Record<MessageKey, string> = {
   assistantSend: 'سوال بھیجیں',
   assistantComposerNote: 'بھیجنے کے لیے Enter · نئی سطر کے لیے Shift + Enter',
   assistantSourcePage: 'صفحہ',
+  voiceStart: 'آواز سے سوال شروع کریں',
+  voiceStop: 'ریکارڈنگ روکیں',
+  voiceCancel: 'ریکارڈنگ منسوخ کریں',
+  voiceListening:
+    'سن رہے ہیں… مکمل ہونے پر روکیں یا منسوخی کے لیے Escape دبائیں۔',
+  voiceTranscribing: 'منتخب زبان میں متن تیار ہو رہا ہے…',
+  voiceError: 'آواز دستیاب نہیں۔ آپ سوال لکھ سکتے ہیں۔',
   loadingPage: 'آپ کا صفحہ کھل رہا ہے…',
 };
 
@@ -210,6 +225,7 @@ const romanUrdu: Record<MessageKey, string> = {
   loginDevAccess: 'Development access',
   loginEmployee: 'Mulazim ke taur par jari rakhein',
   loginAdmin: 'Administrator ke taur par jari rakhein',
+  loginSystemAdmin: 'System administrator ke taur par jari rakhein',
   languageEyebrow: 'Aap ka tajurba',
   languageTitle: 'Apni zaban chunein',
   languageDetail:
@@ -278,6 +294,13 @@ const romanUrdu: Record<MessageKey, string> = {
   assistantComposerNote:
     'Bhejne ke liye Enter · nai line ke liye Shift + Enter',
   assistantSourcePage: 'Page',
+  voiceStart: 'Awaz se sawal shuru karein',
+  voiceStop: 'Recording rokein',
+  voiceCancel: 'Recording mansookh karein',
+  voiceListening:
+    'Sun rahe hain… mukammal ho to rokein ya Escape se cancel karein.',
+  voiceTranscribing: 'Chuni hui zaban mein matn tayyar ho raha hai…',
+  voiceError: 'Voice input dastiyab nahin. Aap sawal type kar sakte hain.',
   loadingPage: 'Aap ka workspace khul raha hai…',
 };
 

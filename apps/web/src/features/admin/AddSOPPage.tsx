@@ -10,8 +10,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
+import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import { Button } from '../../components/ui/Button';
 import { policyDraftSchema, type AccessScope } from '../../types/policy';
+import { profileSchema } from '../../types/profile';
 import {
   parserCapabilitiesSchema,
   sourceDocumentSchema,
@@ -72,10 +74,17 @@ export default function AddSOPPage() {
     roles: { mode: 'selected', values: ['store_keeper'] },
   });
   const navigate = useNavigate();
+  const profile = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => apiRequest('/profile/me', profileSchema),
+  });
+  const canIngest =
+    profile.data?.application_roles.includes('system_admin') ?? false;
   const capabilities = useQuery({
     queryKey: ['parser-capabilities'],
     queryFn: () =>
       apiRequest('/admin/sources/capabilities', parserCapabilitiesSchema),
+    enabled: canIngest,
   });
   const upload = useMutation({
     mutationFn: async () => {
@@ -116,6 +125,14 @@ export default function AddSOPPage() {
     },
   });
   const isText = format === 'structured_text' || format === 'markdown';
+  if (profile.isPending) return <RouteSkeleton />;
+  if (!canIngest)
+    return (
+      <ErrorState
+        title="System administrator access required"
+        detail="Controlled source ingestion is available only to the technical administration team."
+      />
+    );
   return (
     <section className="admin-content add-sop">
       <div className="section-heading">

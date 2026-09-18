@@ -30,6 +30,7 @@ function renderAssistant() {
 afterEach(() => {
   window.localStorage.clear();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('assistant response language', () => {
@@ -75,5 +76,47 @@ describe('assistant response language', () => {
     expect(
       screen.queryByText('English answer must not appear'),
     ).not.toBeInTheDocument();
+  });
+
+  it('lets the employee cancel a voice recording without submitting it', async () => {
+    window.localStorage.setItem('ajt-fixture-identity', 'employee');
+    vi.stubEnv('VITE_VOICE_INPUT_ENABLED', 'true');
+    const stopTrack = vi.fn();
+    vi.stubGlobal('navigator', {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({
+          getTracks: () => [{ stop: stopTrack }],
+        }),
+      },
+    });
+    class FakeMediaRecorder {
+      state = 'inactive';
+      mimeType = 'audio/webm';
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+
+      start() {
+        this.state = 'recording';
+      }
+
+      stop() {
+        this.state = 'inactive';
+        this.onstop?.();
+      }
+    }
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    renderAssistant();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Awaz se sawal shuru karein' }),
+    );
+    await screen.findByText(/Sun rahe hain/);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(stopTrack).toHaveBeenCalledOnce();
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox')).toHaveValue('');
   });
 });

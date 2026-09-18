@@ -5,7 +5,13 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from apps.api.app.auth.dependencies import CurrentProfile
-from apps.api.app.auth.permissions import can_manage_scope, require_admin, require_management_scope
+from apps.api.app.auth.permissions import (
+    can_manage_scope,
+    require_admin,
+    require_management_scope,
+    require_system_admin,
+)
+from apps.api.app.services.audit_service import AuditService
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.policy_service import PolicyService
 from apps.api.app.services.storage_service import ArtifactStore
@@ -43,7 +49,7 @@ class ReviewUpdate(BaseModel):
 
 @router.get("/capabilities")
 async def capabilities(request: Request, profile: CurrentProfile) -> list[dict[str, object]]:
-    require_admin(profile)
+    require_system_admin(profile)
     pipeline = cast(IngestionPipeline, request.app.state.ingestion_pipeline)
     return [
         item.model_dump(mode="json")
@@ -60,7 +66,7 @@ async def upload_source(
     source_format: Annotated[SourceFormat, Form()],
     file: Annotated[UploadFile, File()],
 ) -> SourceDocument:
-    require_admin(profile)
+    require_system_admin(profile)
     store = cast(FoundationStore, request.app.state.foundation_store)
     version = store.versions.get(version_id)
     if (
@@ -95,7 +101,7 @@ async def upload_source(
 async def paste_source(
     request: Request, payload: PasteSourceRequest, profile: CurrentProfile
 ) -> SourceDocument:
-    require_admin(profile)
+    require_system_admin(profile)
     if payload.source_format not in {SourceFormat.MARKDOWN, SourceFormat.STRUCTURED_TEXT}:
         raise HTTPException(
             status_code=422,
@@ -197,6 +203,14 @@ async def update_review(
     cast(PolicyService, request.app.state.policy_service).invalidate_after_review(
         profile.organization_id, version.id
     )
+    cast(AuditService, request.app.state.audit_service).record(
+        profile.organization_id,
+        profile.id,
+        "structure.review_saved",
+        "source_document",
+        source_id,
+        {"version_id": version.id, "source_id": source_id},
+    )
     return canonical
 
 
@@ -219,7 +233,7 @@ async def get_job(request: Request, source_id: str, profile: CurrentProfile) -> 
 
 @router.post("/{source_id}/retry")
 async def retry_source(request: Request, source_id: str, profile: CurrentProfile) -> SourceDocument:
-    require_admin(profile)
+    require_system_admin(profile)
     store = cast(FoundationStore, request.app.state.foundation_store)
     source = store.sources.get(source_id)
     if not source or source.organization_id != profile.organization_id:

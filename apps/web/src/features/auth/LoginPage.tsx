@@ -25,7 +25,9 @@ export default function LoginPage() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const enterFixture = (identity: 'employee' | 'sop-admin') => {
+  const enterFixture = (
+    identity: 'employee' | 'sop-admin' | 'system-admin',
+  ) => {
     queryClient.clear();
     window.localStorage.setItem('ajt-fixture-identity', identity);
     void navigate('/home');
@@ -62,6 +64,14 @@ export default function LoginPage() {
                 }}
               >
                 {t('loginAdmin')}
+              </button>
+              <button
+                className="login-secondary-action"
+                onClick={() => {
+                  enterFixture('system-admin');
+                }}
+              >
+                {t('loginSystemAdmin')}
               </button>
             </div>
           ) : (

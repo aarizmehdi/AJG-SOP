@@ -19,6 +19,10 @@ The Phase 1 LLM adapter is DeepSeek (`deepseek-v4-flash`) behind the provider-ne
 `LLMProvider` interface. Keep its key in ignored `.env.local` or a deployment secret manager. Search
 and canonical policy reading do not depend on the LLM.
 
+Voice input is implemented behind `VITE_VOICE_INPUT_ENABLED=false` and a provider-neutral backend
+contract. It remains disabled until a real speech provider is selected and validated; fixture mode
+does not fake transcription.
+
 Architecture, authorization, provider configuration, operations, design behavior, ADRs, and the
 real-SOP benchmark are documented under [`docs/`](docs/).
 

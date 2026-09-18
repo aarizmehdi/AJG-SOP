@@ -12,6 +12,14 @@ def require_admin(profile: EmployeeProfile) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
 
+def require_system_admin(profile: EmployeeProfile) -> None:
+    if ApplicationRole.SYSTEM_ADMIN not in profile.application_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="System administrator role required",
+        )
+
+
 def can_manage_scope(profile: EmployeeProfile, access: AccessScope) -> bool:
     if ApplicationRole.SYSTEM_ADMIN in profile.application_roles:
         return True

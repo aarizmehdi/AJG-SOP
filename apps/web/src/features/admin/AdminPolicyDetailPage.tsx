@@ -12,6 +12,7 @@ import {
   type PolicyViewer,
   type AccessScope,
 } from '../../types/policy';
+import { profileSchema } from '../../types/profile';
 import {
   displayVersion,
   formatDate,
@@ -191,6 +192,12 @@ export default function AdminPolicyDetailPage() {
       ),
     enabled: !!policyId,
   });
+  const profile = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => apiRequest('/profile/me', profileSchema),
+  });
+  const canRunTechnicalWorkflow =
+    profile.data?.application_roles.includes('system_admin');
   function selectVersion(id: string) {
     setParams(
       id === viewer.data?.policy.active_version_id ? {} : { version: id },
@@ -306,7 +313,7 @@ export default function AdminPolicyDetailPage() {
               {copy.reviewExtraction}
             </Link>
           )}
-          {fullDocumentManageable && (
+          {fullDocumentManageable && canRunTechnicalWorkflow && (
             <Link to={`/admin/workflow/${data.policy.id}`}>
               {copy.versionWorkflow}
             </Link>

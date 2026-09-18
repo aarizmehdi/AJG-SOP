@@ -9,6 +9,7 @@ import {
   sectionChangesSchema,
   type Policy,
 } from '../../types/policy';
+import { profileSchema } from '../../types/profile';
 
 export default function PolicyWorkflowPage() {
   const { policyId = '' } = useParams();
@@ -16,7 +17,18 @@ export default function PolicyWorkflowPage() {
     queryKey: ['admin-policies'],
     queryFn: () => apiRequest('/admin/policies', policyListSchema),
   });
-  if (policies.isLoading) return <RouteSkeleton />;
+  const profile = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => apiRequest('/profile/me', profileSchema),
+  });
+  if (policies.isLoading || profile.isLoading) return <RouteSkeleton />;
+  if (!profile.data?.application_roles.includes('system_admin'))
+    return (
+      <ErrorState
+        title="System administrator access required"
+        detail="Publication and recovery tools are available only to the technical administration team."
+      />
+    );
   const policy = policies.data?.find((item) => item.id === policyId);
   if (!policy)
     return (

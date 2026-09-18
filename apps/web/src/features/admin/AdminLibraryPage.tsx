@@ -5,6 +5,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { apiRequest, ApiError } from '../../api/client';
 import { EmptyState, ErrorState } from '../../components/feedback/StatePanel';
 import { policyListSchema, type Policy } from '../../types/policy';
+import { profileSchema } from '../../types/profile';
 import {
   localizedSort,
   localizedSource,
@@ -47,6 +48,11 @@ export default function AdminLibraryPage() {
     queryKey: ['admin-policies'],
     queryFn: () => apiRequest('/admin/policies', policyListSchema),
   });
+  const profile = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => apiRequest('/profile/me', profileSchema),
+  });
+  const canIngest = profile.data?.application_roles.includes('system_admin');
   const data = policies.data ?? [];
   const departments = [
     ...new Set(
@@ -131,9 +137,11 @@ export default function AdminLibraryPage() {
           <h2 id="library-title">{copy.navLibrary}</h2>
           <p>{copy.libraryIntro}</p>
         </div>
-        <Link className="button button--primary" to="/admin/add">
-          + {copy.addSop}
-        </Link>
+        {canIngest && (
+          <Link className="button button--primary" to="/admin/add">
+            + {copy.addSop}
+          </Link>
+        )}
       </div>
       <div className="library-filter surface">
         <label className="library-search">
@@ -348,9 +356,11 @@ export default function AdminLibraryPage() {
           {!data.length && (
             <div className="library-empty">
               <EmptyState title={copy.noSops} detail={copy.noSopsDetail} />
-              <Link className="button button--primary" to="/admin/add">
-                {copy.addSop}
-              </Link>
+              {canIngest && (
+                <Link className="button button--primary" to="/admin/add">
+                  {copy.addSop}
+                </Link>
+              )}
             </div>
           )}
           {!!data.length && !visible.length && (

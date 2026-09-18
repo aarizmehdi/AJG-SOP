@@ -50,6 +50,10 @@ async def build_version(
         SourceFormat.MARKDOWN,
         content,
     )
+    assert all(
+        section.access == version.access
+        for section in pipeline.store.canonicals[source.id].sections
+    )
     service.attach_source(organization_id, version.id, source.id)
     service.set_access(organization_id, "admin", version.id, access())
     service.approve_structure(organization_id, "admin", source.id)

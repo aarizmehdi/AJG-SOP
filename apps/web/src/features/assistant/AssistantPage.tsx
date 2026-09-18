@@ -1,7 +1,8 @@
 import { useMutation } from '@tanstack/react-query';
-import { ArrowUp, BookOpenText } from 'lucide-react';
+import { ArrowUp, BookOpenText, Mic, Square, X } from 'lucide-react';
 import {
   useEffect,
+  useCallback,
   useRef,
   useState,
   type SyntheticEvent,
@@ -15,6 +16,7 @@ import {
   type VerifiedAnswer,
 } from '../../types/assistant';
 import { useLanguage } from '../language/useLanguage';
+import { useVoiceInput } from './useVoiceInput';
 
 type Turn = {
   id: string;
@@ -38,6 +40,23 @@ export default function AssistantPage() {
   const composing = useRef(false);
   const inFlight = useRef(false);
   const followBottom = useRef(true);
+  const voiceEnabled = import.meta.env.VITE_VOICE_INPUT_ENABLED === 'true';
+  const acceptTranscript = useCallback((transcript: string) => {
+    setQuestion(transcript);
+    window.requestAnimationFrame(() => {
+      const field = textarea.current;
+      if (!field) return;
+      field.style.height = 'auto';
+      field.style.height = `${Math.min(field.scrollHeight, 144).toString()}px`;
+      field.style.overflowY = field.scrollHeight > 144 ? 'auto' : 'hidden';
+      field.focus();
+    });
+  }, []);
+  const voice = useVoiceInput({
+    enabled: voiceEnabled,
+    language,
+    onTranscript: acceptTranscript,
+  });
   const answer = useMutation({
     mutationFn: async (request: Request) => {
       const result = await apiRequest(
@@ -111,6 +130,7 @@ export default function AssistantPage() {
     if (!field) return;
     field.style.height = 'auto';
     field.style.height = `${Math.min(field.scrollHeight, 144).toString()}px`;
+    field.style.overflowY = field.scrollHeight > 144 ? 'auto' : 'hidden';
   };
   const send = () => {
     const trimmed = question.trim();
@@ -121,7 +141,10 @@ export default function AssistantPage() {
     const id = crypto.randomUUID();
     setTurns((current) => [...current, { id, question: trimmed }]);
     setQuestion('');
-    if (textarea.current) textarea.current.style.height = 'auto';
+    if (textarea.current) {
+      textarea.current.style.height = 'auto';
+      textarea.current.style.overflowY = 'hidden';
+    }
     answer.mutate({ id, question: trimmed, responseLanguage: language });
   };
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
@@ -233,14 +256,58 @@ export default function AssistantPage() {
           }}
           placeholder={t('assistantPlaceholder')}
         />
-        <button
-          type="submit"
-          aria-label={t('assistantSend')}
-          disabled={answer.isPending || !question.trim()}
-        >
-          <ArrowUp aria-hidden="true" />
-        </button>
-        <small>{t('assistantComposerNote')}</small>
+        <div className="composer-actions">
+          {voiceEnabled && voice.state !== 'listening' && (
+            <button
+              className="voice-button"
+              type="button"
+              aria-label={t('voiceStart')}
+              disabled={voice.state === 'transcribing'}
+              onClick={() => {
+                void voice.start();
+              }}
+            >
+              <Mic aria-hidden="true" />
+            </button>
+          )}
+          {voiceEnabled && voice.state === 'listening' && (
+            <>
+              <button
+                className="voice-button recording"
+                type="button"
+                aria-label={t('voiceStop')}
+                onClick={voice.stop}
+              >
+                <Square aria-hidden="true" />
+              </button>
+              <button
+                className="voice-button"
+                type="button"
+                aria-label={t('voiceCancel')}
+                onClick={voice.cancel}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </>
+          )}
+          <button
+            className="send-button"
+            type="submit"
+            aria-label={t('assistantSend')}
+            disabled={answer.isPending || !question.trim()}
+          >
+            <ArrowUp aria-hidden="true" />
+          </button>
+        </div>
+        <small aria-live="polite">
+          {voice.state === 'listening'
+            ? t('voiceListening')
+            : voice.state === 'transcribing'
+              ? t('voiceTranscribing')
+              : voice.state === 'error'
+                ? t('voiceError')
+                : t('assistantComposerNote')}
+        </small>
       </form>
     </main>
   );

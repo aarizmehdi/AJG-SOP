@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     embedding_model: str = "provisional-multilingual"
     reranker_provider: str = "fixture"
     document_parser_provider: Literal["fixture", "azure", "docling", "auto"] = "fixture"
+    speech_provider: Literal["disabled"] = "disabled"
 
     azure_document_intelligence_endpoint: str | None = None
     azure_document_intelligence_key: SecretStr | None = None

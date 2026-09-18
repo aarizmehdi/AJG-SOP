@@ -5,7 +5,12 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from apps.api.app.auth.dependencies import CurrentProfile
-from apps.api.app.auth.permissions import can_manage_scope, require_admin, require_management_scope
+from apps.api.app.auth.permissions import (
+    can_manage_scope,
+    require_admin,
+    require_management_scope,
+    require_system_admin,
+)
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.policy_service import PolicyService, PublicationError
 from packages.contracts.access import AccessScope
@@ -27,6 +32,10 @@ class CreatePolicyRequest(BaseModel):
 
 class AccessUpdateRequest(BaseModel):
     access: AccessScope
+
+
+class ReviewConfirmationRequest(BaseModel):
+    confirmed: bool
 
 
 def _service(request: Request) -> PolicyService:
@@ -217,7 +226,7 @@ async def policy_viewer(
 async def create_policy(
     request: Request, payload: CreatePolicyRequest, profile: CurrentProfile
 ) -> dict[str, object]:
-    require_admin(profile)
+    require_system_admin(profile)
     require_management_scope(profile, payload.access)
     service = _service(request)
     policy = service.create_policy(
@@ -245,7 +254,7 @@ async def update_access(
     payload: AccessUpdateRequest,
     profile: CurrentProfile,
 ) -> SOPVersion:
-    require_admin(profile)
+    require_system_admin(profile)
     require_management_scope(profile, payload.access)
     _authorize_complete_version(request, profile, version_id)
     return _service(request).set_access(
@@ -255,9 +264,14 @@ async def update_access(
 
 @router.post("/sources/{source_id}/approve")
 async def approve_structure(
-    request: Request, source_id: str, profile: CurrentProfile
+    request: Request,
+    source_id: str,
+    payload: ReviewConfirmationRequest,
+    profile: CurrentProfile,
 ) -> SOPVersion:
     require_admin(profile)
+    if not payload.confirmed:
+        raise HTTPException(status_code=422, detail="Review confirmation is required")
     source = _store(request).sources.get(source_id)
     if not source or source.organization_id != profile.organization_id:
         raise HTTPException(status_code=404, detail="Source not found")
@@ -272,7 +286,7 @@ async def approve_structure(
 async def prepare_publication(
     request: Request, version_id: str, profile: CurrentProfile
 ) -> SOPVersion:
-    require_admin(profile)
+    require_system_admin(profile)
     _authorize_complete_version(request, profile, version_id)
     try:
         return await _service(request).prepare_for_publication(
@@ -284,7 +298,7 @@ async def prepare_publication(
 
 @router.post("/versions/{version_id}/publish")
 async def publish_version(request: Request, version_id: str, profile: CurrentProfile) -> SOPVersion:
-    require_admin(profile)
+    require_system_admin(profile)
     _authorize_complete_version(request, profile, version_id)
     try:
         return _service(request).publish(profile.organization_id, profile.id, version_id)
@@ -296,7 +310,7 @@ async def publish_version(request: Request, version_id: str, profile: CurrentPro
 async def rollback_version(
     request: Request, policy_id: str, version_id: str, profile: CurrentProfile
 ) -> SOPVersion:
-    require_admin(profile)
+    require_system_admin(profile)
     _authorize_complete_version(request, profile, version_id)
     policy = _store(request).policies.get(policy_id)
     if not policy or policy.organization_id != profile.organization_id:
@@ -338,7 +352,7 @@ async def duplicate_sections(
 
 @router.post("/policies/{policy_id}/deactivate")
 async def deactivate_policy(request: Request, policy_id: str, profile: CurrentProfile) -> SOPPolicy:
-    require_admin(profile)
+    require_system_admin(profile)
     policy = _store(request).policies.get(policy_id)
     if not policy or policy.organization_id != profile.organization_id:
         raise HTTPException(status_code=404, detail="Policy not found")

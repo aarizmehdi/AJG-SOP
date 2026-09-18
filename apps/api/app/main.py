@@ -14,6 +14,7 @@ from apps.api.app.api.assistant import router as assistant_router
 from apps.api.app.api.operations import router as operations_router
 from apps.api.app.api.profile import router as profile_router
 from apps.api.app.api.search import router as search_router
+from apps.api.app.api.speech import router as speech_router
 from apps.api.app.auth.identity import Auth0IdentityProvider, FixtureIdentityProvider
 from apps.api.app.config import Settings, get_settings
 from apps.api.app.repositories.database import InMemoryCanonicalDatabase, MongoCanonicalDatabase
@@ -60,6 +61,7 @@ from services.retrieval.lexical_search import FixtureLexicalRetriever
 from services.retrieval.reranker import FixtureReranker
 from services.retrieval.retriever import RetrievalService
 from services.retrieval.semantic_search import FixtureSemanticRetriever, PineconeSemanticRetriever
+from services.speech.base import UnavailableSpeechToTextProvider
 
 
 def build_parser(settings: Settings) -> DocumentParser:
@@ -178,6 +180,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         GroundingVerifier(),
         app.state.metrics,
     )
+    app.state.speech_provider = UnavailableSpeechToTextProvider()
     structlog.get_logger().info("application_started", mode=settings.app_mode)
     yield
     await app.state.foundation_persistence.flush(app.state.foundation_store)
@@ -199,6 +202,7 @@ app.include_router(admin_policies_router, prefix=settings.api_prefix)
 app.include_router(search_router, prefix=settings.api_prefix)
 app.include_router(assistant_router, prefix=settings.api_prefix)
 app.include_router(operations_router, prefix=settings.api_prefix)
+app.include_router(speech_router, prefix=settings.api_prefix)
 
 
 @app.middleware("http")

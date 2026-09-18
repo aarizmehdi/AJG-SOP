@@ -1573,7 +1573,7 @@ a {
   padding: 7px 0;
   color: var(--navy);
   max-height: 144px;
-  overflow-y: auto;
+  overflow-y: hidden;
   line-height: 1.55;
 }
 .composer button {
@@ -3111,5 +3111,105 @@ a {
 @media (max-width: 520px) {
   .library-selects {
     grid-template-columns: 1fr;
+  }
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.composer .voice-button {
+  background: transparent;
+  color: #557087;
+  border: 1px solid var(--border);
+}
+.composer .voice-button:hover {
+  background: #edf5fa;
+  color: var(--navy);
+}
+.composer .voice-button.recording {
+  border-color: #d39a9a;
+  background: #fff3f3;
+  color: #a13e46;
+}
+.composer .voice-button svg {
+  width: 18px;
+  height: 18px;
+}
+.review-toc {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: #fbfcfe;
+}
+.review-toc strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--navy);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.review-toc > div {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+.review-toc button {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: white;
+  color: #536a81;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.section-editor {
+  scroll-margin-top: 20px;
+}
+.review-identity {
+  display: flex;
+  gap: 12px;
+  margin: 0 18px 14px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #f8fafc;
+  color: var(--navy);
+}
+.review-identity > svg {
+  flex: none;
+  color: var(--blue-dark);
+}
+.review-identity > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.review-identity span,
+.review-identity small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.review-identity label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 9px;
+  color: #334a62;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+.review-identity input {
+  margin-top: 2px;
+}
+@media (max-width: 520px) {
+  .composer-actions {
+    gap: 4px;
+  }
+  .composer button {
+    width: 40px;
+    height: 40px;
   }
 }

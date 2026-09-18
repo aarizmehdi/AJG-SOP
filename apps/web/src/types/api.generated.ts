@@ -176,6 +176,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/policies/{policy_id}/viewer': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Policy Viewer */
+    get: operations['policy_viewer_api_v1_admin_policies__policy_id__viewer_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/versions/{version_id}/access': {
     parameters: {
       query?: never;
@@ -434,6 +451,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/speech/capabilities': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Speech Capabilities */
+    get: operations['speech_capabilities_api_v1_speech_capabilities_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/speech/transcribe': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Transcribe Speech */
+    post: operations['transcribe_speech_api_v1_speech_transcribe_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/health': {
     parameters: {
       query?: never;
@@ -505,6 +556,11 @@ export interface components {
      * @enum {string}
      */
     BlockKind: 'paragraph' | 'ordered_list' | 'unordered_list' | 'table';
+    /** Body_transcribe_speech_api_v1_speech_transcribe_post */
+    Body_transcribe_speech_api_v1_speech_transcribe_post: {
+      /** Audio */
+      audio: string;
+    };
     /** Body_upload_source_api_v1_admin_sources_upload_post */
     Body_upload_source_api_v1_admin_sources_upload_post: {
       /** Policy Id */
@@ -879,6 +935,11 @@ export interface components {
      * @enum {string}
      */
     PolicyStatus: 'draft' | 'active' | 'inactive';
+    /** ReviewConfirmationRequest */
+    ReviewConfirmationRequest: {
+      /** Confirmed */
+      confirmed: boolean;
+    };
     /** ReviewRevision */
     ReviewRevision: {
       /** Revision */
@@ -1102,6 +1163,15 @@ export interface components {
      */
     SourceStatus:
       'uploaded' | 'processing' | 'review_required' | 'approved' | 'failed';
+    /** SpeechTranscription */
+    SpeechTranscription: {
+      /** Detected Language */
+      detected_language: string;
+      /** Raw Transcript */
+      raw_transcript: string;
+      /** Normalized Transcript */
+      normalized_transcript: string;
+    };
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -1565,6 +1635,43 @@ export interface operations {
       };
     };
   };
+  policy_viewer_api_v1_admin_policies__policy_id__viewer_get: {
+    parameters: {
+      query?: {
+        version_id?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        policy_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   update_access_api_v1_admin_versions__version_id__access_put: {
     parameters: {
       query?: never;
@@ -1613,7 +1720,11 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReviewConfirmationRequest'];
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {
@@ -2061,6 +2172,76 @@ export interface operations {
           'application/json': {
             [key: string]: unknown;
           };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  speech_capabilities_api_v1_speech_capabilities_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  transcribe_speech_api_v1_speech_transcribe_post: {
+    parameters: {
+      query: {
+        response_language: components['schemas']['Language'];
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_transcribe_speech_api_v1_speech_transcribe_post'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SpeechTranscription'];
         };
       };
       /** @description Validation Error */

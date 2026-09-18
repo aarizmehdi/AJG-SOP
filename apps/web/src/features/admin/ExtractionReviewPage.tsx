@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, LocateFixed, Plus } from 'lucide-react';
+import { ChevronLeft, LocateFixed, Plus, UserCheck } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
@@ -7,7 +7,9 @@ import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import { Button } from '../../components/ui/Button';
 import { versionSchema } from '../../types/policy';
+import { profileSchema, type Profile } from '../../types/profile';
 import { canonicalSopSchema, reviewPayloadSchema } from '../../types/source';
+import { useAdminCopy } from './adminCopy';
 import { OriginalPreview } from './OriginalPreview';
 
 type CanonicalSop = ReturnType<typeof canonicalSopSchema.parse>;
@@ -18,14 +20,19 @@ function ReviewEditor({
   source,
   raw,
   initial,
+  profile,
 }: {
   sourceId: string;
   source: SourceDocument;
   raw: ReturnType<typeof reviewPayloadSchema.parse>['raw'];
   initial: CanonicalSop;
+  profile: Profile;
 }) {
+  const { copy } = useAdminCopy();
   const [draft, setDraft] = useState(initial);
   const [versionId, setVersionId] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const isSystemAdmin = profile.application_roles.includes('system_admin');
   const save = useMutation({
     mutationFn: () =>
       apiRequest(`/admin/sources/${sourceId}/review`, canonicalSopSchema, {
@@ -37,6 +44,7 @@ function ReviewEditor({
     mutationFn: () =>
       apiRequest(`/admin/sources/${sourceId}/approve`, versionSchema, {
         method: 'POST',
+        body: JSON.stringify({ confirmed: true }),
       }),
     onSuccess: (version) => {
       setVersionId(version.id);
@@ -177,8 +185,8 @@ function ReviewEditor({
       ...basis,
       id: `section-review-${id}`,
       stable_key: `${basis.stable_key}-review-${id}`,
-      heading: 'New section',
-      heading_path: [...basis.heading_path.slice(0, -1), 'New section'],
+      heading: copy.newSection,
+      heading_path: [...basis.heading_path.slice(0, -1), copy.newSection],
       blocks: [],
     };
     setDraft({
@@ -201,46 +209,66 @@ function ReviewEditor({
         <div>
           <Link className="back-link" to="/admin">
             <ChevronLeft />
-            Back to library
+            {copy.backToLibrary}
           </Link>
-          <h2>Review extracted structure</h2>
-          <p>
-            Correct OCR and structure on the right. The original source remains
-            unchanged.
-          </p>
+          <h2>{copy.reviewTitle}</h2>
+          <p>{copy.reviewLead}</p>
         </div>
-        <span className="pill pill--review">Human review required</span>
+        <span className="pill pill--review">{copy.humanReviewRequired}</span>
       </div>
       <div className="review-grid">
         <section className="review-pane source-pane">
           <header>
             <div>
-              <span className="pane-label">Original source</span>
+              <span className="pane-label">{copy.originalSource}</span>
               <strong>{source.file_name}</strong>
             </div>
-            <span>Private</span>
+            <span>{copy.privateLabel}</span>
           </header>
           <OriginalPreview sourceId={sourceId} source={source} raw={raw} />
-          <footer>Source locations follow the selected canonical block.</footer>
+          <footer>{copy.sourceLocationHint}</footer>
         </section>
         <section className="review-pane canonical-pane">
           <header>
             <div>
-              <span className="pane-label">Canonical SOP</span>
+              <span className="pane-label">{copy.canonicalSop}</span>
               <strong>{draft.title}</strong>
             </div>
             <span>Schema 1.0</span>
           </header>
+          <nav className="review-toc" aria-label={copy.structuredSopContents}>
+            <strong>{copy.contents}</strong>
+            <div>
+              {draft.sections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  dir="auto"
+                  onClick={() => {
+                    document
+                      .getElementById(`review-${section.id}`)
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                >
+                  {section.heading}
+                </button>
+              ))}
+            </div>
+          </nav>
           <div className="canonical-editor">
             {draft.sections.map((section) => (
-              <article key={section.id} className="section-editor">
+              <article
+                key={section.id}
+                id={`review-${section.id}`}
+                className="section-editor"
+              >
                 <div className="section-path">
                   <LocateFixed />
                   {section.heading_path.join(' → ')}
                 </div>
                 <div className="structure-fields">
                   <label>
-                    Heading
+                    {copy.heading}
                     <input
                       value={section.heading}
                       onChange={(event) => {
@@ -249,7 +277,7 @@ function ReviewEditor({
                     />
                   </label>
                   <label>
-                    Level
+                    {copy.level}
                     <input
                       type="number"
                       min="1"
@@ -262,7 +290,7 @@ function ReviewEditor({
                   </label>
                   {pages.length > 0 && (
                     <label>
-                      Source page
+                      {copy.sourcePage}
                       <select
                         value={section.source.page_start ?? pages[0]}
                         onChange={(event) => {
@@ -281,7 +309,7 @@ function ReviewEditor({
                 {section.blocks.map((block) =>
                   block.text !== null ? (
                     <label key={block.id}>
-                      Content
+                      {copy.content}
                       <textarea
                         value={block.text}
                         rows={4}
@@ -292,10 +320,14 @@ function ReviewEditor({
                     </label>
                   ) : block.list_items.length > 0 ? (
                     <fieldset className="structured-editor" key={block.id}>
-                      <legend>{block.kind.replace('_', ' ')}</legend>
+                      <legend>
+                        {block.kind === 'ordered_list'
+                          ? copy.orderedList
+                          : copy.unorderedList}
+                      </legend>
                       {block.list_items.map((item, index) => (
                         <label key={`${block.id}-${String(index)}`}>
-                          Item {index + 1}
+                          {copy.item} {index + 1}
                           <input
                             value={item.text}
                             onChange={(event) => {
@@ -312,7 +344,7 @@ function ReviewEditor({
                     </fieldset>
                   ) : block.table ? (
                     <fieldset className="structured-editor" key={block.id}>
-                      <legend>Table cells</legend>
+                      <legend>{copy.tableCells}</legend>
                       {block.table.cells.map((cell) => (
                         <label
                           key={`${String(cell.row)}-${String(cell.column)}`}
@@ -343,21 +375,44 @@ function ReviewEditor({
                   }}
                 >
                   <Plus />
-                  Add section after
+                  {copy.addSectionAfter}
                 </button>
               </article>
             ))}
           </div>
+          <div className="review-identity">
+            <UserCheck size={20} aria-hidden="true" />
+            <div>
+              <span>{copy.reviewingAs}</span>
+              <strong>{profile.display_name}</strong>
+              <small>
+                {profile.application_roles.includes('system_admin')
+                  ? copy.systemAdministrator
+                  : copy.sopAdministrator}
+                {profile.email ? ` · ${profile.email}` : ''}
+              </small>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={confirmed}
+                  onChange={(event) => {
+                    setConfirmed(event.target.checked);
+                  }}
+                />
+                {copy.confirmCompared}
+              </label>
+            </div>
+          </div>
           <footer>
             <span className="review-status" role="status">
               {publish.isSuccess
-                ? 'Published'
+                ? copy.statusPublished
                 : prepare.isSuccess
-                  ? 'Index verified — ready to publish'
+                  ? copy.indexVerified
                   : approve.isSuccess
-                    ? 'Structure approved'
+                    ? copy.structureApproved
                     : save.isSuccess
-                      ? 'Corrections saved'
+                      ? copy.correctionsSaved
                       : ''}
             </span>
             <Button
@@ -367,36 +422,36 @@ function ReviewEditor({
                 save.mutate();
               }}
             >
-              Save correction
+              {copy.saveCorrection}
             </Button>
             {!approve.isSuccess && (
               <Button
-                disabled={approve.isPending}
+                disabled={approve.isPending || !confirmed}
                 onClick={() => {
                   approve.mutate();
                 }}
               >
-                Approve structure
+                {copy.submitReview}
               </Button>
             )}
-            {approve.isSuccess && !prepare.isSuccess && (
+            {isSystemAdmin && approve.isSuccess && !prepare.isSuccess && (
               <Button
                 disabled={prepare.isPending}
                 onClick={() => {
                   prepare.mutate();
                 }}
               >
-                Prepare search index
+                {copy.prepareSearchIndex}
               </Button>
             )}
-            {prepare.isSuccess && !publish.isSuccess && (
+            {isSystemAdmin && prepare.isSuccess && !publish.isSuccess && (
               <Button
                 disabled={publish.isPending}
                 onClick={() => {
                   publish.mutate();
                 }}
               >
-                Publish
+                {copy.publish}
               </Button>
             )}
           </footer>
@@ -407,25 +462,30 @@ function ReviewEditor({
 }
 
 export default function ExtractionReviewPage() {
+  const { copy } = useAdminCopy();
   const { sourceId = '' } = useParams();
   const review = useQuery({
     queryKey: ['source-review', sourceId],
     queryFn: () =>
       apiRequest(`/admin/sources/${sourceId}/review`, reviewPayloadSchema),
   });
-  if (review.isLoading) return <RouteSkeleton />;
+  const profile = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => apiRequest('/profile/me', profileSchema),
+  });
+  if (review.isLoading || profile.isLoading) return <RouteSkeleton />;
   if (review.isError)
     return (
       <ErrorState
-        title="Review unavailable"
-        detail="The source may not exist in this fixture session, or the API is offline."
+        title={copy.reviewUnavailable}
+        detail={copy.reviewUnavailableDetail}
       />
     );
-  if (!review.data?.canonical)
+  if (!review.data?.canonical || !profile.data)
     return (
       <ErrorState
-        title="Extraction unavailable"
-        detail="This format requires a configured parser provider before canonical review."
+        title={copy.extractionUnavailable}
+        detail={copy.extractionUnavailableDetail}
       />
     );
   return (
@@ -435,6 +495,7 @@ export default function ExtractionReviewPage() {
       source={review.data.source}
       raw={review.data.raw}
       initial={review.data.canonical}
+      profile={profile.data}
     />
   );
 }

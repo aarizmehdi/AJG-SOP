@@ -127,7 +127,10 @@ class IngestionPipeline:
                 raw.model_dump_json(indent=2).encode(),
             )
             self._transition(job, IngestionState.STRUCTURING, "Building sections")
-            canonical = self.canonicalizer.canonicalize(source, raw)
+            version = self.store.versions.get(source.version_id)
+            if not version or version.organization_id != source.organization_id:
+                raise PermissionError("Source version ownership could not be verified")
+            canonical = self.canonicalizer.canonicalize(source, raw, version.access)
             canonical_uri = await self.artifacts.put(
                 organization_id,
                 f"sources/{source_id}/canonical/canonical.json",

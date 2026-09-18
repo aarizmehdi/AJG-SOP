@@ -188,7 +188,12 @@ class PolicyService:
                 )
             )
         self.audit.record(
-            organization_id, actor_id, "structure.approved", "source_document", source_id
+            organization_id,
+            actor_id,
+            "structure.approved",
+            "source_document",
+            source_id,
+            {"version_id": version.id, "source_id": source_id},
         )
         return version
 
