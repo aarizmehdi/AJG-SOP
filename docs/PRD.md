@@ -865,8 +865,7 @@ Concept:
 
 ```python
 class DocumentParser:
-    async def parse(self, source) -> RawDocumentResult:
-        ...
+    async def parse(self, source) -> RawDocumentResult: ...
 ```
 
 Providers must remain swappable.

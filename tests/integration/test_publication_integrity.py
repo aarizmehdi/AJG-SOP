@@ -19,13 +19,9 @@ from services.ingestion.structure.canonical_document import Canonicalizer
 
 def access() -> AccessScope:
     return AccessScope(
-        departments=AccessDimension(
-            mode=AccessMode.SELECTED, values=frozenset({"store"})
-        ),
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"store"})),
         locations=AccessDimension(mode=AccessMode.ALL),
-        roles=AccessDimension(
-            mode=AccessMode.SELECTED, values=frozenset({"store_keeper"})
-        ),
+        roles=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"store_keeper"})),
     )
 
 
@@ -38,9 +34,7 @@ async def build_version(
     label: str,
     content: bytes,
 ) -> str:
-    version = service.create_version(
-        organization_id, "admin", policy_id, label, access()
-    )
+    version = service.create_version(organization_id, "admin", policy_id, label, access())
     source = await pipeline.ingest(
         organization_id,
         policy_id,

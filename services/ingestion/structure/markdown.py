@@ -15,8 +15,6 @@ def canonical_to_markdown(document: CanonicalSOP) -> str:
                     lines.append(f"{'  ' * item.level}{marker} {item.text}")
                 lines.append("")
             elif block.kind is BlockKind.TABLE and block.table:
-                lines.append(
-                    " | ".join(cell.text for cell in block.table.cells if cell.is_header)
-                )
+                lines.append(" | ".join(cell.text for cell in block.table.cells if cell.is_header))
                 lines.append("")
     return "\n".join(lines).strip() + "\n"

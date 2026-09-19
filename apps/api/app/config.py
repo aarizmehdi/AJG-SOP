@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     app_name: str = "Aziz Jan Trust SOP Knowledge System"
     api_prefix: str = "/api/v1"
     web_origin: str = "http://localhost:5173"
+    cors_origins: str = ""
+
+    port: int = 8000
+    workers: int = 1
+    max_upload_bytes: int = 200 * 1024 * 1024
 
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_database: str = "aziz_jan_sop"
@@ -48,6 +53,16 @@ class Settings(BaseSettings):
     azure_document_intelligence_endpoint: str | None = None
     azure_document_intelligence_key: SecretStr | None = None
 
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Return the list of allowed CORS origins."""
+        origins = [self.web_origin]
+        if self.cors_origins:
+            origins.extend(
+                origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
+            )
+        return origins
+
     @model_validator(mode="after")
     def validate_live_configuration(self) -> "Settings":
         if self.app_mode == "live":
@@ -62,6 +77,13 @@ class Settings(BaseSettings):
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
+            if "localhost" in self.web_origin:
+                raise ValueError(
+                    "WEB_ORIGIN must not be localhost in live mode; "
+                    "set it to your production Vercel URL"
+                )
+            if "localhost" in self.mongodb_uri and "127.0.0.1" not in self.mongodb_uri:
+                pass  # Allow explicit localhost for local live testing
         return self
 
 

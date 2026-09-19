@@ -15,6 +15,13 @@ class ArtifactStore(ABC):
         raise NotImplementedError
 
 
+MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB limit per user requirement
+
+
+class StorageError(RuntimeError):
+    pass
+
+
 class LocalArtifactStore(ArtifactStore):
     def __init__(self, root: Path) -> None:
         self._root = root.resolve()
@@ -26,6 +33,10 @@ class LocalArtifactStore(ArtifactStore):
         return candidate
 
     async def put(self, organization_id: str, key: str, content: bytes) -> str:
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            mb = len(content) / (1024 * 1024)
+            limit_mb = MAX_FILE_SIZE_BYTES // (1024 * 1024)
+            raise ValueError(f"File size {mb:.1f}MB exceeds maximum allowed limit of {limit_mb}MB")
         path = self._path(organization_id, key)
         await anyio.to_thread.run_sync(lambda: path.parent.mkdir(parents=True, exist_ok=True))
         await anyio.to_thread.run_sync(path.write_bytes, content)
@@ -36,6 +47,8 @@ class LocalArtifactStore(ArtifactStore):
         if not uri.startswith(prefix):
             raise PermissionError("Artifact does not belong to the active organization")
         path = self._path(organization_id, uri[len(prefix) :])
+        if not path.exists():
+            raise StorageError(f"Artifact not found at {path}")
         return await anyio.to_thread.run_sync(path.read_bytes)
 
 
@@ -58,10 +71,17 @@ class S3ArtifactStore(ArtifactStore):
         )
 
     async def put(self, organization_id: str, key: str, content: bytes) -> str:
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            mb = len(content) / (1024 * 1024)
+            limit_mb = MAX_FILE_SIZE_BYTES // (1024 * 1024)
+            raise ValueError(f"File size {mb:.1f}MB exceeds maximum allowed limit of {limit_mb}MB")
         object_key = f"{organization_id}/{key}"
-        await anyio.to_thread.run_sync(
-            lambda: self._client.put_object(Bucket=self._bucket, Key=object_key, Body=content)
-        )
+        try:
+            await anyio.to_thread.run_sync(
+                lambda: self._client.put_object(Bucket=self._bucket, Key=object_key, Body=content)
+            )
+        except Exception as err:
+            raise StorageError(f"Failed to store artifact in S3/R2: {err}") from err
         return f"s3://{self._bucket}/{object_key}"
 
     async def get(self, organization_id: str, uri: str) -> bytes:
@@ -69,7 +89,10 @@ class S3ArtifactStore(ArtifactStore):
         if not uri.startswith(prefix):
             raise PermissionError("Artifact does not belong to the active organization")
         object_key = f"{organization_id}/{uri[len(prefix) :]}"
-        response = await anyio.to_thread.run_sync(
-            lambda: self._client.get_object(Bucket=self._bucket, Key=object_key)
-        )
-        return await anyio.to_thread.run_sync(response["Body"].read)
+        try:
+            response = await anyio.to_thread.run_sync(
+                lambda: self._client.get_object(Bucket=self._bucket, Key=object_key)
+            )
+            return await anyio.to_thread.run_sync(response["Body"].read)
+        except Exception as err:
+            raise StorageError(f"Failed to retrieve artifact from S3/R2: {err}") from err

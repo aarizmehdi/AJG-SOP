@@ -41,7 +41,8 @@ from services.assistant.answerability import FixtureAnswerabilityGate
 from services.assistant.citations import CitationValidator
 from services.assistant.grounding import GroundingVerifier
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
-from services.ingestion.embeddings.base import FixtureEmbeddingProvider
+from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
+from services.ingestion.embeddings.unavailable import UnavailableEmbeddingProvider
 from services.ingestion.extractors.azure_document_intelligence import (
     AzureDocumentIntelligenceParser,
 )
@@ -60,7 +61,11 @@ from services.retrieval.fusion import ReciprocalRankFusion
 from services.retrieval.lexical_search import FixtureLexicalRetriever
 from services.retrieval.reranker import FixtureReranker
 from services.retrieval.retriever import RetrievalService
-from services.retrieval.semantic_search import FixtureSemanticRetriever, PineconeSemanticRetriever
+from services.retrieval.semantic_search import (
+    FixtureSemanticRetriever,
+    PineconeSemanticRetriever,
+    SemanticCandidateRetriever,
+)
 from services.speech.base import UnavailableSpeechToTextProvider
 
 
@@ -115,6 +120,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.foundation_store,
         app.state.metrics,
     )
+
+    # --- Retrieval index ---
     if settings.app_mode == "fixture":
         app.state.retrieval_index = FixtureRetrievalIndex()
     else:
@@ -125,29 +132,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.pinecone_index,
             settings.pinecone_namespace_prefix,
         )
+
+    # --- Publication pipeline providers ---
+    publication_embeddings: EmbeddingProvider
+    if settings.app_mode == "fixture":
+        publication_embeddings = FixtureEmbeddingProvider()
+    else:
+        publication_embeddings = UnavailableEmbeddingProvider()
+
     app.state.audit_service = AuditService(app.state.foundation_store)
     app.state.policy_service = PolicyService(
         app.state.foundation_store,
         SectionAwareFixtureChunker(),
-        FixtureEmbeddingProvider(),
+        publication_embeddings,
         app.state.retrieval_index,
         app.state.audit_service,
     )
     if settings.app_mode == "fixture":
         await seed_fixture_data(app)
+
+    # --- Retrieval service ---
     authorization = AuthorizationFilter(app.state.foundation_store)
-    semantic = (
-        FixtureSemanticRetriever(FixtureEmbeddingProvider())
-        if settings.app_mode == "fixture"
-        else PineconeSemanticRetriever(
-            settings.pinecone_api_key.get_secret_value()
-            if settings.pinecone_api_key
-            else "",
+    semantic: SemanticCandidateRetriever
+    if settings.app_mode == "fixture":
+        semantic = FixtureSemanticRetriever(FixtureEmbeddingProvider())
+    else:
+        semantic = PineconeSemanticRetriever(
+            settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
             settings.pinecone_index,
             settings.pinecone_namespace_prefix,
-            FixtureEmbeddingProvider(),
+            UnavailableEmbeddingProvider(),
         )
-    )
     app.state.retrieval_service = RetrievalService(
         app.state.foundation_store,
         authorization,
@@ -160,6 +175,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.policy_reader_service = PolicyReaderService(
         app.state.foundation_store, authorization, app.state.artifact_store
     )
+
+    # --- LLM provider ---
     llm_provider: LLMProvider
     if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
         llm_provider = DeepSeekLLMProvider(
@@ -183,7 +200,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.speech_provider = UnavailableSpeechToTextProvider()
     structlog.get_logger().info("application_started", mode=settings.app_mode)
     yield
-    await app.state.foundation_persistence.flush(app.state.foundation_store)
+    try:
+        await app.state.foundation_persistence.flush(app.state.foundation_store)
+    except Exception:
+        structlog.get_logger().exception("shutdown_flush_failed")
     await app.state.foundation_persistence.close()
 
 
@@ -191,7 +211,7 @@ settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.web_origin],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
@@ -212,7 +232,12 @@ async def persist_successful_mutations(
     response = await call_next(request)
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and response.status_code < 400:
         persistence: FoundationPersistence = request.app.state.foundation_persistence
-        await persistence.flush(request.app.state.foundation_store)
+        store: FoundationStore = request.app.state.foundation_store
+        try:
+            await persistence.flush(store)
+            store.clear_mutations()
+        except Exception:
+            structlog.get_logger().exception("mutation_flush_failed")
     return response
 
 

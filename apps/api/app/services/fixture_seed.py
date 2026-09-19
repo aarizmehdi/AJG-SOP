@@ -15,19 +15,11 @@ async def seed_fixture_data(app: FastAPI) -> None:
         "FIXTURE-SOP-001",
     )
     access = AccessScope(
-        departments=AccessDimension(
-            mode=AccessMode.SELECTED, values=frozenset({"store"})
-        ),
-        locations=AccessDimension(
-            mode=AccessMode.SELECTED, values=frozenset({"peshawar-main"})
-        ),
-        roles=AccessDimension(
-            mode=AccessMode.SELECTED, values=frozenset({"store_keeper"})
-        ),
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"store"})),
+        locations=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"peshawar-main"})),
+        roles=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"store_keeper"})),
     )
-    version = service.create_version(
-        "ajt", "fixture-system", policy.id, "Fixture 1", access
-    )
+    version = service.create_version("ajt", "fixture-system", policy.id, "Fixture 1", access)
     content = b"""# Store Operations
 
 ## 4.3 Damaged Stock Handling

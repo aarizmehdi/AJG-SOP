@@ -16,9 +16,7 @@ from services.retrieval.semantic_search import SemanticCandidateRetriever
 
 def selected(department: str) -> AccessScope:
     return AccessScope(
-        departments=AccessDimension(
-            mode=AccessMode.SELECTED, values=frozenset({department})
-        ),
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({department})),
         locations=AccessDimension(mode=AccessMode.ALL),
         roles=AccessDimension(mode=AccessMode.ALL),
     )

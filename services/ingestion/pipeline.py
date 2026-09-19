@@ -67,6 +67,7 @@ class IngestionPipeline:
             parser_provider=self.parser.__class__.__name__,
         )
         self.store.sources[source.id] = source
+        self.store.mark_modified("source_documents", source.id, source)
         job = IngestionJob(
             id=f"job-{uuid4().hex[:12]}",
             organization_id=organization_id,
@@ -82,6 +83,7 @@ class IngestionPipeline:
             ],
         )
         self.store.jobs[job.id] = job
+        self.store.mark_modified("ingestion_jobs", job.id, job)
         return await self._process(source, job, content)
 
     async def retry(self, organization_id: str, source_id: str) -> SourceDocument:
@@ -97,9 +99,7 @@ class IngestionPipeline:
         content = await self.artifacts.get(organization_id, source.original_artifact_uri)
         job.retry_count += 1
         job.error_code = None
-        source = source.model_copy(
-            update={"status": SourceStatus.PROCESSING, "error_code": None}
-        )
+        source = source.model_copy(update={"status": SourceStatus.PROCESSING, "error_code": None})
         self.store.sources[source.id] = source
         return await self._process(source, job, content)
 
@@ -152,6 +152,8 @@ class IngestionPipeline:
             )
             self.store.raw_results[source.id] = raw
             self.store.canonicals[source.id] = canonical
+            self.store.mark_modified("raw_parser_results", source.id, raw)
+            self.store.mark_modified("canonical_sops", source.id, canonical)
             self._transition(job, IngestionState.REVIEW_REQUIRED, "Waiting for human review")
         except ParserUnavailableError:
             source = source.model_copy(
@@ -181,6 +183,7 @@ class IngestionPipeline:
             if self.metrics:
                 self.metrics.observe("ingestion", (perf_counter() - started) * 1000)
         self.store.sources[source.id] = source
+        self.store.mark_modified("source_documents", source.id, source)
         return source
 
     @staticmethod
@@ -238,11 +241,7 @@ class IngestionPipeline:
             content = "\n".join(
                 block.text
                 or "\n".join(item.text for item in block.list_items)
-                or (
-                    "\n".join(cell.text for cell in block.table.cells)
-                    if block.table
-                    else ""
-                )
+                or ("\n".join(cell.text for cell in block.table.cells) if block.table else "")
                 for block in section.blocks
             )
             section.content_hash = hashlib.sha256(content.encode()).hexdigest()
@@ -262,15 +261,15 @@ class IngestionPipeline:
             canonical.model_dump_json(indent=2).encode(),
         )
         self.store.canonicals[source_id] = canonical
+        self.store.mark_modified("canonical_sops", source_id, canonical)
         self.store.sources[source_id] = source.model_copy(
             update={"reviewed_artifact_uri": uri, "status": SourceStatus.REVIEW_REQUIRED}
         )
+        self.store.mark_modified("source_documents", source_id, self.store.sources[source_id])
         return canonical
 
     @staticmethod
-    def _validate_locator(
-        locator: SourceLocator, source_id: str, valid_pages: set[int]
-    ) -> None:
+    def _validate_locator(locator: SourceLocator, source_id: str, valid_pages: set[int]) -> None:
         if locator.source_document_id != source_id:
             raise PermissionError("Review source mappings cannot cross source documents")
         located_pages = {

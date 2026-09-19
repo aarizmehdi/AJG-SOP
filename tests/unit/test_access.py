@@ -65,9 +65,7 @@ def test_sop_admin_management_scope_must_contain_every_dimension() -> None:
     )
     outside = allowed.model_copy(
         update={
-            "departments": AccessDimension(
-                mode=AccessMode.SELECTED, values=frozenset({"finance"})
-            )
+            "departments": AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"finance"}))
         }
     )
 

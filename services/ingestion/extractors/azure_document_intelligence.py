@@ -123,9 +123,7 @@ class AzureDocumentIntelligenceParser(DocumentParser):
                     RawBlock(
                         kind=kind,
                         text=text,
-                        level=1
-                        if role == "title"
-                        else (2 if role == "sectionHeading" else None),
+                        level=1 if role == "title" else (2 if role == "sectionHeading" else None),
                         marker=marker,
                         page=page,
                         bounding_boxes=boxes,
@@ -153,8 +151,7 @@ class AzureDocumentIntelligenceParser(DocumentParser):
                         row_span=int(cell.get("rowSpan", 1)),
                         column_span=int(cell.get("columnSpan", 1)),
                         text=str(cell.get("content", "")),
-                        is_header=str(cell.get("kind", ""))
-                        in {"columnHeader", "rowHeader"},
+                        is_header=str(cell.get("kind", "")) in {"columnHeader", "rowHeader"},
                         page=cell_page,
                         bounding_boxes=cell_boxes,
                         text_start=cell_start,

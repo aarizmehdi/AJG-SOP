@@ -18,9 +18,7 @@ async def metrics(request: Request, profile: CurrentProfile) -> dict[str, object
 
 
 @router.get("/retrieval-telemetry")
-async def retrieval_telemetry(
-    request: Request, profile: CurrentProfile
-) -> dict[str, object]:
+async def retrieval_telemetry(request: Request, profile: CurrentProfile) -> dict[str, object]:
     require_system_admin(profile)
     retrieval = cast(RetrievalService, request.app.state.retrieval_service)
     return {

@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
 import jwt
 from jwt import PyJWKClient
 
@@ -36,22 +35,28 @@ class Auth0IdentityProvider(IdentityProvider):
             raise ValueError("Auth0 domain and audience are required")
         self._issuer = f"https://{settings.auth0_domain}/"
         self._audience = settings.auth0_audience
-        self._jwks = PyJWKClient(f"{self._issuer}.well-known/jwks.json")
+        self._jwks = PyJWKClient(
+            f"{self._issuer}.well-known/jwks.json",
+            cache_keys=True,
+            cache_jwk_set=True,
+            lifespan=3600,
+        )
 
     async def authenticate(self, credential: str) -> AuthenticatedIdentity:
         token = credential.removeprefix("Bearer ").strip()
-        async with httpx.AsyncClient() as client:
-            discovery = await client.get(f"{self._issuer}.well-known/jwks.json")
-            discovery.raise_for_status()
-        key = self._jwks.get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            key.key,
-            algorithms=["RS256"],
-            audience=self._audience,
-            issuer=self._issuer,
-        )
-        return AuthenticatedIdentity(subject=str(claims["sub"]), claims=claims)
+        try:
+            key = self._jwks.get_signing_key_from_jwt(token)
+            claims = jwt.decode(
+                token,
+                key.key,
+                algorithms=["RS256"],
+                audience=self._audience,
+                issuer=self._issuer,
+                options={"verify_exp": True, "verify_iss": True, "verify_aud": True},
+            )
+            return AuthenticatedIdentity(subject=str(claims["sub"]), claims=claims)
+        except Exception as err:
+            raise ValueError(f"Invalid JWT credential: {err}") from err
 
 
 class FixtureIdentityProvider(IdentityProvider):

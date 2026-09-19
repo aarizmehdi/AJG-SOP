@@ -31,6 +31,11 @@ async def current_profile(
     if request.app.state.settings.app_mode == "fixture":
         profile = FIXTURE_PROFILES.get(identity.subject)
     else:
+        if identity.subject.startswith("fixture|"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Fixture identity prohibited in live mode",
+            )
         stored = await request.app.state.database.resolve_identity_profile(
             identity.subject,
             identity.external_organization_id,

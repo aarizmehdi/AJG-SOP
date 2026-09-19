@@ -20,9 +20,7 @@ class DerivedRetrievalIndex(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def verify(
-        self, organization_id: str, version_id: str, expected_ids: set[str]
-    ) -> bool:
+    async def verify(self, organization_id: str, version_id: str, expected_ids: set[str]) -> bool:
         raise NotImplementedError
 
 
@@ -48,9 +46,7 @@ class FixtureRetrievalIndex(DerivedRetrievalIndex):
         }
         return f"fixture:{organization_id}:{version_id}"
 
-    async def verify(
-        self, organization_id: str, version_id: str, expected_ids: set[str]
-    ) -> bool:
+    async def verify(self, organization_id: str, version_id: str, expected_ids: set[str]) -> bool:
         return set(self.records.get((organization_id, version_id), {})) == expected_ids
 
 
@@ -63,9 +59,7 @@ class PineconeRetrievalIndex(DerivedRetrievalIndex):
 
     def namespace(self, organization_id: str) -> str:
         safe_tenant = "".join(
-            char
-            for char in organization_id.lower()
-            if char.isalnum() or char == "-"
+            char for char in organization_id.lower() if char.isalnum() or char == "-"
         )
         return f"{self._namespace_prefix}--{safe_tenant}"
 
@@ -102,9 +96,7 @@ class PineconeRetrievalIndex(DerivedRetrievalIndex):
         )
         return f"pinecone:{self.namespace(organization_id)}:{version_id}"
 
-    async def verify(
-        self, organization_id: str, version_id: str, expected_ids: set[str]
-    ) -> bool:
+    async def verify(self, organization_id: str, version_id: str, expected_ids: set[str]) -> bool:
         response = await anyio.to_thread.run_sync(
             lambda: self._index.fetch(
                 ids=list(expected_ids), namespace=self.namespace(organization_id)
