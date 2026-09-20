@@ -21,7 +21,13 @@ function LiveAuthGuard({ children }: PropsWithChildren) {
         }}
       >
         <h2 style={{ marginTop: 0, fontSize: '20px' }}>Authentication Error</h2>
-        <p style={{ fontSize: '14px', lineHeight: '1.5', wordBreak: 'break-word' }}>
+        <p
+          style={{
+            fontSize: '14px',
+            lineHeight: '1.5',
+            wordBreak: 'break-word',
+          }}
+        >
           {error.message}
         </p>
         <button

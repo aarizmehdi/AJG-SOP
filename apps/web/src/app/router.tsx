@@ -19,12 +19,36 @@ import {
   Search,
 } from './routeModules';
 
+import { useAuth0 } from '@auth0/auth0-react';
+
+function LiveRootRedirect() {
+  const { isAuthenticated, isLoading } = useAuth0();
+  const search = window.location.search;
+  const hasAuthCodeOrError =
+    search.includes('code=') || search.includes('error=');
+
+  if (isLoading || hasAuthCodeOrError) {
+    return <RouteSkeleton />;
+  }
+  if (isAuthenticated) {
+    return <Navigate to="/home" replace />;
+  }
+  return <Navigate to="/login" replace />;
+}
+
+function RootRedirect() {
+  if ((import.meta.env.VITE_APP_MODE ?? 'fixture') === 'fixture') {
+    return <Navigate to="/home" replace />;
+  }
+  return <LiveRootRedirect />;
+}
+
 const loading = (node: React.ReactNode) => (
   <Suspense fallback={<RouteSkeleton />}>{node}</Suspense>
 );
 
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to="/home" replace /> },
+  { path: '/', element: <RootRedirect /> },
   { path: '/login', element: loading(<Login />) },
   {
     element: (

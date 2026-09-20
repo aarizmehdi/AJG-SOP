@@ -1,8 +1,9 @@
 import { ArrowRight } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { BrandMark } from '../../components/ui/BrandMark';
+import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useLanguage } from '../language/useLanguage';
 
@@ -10,7 +11,10 @@ function LiveLoginButton() {
   const { loginWithRedirect, isLoading, error } = useAuth0();
   const { t } = useLanguage();
   return (
-    <div className="login-actions" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <div
+      className="login-actions"
+      style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+    >
       {error ? (
         <div
           role="alert"
@@ -26,7 +30,9 @@ function LiveLoginButton() {
           }}
         >
           <strong>Auth0 Login Error:</strong>
-          <div style={{ marginTop: '4px', wordBreak: 'break-word' }}>{error.message}</div>
+          <div style={{ marginTop: '4px', wordBreak: 'break-word' }}>
+            {error.message}
+          </div>
         </div>
       ) : null}
       <Button
@@ -45,6 +51,17 @@ export default function LoginPage() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const appMode = import.meta.env.VITE_APP_MODE ?? 'fixture';
+  const { isAuthenticated, isLoading } = useAuth0();
+
+  if (appMode === 'live' && isLoading) {
+    return <RouteSkeleton />;
+  }
+
+  if (appMode === 'live' && isAuthenticated) {
+    return <Navigate to="/home" replace />;
+  }
+
   const enterFixture = (
     identity: 'employee' | 'sop-admin' | 'system-admin',
   ) => {

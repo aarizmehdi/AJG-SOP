@@ -41,16 +41,15 @@ class MongoCanonicalDatabase:
             organization = await self._database["organizations"].find_one(
                 {"auth0_organization_id": external_organization_id}
             )
-            if organization:
-                profile = await self._database["employee_profiles"].find_one(
-                    {
-                        "organization_id": organization["organization_id"],
-                        "identity_subject": identity_subject,
-                        "active": True,
-                    }
-                )
-                if profile:
-                    return profile
+            if not organization:
+                return None
+            return await self._database["employee_profiles"].find_one(
+                {
+                    "organization_id": organization["organization_id"],
+                    "identity_subject": identity_subject,
+                    "active": True,
+                }
+            )
         return await self._database["employee_profiles"].find_one(
             {
                 "identity_subject": identity_subject,
@@ -105,14 +104,13 @@ class InMemoryCanonicalDatabase:
                 ),
                 None,
             )
-            if organization:
-                profile = await self.get_one(
-                    "employee_profiles",
-                    str(organization["organization_id"]),
-                    {"identity_subject": identity_subject, "active": True},
-                )
-                if profile:
-                    return profile
+            if not organization:
+                return None
+            return await self.get_one(
+                "employee_profiles",
+                str(organization["organization_id"]),
+                {"identity_subject": identity_subject, "active": True},
+            )
         for profile in self.collections.get("employee_profiles", []):
             if profile.get("identity_subject") == identity_subject and profile.get("active", True):
                 return profile.copy()
