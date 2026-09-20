@@ -6,7 +6,11 @@ from pymongo import AsyncMongoClient
 
 class CanonicalDatabase(Protocol):
     async def resolve_identity_profile(
-        self, identity_subject: str, external_organization_id: str | None
+        self,
+        identity_subject: str,
+        external_organization_id: str | None,
+        email: str | None = None,
+        display_name: str | None = None,
     ) -> dict[str, Any] | None: ...
 
     async def get_one(
@@ -34,7 +38,11 @@ class MongoCanonicalDatabase:
         self._database = self._client[database]
 
     async def resolve_identity_profile(
-        self, identity_subject: str, external_organization_id: str | None
+        self,
+        identity_subject: str,
+        external_organization_id: str | None,
+        email: str | None = None,
+        display_name: str | None = None,
     ) -> dict[str, Any] | None:
         """Resolve the tenant from validated identity data, never from request parameters."""
         if external_organization_id:
@@ -43,19 +51,98 @@ class MongoCanonicalDatabase:
             )
             if not organization:
                 return None
-            return await self._database["employee_profiles"].find_one(
+            profile = await self._database["employee_profiles"].find_one(
                 {
                     "organization_id": organization["organization_id"],
                     "identity_subject": identity_subject,
                     "active": True,
                 }
             )
-        return await self._database["employee_profiles"].find_one(
+            if profile:
+                return profile
+            if email:
+                profile = await self._database["employee_profiles"].find_one(
+                    {
+                        "organization_id": organization["organization_id"],
+                        "email": email,
+                        "active": True,
+                    }
+                )
+                if profile:
+                    await self._database["employee_profiles"].update_one(
+                        {"_id": profile["_id"]},
+                        {"$set": {"identity_subject": identity_subject}},
+                    )
+                    profile["identity_subject"] = identity_subject
+                    return profile
+            return None
+
+        # Standard single-tenant MVP resolution by identity_subject:
+        profile = await self._database["employee_profiles"].find_one(
             {
                 "identity_subject": identity_subject,
                 "active": True,
             }
         )
+        if profile:
+            return profile
+
+        # Email fallback for seeded admin or provisioned users:
+        if email:
+            profile = await self._database["employee_profiles"].find_one(
+                {
+                    "email": email,
+                    "active": True,
+                }
+            )
+            if profile:
+                await self._database["employee_profiles"].update_one(
+                    {"_id": profile["_id"]},
+                    {"$set": {"identity_subject": identity_subject}},
+                )
+                profile["identity_subject"] = identity_subject
+                return profile
+
+        # Live auto-provisioning for organization 'ajt':
+        org = await self._database["organizations"].find_one({"organization_id": "ajt"})
+        if not org:
+            org = {
+                "organization_id": "ajt",
+                "name": "Aziz Jan Trust",
+                "slug": "ajt",
+                "created_at": "2026-09-20T00:00:00Z",
+            }
+            await self._database["organizations"].replace_one(
+                {"organization_id": "ajt"}, org, upsert=True
+            )
+
+        total_profiles = await self._database["employee_profiles"].count_documents(
+            {"organization_id": "ajt"}
+        )
+        is_first = total_profiles == 0
+        roles = ["employee", "sop_admin", "system_admin"] if is_first else ["employee"]
+        new_profile = {
+            "id": f"user-ajt-{identity_subject.replace('|', '-')}",
+            "organization_id": "ajt",
+            "identity_subject": identity_subject,
+            "display_name": display_name or email or "Live User",
+            "email": email or f"{identity_subject}@ajt.org",
+            "application_roles": roles,
+            "departments": ["management", "operations", "technology"],
+            "locations": ["head-office"],
+            "organizational_roles": ["admin"] if is_first else ["employee"],
+            "management_departments": ["management", "operations", "technology"],
+            "management_locations": ["head-office"],
+            "management_roles": ["admin"],
+            "preferred_language": "english",
+            "active": True,
+        }
+        await self._database["employee_profiles"].replace_one(
+            {"organization_id": "ajt", "identity_subject": identity_subject},
+            new_profile,
+            upsert=True,
+        )
+        return new_profile
 
     @staticmethod
     def _tenant_query(organization_id: str, query: Mapping[str, Any]) -> dict[str, Any]:
@@ -93,7 +180,11 @@ class InMemoryCanonicalDatabase:
         self.collections: dict[str, list[dict[str, Any]]] = {}
 
     async def resolve_identity_profile(
-        self, identity_subject: str, external_organization_id: str | None
+        self,
+        identity_subject: str,
+        external_organization_id: str | None,
+        email: str | None = None,
+        display_name: str | None = None,
     ) -> dict[str, Any] | None:
         if external_organization_id:
             organization = next(
@@ -114,6 +205,11 @@ class InMemoryCanonicalDatabase:
         for profile in self.collections.get("employee_profiles", []):
             if profile.get("identity_subject") == identity_subject and profile.get("active", True):
                 return profile.copy()
+        if email:
+            for profile in self.collections.get("employee_profiles", []):
+                if profile.get("email") == email and profile.get("active", True):
+                    profile["identity_subject"] = identity_subject
+                    return profile.copy()
         return None
 
     async def get_one(

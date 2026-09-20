@@ -37,8 +37,8 @@ export function ProfileLocaleGate() {
         <ErrorState
           title={t('workspaceUnavailable')}
           detail={
-            (profile.error as Error)?.message
-              ? `${t('workspaceErrorDetail')} (${(profile.error as Error).message})`
+            profile.error.message
+              ? `${t('workspaceErrorDetail')} (${profile.error.message})`
               : t('workspaceErrorDetail')
           }
         />
