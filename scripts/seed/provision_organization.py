@@ -3,7 +3,7 @@
 import asyncio
 from argparse import ArgumentParser
 
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 from apps.api.app.models.organization import ApplicationRole, EmployeeProfile, Organization
 from packages.contracts.common import Language, utc_now
@@ -21,7 +21,7 @@ async def provision(
     admin_name: str,
     assign_system_admin: bool,
 ) -> None:
-    client = AsyncIOMotorClient(mongo_uri)
+    client = AsyncMongoClient(mongo_uri)
     db = client[db_name]
 
     print(f"Connecting to MongoDB database '{db_name}'...")
@@ -39,7 +39,7 @@ async def provision(
         org.model_dump(mode="json"),
         upsert=True,
     )
-    print(f"✓ Provisioned organization '{org_name}' (ID: {org_id})")
+    print(f"[OK] Provisioned organization '{org_name}' (ID: {org_id})")
 
     # 2. Provision Admin Profile
     roles = {ApplicationRole.EMPLOYEE, ApplicationRole.SOP_ADMIN}
@@ -79,10 +79,10 @@ async def provision(
         upsert=True,
     )
     print(
-        f"✓ Provisioned employee profile '{admin_name}' ({admin_email}) with subject '{admin_sub}'"
+        f"[OK] Provisioned employee profile '{admin_name}' ({admin_email}) with subject '{admin_sub}'"
     )
     print(f"  Roles: {[r.value for r in roles]}")
-    client.close()
+    await client.close()
 
 
 def main() -> None:
