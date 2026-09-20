@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,8 +28,12 @@ class Settings(BaseSettings):
     s3_endpoint_url: str | None = None
     s3_region: str = "us-east-1"
     s3_bucket: str = "aziz-jan-sop-private"
-    s3_access_key_id: SecretStr | None = None
-    s3_secret_access_key: SecretStr | None = None
+    s3_access_key_id: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("s3_access_key_id", "s3_access_key")
+    )
+    s3_secret_access_key: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("s3_secret_access_key", "s3_secret_key")
+    )
 
     pinecone_api_key: SecretStr | None = None
     pinecone_index: str = "aziz-jan-sop"
@@ -37,7 +41,9 @@ class Settings(BaseSettings):
 
     auth0_domain: str | None = None
     auth0_audience: str | None = None
-    auth0_client_id: str | None = None
+    auth0_client_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("auth0_client_id", "vite_auth0_client_id")
+    )
 
     llm_provider: Literal["fixture", "deepseek"] = "deepseek"
     deepseek_api_key: SecretStr | None = None
@@ -70,7 +76,6 @@ class Settings(BaseSettings):
                 "AUTH0_DOMAIN": self.auth0_domain,
                 "AUTH0_AUDIENCE": self.auth0_audience,
                 "AUTH0_CLIENT_ID": self.auth0_client_id,
-                "PINECONE_API_KEY": self.pinecone_api_key,
                 "S3_ACCESS_KEY_ID": self.s3_access_key_id,
                 "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
             }
