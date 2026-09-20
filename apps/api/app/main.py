@@ -5,7 +5,7 @@ from time import perf_counter
 from uuid import uuid4
 
 import structlog
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.app.api.admin_policies import router as admin_policies_router
@@ -236,8 +236,12 @@ async def persist_successful_mutations(
         try:
             await persistence.flush(store)
             store.clear_mutations()
-        except Exception:
+        except Exception as err:
             structlog.get_logger().exception("mutation_flush_failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database persistence failed",
+            ) from err
     return response
 
 

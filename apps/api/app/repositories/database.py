@@ -37,16 +37,22 @@ class MongoCanonicalDatabase:
         self, identity_subject: str, external_organization_id: str | None
     ) -> dict[str, Any] | None:
         """Resolve the tenant from validated identity data, never from request parameters."""
-        if not external_organization_id:
-            return None
-        organization = await self._database["organizations"].find_one(
-            {"auth0_organization_id": external_organization_id}
-        )
-        if not organization:
-            return None
+        if external_organization_id:
+            organization = await self._database["organizations"].find_one(
+                {"auth0_organization_id": external_organization_id}
+            )
+            if organization:
+                profile = await self._database["employee_profiles"].find_one(
+                    {
+                        "organization_id": organization["organization_id"],
+                        "identity_subject": identity_subject,
+                        "active": True,
+                    }
+                )
+                if profile:
+                    return profile
         return await self._database["employee_profiles"].find_one(
             {
-                "organization_id": organization["organization_id"],
                 "identity_subject": identity_subject,
                 "active": True,
             }
@@ -90,21 +96,27 @@ class InMemoryCanonicalDatabase:
     async def resolve_identity_profile(
         self, identity_subject: str, external_organization_id: str | None
     ) -> dict[str, Any] | None:
-        organization = next(
-            (
-                item
-                for item in self.collections.get("organizations", [])
-                if item.get("auth0_organization_id") == external_organization_id
-            ),
-            None,
-        )
-        if not organization:
-            return None
-        return await self.get_one(
-            "employee_profiles",
-            str(organization["organization_id"]),
-            {"identity_subject": identity_subject, "active": True},
-        )
+        if external_organization_id:
+            organization = next(
+                (
+                    item
+                    for item in self.collections.get("organizations", [])
+                    if item.get("auth0_organization_id") == external_organization_id
+                ),
+                None,
+            )
+            if organization:
+                profile = await self.get_one(
+                    "employee_profiles",
+                    str(organization["organization_id"]),
+                    {"identity_subject": identity_subject, "active": True},
+                )
+                if profile:
+                    return profile
+        for profile in self.collections.get("employee_profiles", []):
+            if profile.get("identity_subject") == identity_subject and profile.get("active", True):
+                return profile.copy()
+        return None
 
     async def get_one(
         self, collection: str, organization_id: str, query: Mapping[str, Any]

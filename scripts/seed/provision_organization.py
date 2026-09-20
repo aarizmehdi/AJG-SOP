@@ -79,7 +79,8 @@ async def provision(
         upsert=True,
     )
     print(
-        f"[OK] Provisioned employee profile '{admin_name}' ({admin_email}) with subject '{admin_sub}'"
+        f"[OK] Provisioned employee profile '{admin_name}' ({admin_email}) "
+        f"with subject '{admin_sub}'"
     )
     print(f"  Roles: {[r.value for r in roles]}")
     await client.close()

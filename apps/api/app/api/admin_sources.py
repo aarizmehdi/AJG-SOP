@@ -262,7 +262,8 @@ async def import_source(
     original_file: Annotated[UploadFile, File()],
     structured_file: Annotated[UploadFile, File()],
 ) -> SourceDocument:
-    """Import a pre-verified original PDF along with its corresponding structured Markdown/JSON file."""
+    """Import a pre-verified original PDF along with its corresponding structured file
+    (Markdown or JSON)."""
     require_system_admin(profile)
     store = cast(FoundationStore, request.app.state.foundation_store)
     version = store.versions.get(version_id)
