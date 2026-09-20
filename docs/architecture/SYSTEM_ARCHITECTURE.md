@@ -5,7 +5,7 @@ The system separates authoritative records from derived services. MongoDB stores
 ```mermaid
 flowchart LR
   UI[React application] --> API[FastAPI /api/v1]
-  API --> AUTH[Auth0 token validation]
+  API --> AUTH[Firebase ID token validation]
   API --> MONGO[(MongoDB canonical data)]
   API --> S3[(Private originals and artifacts)]
   API --> RET[Shared retrieval service]
@@ -16,7 +16,7 @@ flowchart LR
   FUSE --> LLM[DeepSeek provider boundary]
 ```
 
-`organization_id` is required on every organization-owned contract and every Mongo/Pinecone operation. The backend obtains it from a validated Auth0 organization membership and authoritative employee profile. Request bodies cannot select a tenant.
+`organization_id` is required on every organization-owned contract and every Mongo/Pinecone operation. The backend obtains it only from the active MongoDB employee profile selected by a verified Firebase UID. Firebase claims and request bodies cannot select a tenant.
 
 Fixture mode uses deterministic local parsers, embeddings, reranking, an in-memory canonical adapter, and private local artifacts. Live mode hydrates a process-local unit of work from MongoDB and flushes successful mutations back to tenant-owned Mongo collections. Multi-instance change coordination still requires a production transaction/outbox implementation before deployment.
 

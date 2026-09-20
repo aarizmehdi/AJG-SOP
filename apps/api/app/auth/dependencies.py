@@ -36,12 +36,7 @@ async def current_profile(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Fixture identity prohibited in live mode",
             )
-        stored = await request.app.state.database.resolve_identity_profile(
-            identity.subject,
-            identity.external_organization_id,
-            email=identity.claims.get("email"),
-            display_name=identity.claims.get("name") or identity.claims.get("nickname"),
-        )
+        stored = await request.app.state.database.resolve_identity_profile(identity.subject)
         profile = EmployeeProfile.model_validate(stored) if stored else None
     if not profile or not profile.active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No active membership")

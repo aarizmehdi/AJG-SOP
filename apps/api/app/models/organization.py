@@ -15,7 +15,6 @@ class ApplicationRole(StrEnum):
 class Organization(OrganizationOwned):
     name: str
     slug: str
-    auth0_organization_id: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
 

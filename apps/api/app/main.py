@@ -15,7 +15,7 @@ from apps.api.app.api.operations import router as operations_router
 from apps.api.app.api.profile import router as profile_router
 from apps.api.app.api.search import router as search_router
 from apps.api.app.api.speech import router as speech_router
-from apps.api.app.auth.identity import Auth0IdentityProvider, FixtureIdentityProvider
+from apps.api.app.auth.identity import FirebaseIdentityProvider, FixtureIdentityProvider
 from apps.api.app.config import Settings, get_settings
 from apps.api.app.repositories.database import InMemoryCanonicalDatabase, MongoCanonicalDatabase
 from apps.api.app.repositories.foundation_persistence import (
@@ -97,8 +97,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.artifact_store = LocalArtifactStore(Path(".data"))
         app.state.foundation_persistence = FixtureFoundationPersistence()
     else:
-        app.state.identity_provider = Auth0IdentityProvider(settings)
+        app.state.identity_provider = FirebaseIdentityProvider(settings)
         app.state.database = MongoCanonicalDatabase(settings.mongodb_uri, settings.mongodb_database)
+        await app.state.database.initialize()
         if not settings.s3_access_key_id or not settings.s3_secret_access_key:
             raise ValueError("S3 credentials are required in live mode")
         app.state.artifact_store = S3ArtifactStore(

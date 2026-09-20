@@ -2,6 +2,7 @@
 
 import asyncio
 from argparse import ArgumentParser
+from typing import Any
 
 from pymongo import AsyncMongoClient
 
@@ -15,13 +16,12 @@ async def provision(
     org_id: str,
     org_name: str,
     org_slug: str,
-    auth0_org_id: str | None,
-    admin_sub: str,
+    firebase_uid: str,
     admin_email: str,
     admin_name: str,
     assign_system_admin: bool,
 ) -> None:
-    client = AsyncMongoClient(mongo_uri)
+    client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(mongo_uri)
     db = client[db_name]
 
     print(f"Connecting to MongoDB database '{db_name}'...")
@@ -31,7 +31,6 @@ async def provision(
         organization_id=org_id,
         name=org_name,
         slug=org_slug,
-        auth0_organization_id=auth0_org_id,
         created_at=utc_now(),
     )
     await db["organizations"].replace_one(
@@ -49,7 +48,7 @@ async def provision(
     profile = EmployeeProfile(
         id=f"user-{org_id}-admin",
         organization_id=org_id,
-        identity_subject=admin_sub,
+        identity_subject=firebase_uid,
         display_name=admin_name,
         email=admin_email,
         application_roles=frozenset(roles),
@@ -73,14 +72,32 @@ async def provision(
     doc["management_locations"] = list(doc["management_locations"])
     doc["management_roles"] = list(doc["management_roles"])
 
+    existing = await db["employee_profiles"].find_one(
+        {
+            "organization_id": org_id,
+            "$or": [
+                {"id": profile.id},
+                {"identity_subject": firebase_uid},
+                {"email": admin_email},
+            ],
+        }
+    )
+    if existing and existing.get("identity_subject") != firebase_uid:
+        raise RuntimeError(
+            "An existing administrator/profile matched. Use the explicit Firebase UID link "
+            "procedure instead of creating a duplicate."
+        )
+    await db["employee_profiles"].create_index(
+        "identity_subject", unique=True, name="uq_employee_identity_subject"
+    )
     await db["employee_profiles"].replace_one(
-        {"organization_id": org_id, "identity_subject": admin_sub},
+        {"organization_id": org_id, "identity_subject": firebase_uid},
         doc,
         upsert=True,
     )
     print(
         f"[OK] Provisioned employee profile '{admin_name}' ({admin_email}) "
-        f"with subject '{admin_sub}'"
+        f"with Firebase UID '{firebase_uid}'"
     )
     print(f"  Roles: {[r.value for r in roles]}")
     await client.close()
@@ -95,9 +112,8 @@ def main() -> None:
     parser.add_argument("--org-id", default="ajt", help="Organization ID (default: ajt)")
     parser.add_argument("--org-name", default="Aziz Jan Trust", help="Organization name")
     parser.add_argument("--org-slug", default="ajt", help="Organization slug")
-    parser.add_argument("--auth0-org-id", help="Auth0 Organization ID if using Auth0 Organizations")
     parser.add_argument(
-        "--admin-sub", required=True, help="Auth0 user sub (e.g. auth0|65... or google-oauth2|...)"
+        "--firebase-uid", required=True, help="Existing Firebase Authentication UID"
     )
     parser.add_argument("--admin-email", required=True, help="Admin user email")
     parser.add_argument("--admin-name", required=True, help="Admin user display name")
@@ -114,8 +130,7 @@ def main() -> None:
             org_id=args.org_id,
             org_name=args.org_name,
             org_slug=args.org_slug,
-            auth0_org_id=args.auth0_org_id,
-            admin_sub=args.admin_sub,
+            firebase_uid=args.firebase_uid,
             admin_email=args.admin_email,
             admin_name=args.admin_name,
             assign_system_admin=args.with_system_admin,

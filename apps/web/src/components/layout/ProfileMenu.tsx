@@ -1,10 +1,10 @@
-import { useAuth0 } from '@auth0/auth0-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, Languages, LogOut } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Profile } from '../../types/profile';
 import { useLanguage } from '../../features/language/useLanguage';
+import { useFirebaseAuth } from '../../features/auth/firebase-auth-context';
 
 function LiveLogout({
   close,
@@ -13,7 +13,9 @@ function LiveLogout({
   close: () => void;
   itemRef: React.Ref<HTMLButtonElement>;
 }) {
-  const { logout } = useAuth0();
+  const { signOut } = useFirebaseAuth();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { t } = useLanguage();
   return (
     <button
@@ -21,8 +23,9 @@ function LiveLogout({
       role="menuitem"
       onClick={() => {
         close();
-        void logout({
-          logoutParams: { returnTo: `${window.location.origin}/login` },
+        queryClient.clear();
+        void signOut().finally(() => {
+          void navigate('/login', { replace: true });
         });
       }}
     >

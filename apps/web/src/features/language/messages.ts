@@ -20,6 +20,24 @@ const english = {
   loginWelcome: 'Welcome back',
   loginDetail: 'Sign in to explore the policies available to you.',
   loginAction: 'Sign in',
+  signingIn: 'Signing in…',
+  emailAddress: 'Email address',
+  password: 'Password',
+  invalidCredentials: 'The email or password is incorrect.',
+  tooManyAttempts: 'Too many attempts. Please wait and try again.',
+  authNetworkError:
+    'Sign-in could not reach Firebase. Check your connection and retry.',
+  signInFailed: 'Sign-in failed. Please try again.',
+  authenticationError: 'Authentication error',
+  authInitializationFailed:
+    'Secure sign-in could not initialize. Reload the page and try again.',
+  returnToLogin: 'Return to login',
+  accountAccessError:
+    'This Firebase account is not linked to an active Aziz Jan Trust employee profile.',
+  backendUnavailable:
+    'The AJT service could not be reached. Your login is still active; retry the connection.',
+  retry: 'Retry',
+  switchAccount: 'Sign out and switch account',
   loginDevAccess: 'Development access',
   loginEmployee: 'Continue as employee',
   loginAdmin: 'Continue as administrator',
@@ -123,6 +141,24 @@ const urdu: Record<MessageKey, string> = {
   loginWelcome: 'خوش آمدید',
   loginDetail: 'اپنے لیے دستیاب پالیسیوں تک رسائی کے لیے سائن اِن کریں۔',
   loginAction: 'سائن اِن',
+  signingIn: 'سائن اِن ہو رہا ہے…',
+  emailAddress: 'ای میل ایڈریس',
+  password: 'پاس ورڈ',
+  invalidCredentials: 'ای میل یا پاس ورڈ درست نہیں ہے۔',
+  tooManyAttempts: 'بہت زیادہ کوششیں ہو چکی ہیں۔ کچھ دیر بعد دوبارہ کوشش کریں۔',
+  authNetworkError:
+    'فائر بیس سے رابطہ نہیں ہو سکا۔ کنکشن چیک کر کے دوبارہ کوشش کریں۔',
+  signInFailed: 'سائن اِن نہیں ہو سکا۔ دوبارہ کوشش کریں۔',
+  authenticationError: 'توثیق کی خرابی',
+  authInitializationFailed:
+    'محفوظ سائن اِن شروع نہیں ہو سکا۔ صفحہ دوبارہ لوڈ کریں۔',
+  returnToLogin: 'لاگ اِن پر واپس جائیں',
+  accountAccessError:
+    'یہ فائر بیس اکاؤنٹ عزیز جان ٹرسٹ کے فعال ملازم پروفائل سے منسلک نہیں ہے۔',
+  backendUnavailable:
+    'اے جے ٹی سروس سے رابطہ نہیں ہو سکا۔ آپ کا لاگ اِن فعال ہے؛ دوبارہ کوشش کریں۔',
+  retry: 'دوبارہ کوشش کریں',
+  switchAccount: 'سائن آؤٹ کریں اور اکاؤنٹ بدلیں',
   loginDevAccess: 'ترقیاتی رسائی',
   loginEmployee: 'ملازم کے طور پر جاری رکھیں',
   loginAdmin: 'منتظم کے طور پر جاری رکھیں',
@@ -222,6 +258,25 @@ const romanUrdu: Record<MessageKey, string> = {
   loginWelcome: 'Khush aamdeed',
   loginDetail: 'Apne liye dastiyab policies dekhne ke liye sign in karein.',
   loginAction: 'Sign in',
+  signingIn: 'Sign in ho raha hai…',
+  emailAddress: 'Email address',
+  password: 'Password',
+  invalidCredentials: 'Email ya password durust nahin hai.',
+  tooManyAttempts:
+    'Bohat zyada koshishen ho chuki hain. Thori dair baad dobara koshish karein.',
+  authNetworkError:
+    'Firebase se rabta nahin ho saka. Connection check karke dobara koshish karein.',
+  signInFailed: 'Sign in nahin ho saka. Dobara koshish karein.',
+  authenticationError: 'Authentication error',
+  authInitializationFailed:
+    'Secure sign in shuru nahin ho saka. Page reload karke dobara koshish karein.',
+  returnToLogin: 'Login par wapas jayein',
+  accountAccessError:
+    'Yeh Firebase account Aziz Jan Trust ke active employee profile se linked nahin hai.',
+  backendUnavailable:
+    'AJT service se rabta nahin ho saka. Aap ka login active hai; dobara koshish karein.',
+  retry: 'Dobara koshish karein',
+  switchAccount: 'Sign out karke account badlein',
   loginDevAccess: 'Development access',
   loginEmployee: 'Mulazim ke taur par jari rakhein',
   loginAdmin: 'Administrator ke taur par jari rakhein',

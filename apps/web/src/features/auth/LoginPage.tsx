@@ -1,49 +1,85 @@
 import { ArrowRight } from 'lucide-react';
+import { useState, type SyntheticEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { BrandMark } from '../../components/ui/BrandMark';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
-import { useAuth0 } from '@auth0/auth0-react';
 import { useLanguage } from '../language/useLanguage';
+import { useFirebaseAuth } from './firebase-auth-context';
 
-function LiveLoginButton() {
-  const { loginWithRedirect, isLoading, error } = useAuth0();
+function LiveLoginForm() {
+  const { signIn } = useFirebaseAuth();
   const { t } = useLanguage();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    try {
+      await signIn(email.trim(), password);
+      void navigate('/home', { replace: true });
+    } catch (caught) {
+      const key = caught instanceof Error ? caught.message : 'signInFailed';
+      setError(
+        key === 'invalidCredentials'
+          ? t('invalidCredentials')
+          : key === 'tooManyAttempts'
+            ? t('tooManyAttempts')
+            : key === 'authNetworkError'
+              ? t('authNetworkError')
+              : t('signInFailed'),
+      );
+    } finally {
+      setPending(false);
+    }
+  };
   return (
-    <div
-      className="login-actions"
-      style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+    <form
+      className="login-form"
+      onSubmit={(event) => {
+        void submit(event);
+      }}
     >
+      <label htmlFor="login-email">{t('emailAddress')}</label>
+      <input
+        id="login-email"
+        type="email"
+        value={email}
+        onChange={(event) => {
+          setEmail(event.target.value);
+        }}
+        autoComplete="username"
+        required
+        disabled={pending}
+      />
+      <label htmlFor="login-password">{t('password')}</label>
+      <input
+        id="login-password"
+        type="password"
+        value={password}
+        onChange={(event) => {
+          setPassword(event.target.value);
+        }}
+        autoComplete="current-password"
+        required
+        disabled={pending}
+      />
       {error ? (
-        <div
-          role="alert"
-          style={{
-            padding: '12px',
-            borderRadius: '8px',
-            background: '#fef2f2',
-            border: '1px solid #fca5a5',
-            color: '#991b1b',
-            fontSize: '14px',
-            lineHeight: '1.4',
-            textAlign: 'left',
-          }}
-        >
-          <strong>Auth0 Login Error:</strong>
-          <div style={{ marginTop: '4px', wordBreak: 'break-word' }}>
-            {error.message}
-          </div>
+        <div className="login-error" role="alert">
+          {error}
         </div>
       ) : null}
-      <Button
-        disabled={isLoading}
-        onClick={() => {
-          void loginWithRedirect();
-        }}
-      >
-        {t('loginAction')} <ArrowRight size={18} aria-hidden="true" />
+      <Button type="submit" disabled={pending}>
+        {pending ? t('signingIn') : t('loginAction')}{' '}
+        {!pending && <ArrowRight size={18} aria-hidden="true" />}
       </Button>
-    </div>
+    </form>
   );
 }
 
@@ -52,13 +88,13 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const appMode = import.meta.env.VITE_APP_MODE ?? 'fixture';
-  const { isAuthenticated, isLoading } = useAuth0();
+  const { authenticated, initialized, initializationError } = useFirebaseAuth();
 
-  if (appMode === 'live' && isLoading) {
+  if (appMode === 'live' && !initialized) {
     return <RouteSkeleton />;
   }
 
-  if (appMode === 'live' && isAuthenticated) {
+  if (appMode === 'live' && authenticated) {
     return <Navigate to="/home" replace />;
   }
 
@@ -111,8 +147,12 @@ export default function LoginPage() {
                 {t('loginSystemAdmin')}
               </button>
             </div>
+          ) : initializationError ? (
+            <div className="login-error" role="alert">
+              {t('authInitializationFailed')}
+            </div>
           ) : (
-            <LiveLoginButton />
+            <LiveLoginForm />
           )}
         </div>
       </section>

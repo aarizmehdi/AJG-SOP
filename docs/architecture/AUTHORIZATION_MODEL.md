@@ -1,6 +1,6 @@
 # Authorization model
 
-Identity tokens are validated by the backend. An Auth0 `org_id` maps to an internal organization, then the token subject maps to an active employee profile. Client-supplied organization or scope fields are never trusted.
+Firebase ID tokens are validated by the backend with the Firebase Admin SDK. The verified UID must exactly match one pre-provisioned, active MongoDB employee profile. That profile supplies the organization and roles. Firebase claims and client-supplied organization or scope fields are never trusted.
 
 An access dimension is explicitly either `all` or `selected`. A selected dimension must contain at least one value. A person matches when any assigned value matches within a dimension. Department, location, and organizational-role dimensions must all pass.
 

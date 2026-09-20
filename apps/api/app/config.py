@@ -39,11 +39,8 @@ class Settings(BaseSettings):
     pinecone_index: str = "aziz-jan-sop"
     pinecone_namespace_prefix: str = "aziz-jan-trust"
 
-    auth0_domain: str | None = None
-    auth0_audience: str | None = None
-    auth0_client_id: str | None = Field(
-        default=None, validation_alias=AliasChoices("auth0_client_id", "vite_auth0_client_id")
-    )
+    firebase_project_id: str | None = None
+    firebase_service_account_json: SecretStr | None = None
 
     llm_provider: Literal["fixture", "deepseek"] = "deepseek"
     deepseek_api_key: SecretStr | None = None
@@ -80,9 +77,8 @@ class Settings(BaseSettings):
     def validate_live_configuration(self) -> "Settings":
         if self.app_mode == "live":
             required = {
-                "AUTH0_DOMAIN": self.auth0_domain,
-                "AUTH0_AUDIENCE": self.auth0_audience,
-                "AUTH0_CLIENT_ID": self.auth0_client_id,
+                "FIREBASE_PROJECT_ID": self.firebase_project_id,
+                "FIREBASE_SERVICE_ACCOUNT_JSON": self.firebase_service_account_json,
                 "S3_ACCESS_KEY_ID": self.s3_access_key_id,
                 "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
             }
