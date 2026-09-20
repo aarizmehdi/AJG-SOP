@@ -24,7 +24,11 @@ export function ProfileLocaleGate() {
     return (
       <ErrorState
         title={t('workspaceUnavailable')}
-        detail={t('workspaceErrorDetail')}
+        detail={
+          (profile.error as Error)?.message
+            ? `${t('workspaceErrorDetail')} (${(profile.error as Error).message})`
+            : t('workspaceErrorDetail')
+        }
       />
     );
   if (profileId !== profile.data.id) return <RouteSkeleton />;
