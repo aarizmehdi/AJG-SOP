@@ -25,8 +25,7 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
             exact_bonus = 4.0 if query.casefold() in content else 0.0
             policy_bonus = (
                 3.0
-                if chunk.policy_number
-                and chunk.policy_number.casefold() in query.casefold()
+                if chunk.policy_number and chunk.policy_number.casefold() in query.casefold()
                 else 0.0
             )
             hits = sum(content.count(term) for term in terms)

@@ -60,6 +60,7 @@ class PolicyService:
             policy_number=policy_number,
         )
         self.store.policies[policy.id] = policy
+        self.store.mark_modified("policies", policy.id, policy)
         self.audit.record(organization_id, actor_id, "policy.created", "policy", policy.id)
         return policy
 
@@ -82,6 +83,7 @@ class PolicyService:
             access=access,
         )
         self.store.versions[version.id] = version
+        self.store.mark_modified("policy_versions", version.id, version)
         self.audit.record(
             organization_id, actor_id, "version.created", "policy_version", version.id
         )
@@ -106,6 +108,7 @@ class PolicyService:
             if canonical:
                 for section in canonical.sections:
                     section.access = access
+        self.store.mark_modified("policy_versions", version.id, version)
         self.audit.record(
             organization_id, actor_id, "version.access_updated", "policy_version", version.id
         )
@@ -155,9 +158,7 @@ class PolicyService:
             version.source_document_ids.append(source_id)
         version.status = VersionStatus.EXTRACTION_REVIEW
 
-    def approve_structure(
-        self, organization_id: str, actor_id: str, source_id: str
-    ) -> SOPVersion:
+    def approve_structure(self, organization_id: str, actor_id: str, source_id: str) -> SOPVersion:
         source = self.store.sources[source_id]
         if source.organization_id != organization_id:
             raise KeyError(source_id)
@@ -195,6 +196,7 @@ class PolicyService:
             source_id,
             {"version_id": version.id, "source_id": source_id},
         )
+        self.store.mark_modified("policy_versions", version.id, version)
         return version
 
     async def prepare_for_publication(
@@ -246,15 +248,16 @@ class PolicyService:
         version.index_revision = revision
         version.status = VersionStatus.READY_TO_PUBLISH
         self.store.chunks[version.id] = list(chunks)
+        for chunk in chunks:
+            self.store.mark_modified("retrieval_chunks", chunk.id, chunk)
+        self.store.mark_modified("policy_versions", version.id, version)
         self._jobs_transition(jobs, IngestionState.READY_FOR_REVIEW, "Index verified")
         self.audit.record(
             organization_id, actor_id, "version.index_verified", "policy_version", version.id
         )
         return version
 
-    def publish(
-        self, organization_id: str, actor_id: str, version_id: str
-    ) -> SOPVersion:
+    def publish(self, organization_id: str, actor_id: str, version_id: str) -> SOPVersion:
         version = self._version(organization_id, version_id)
         if version.status is not VersionStatus.READY_TO_PUBLISH or not version.index_revision:
             raise PublicationError("Version must pass index verification before publication")
@@ -263,6 +266,7 @@ class PolicyService:
         previous = self.store.versions.get(previous_id) if previous_id else None
         if previous and previous.organization_id == organization_id:
             previous.status = VersionStatus.SUPERSEDED
+            self.store.mark_modified("policy_versions", previous.id, previous)
         version.status = VersionStatus.PUBLISHED
         version.published_at = utc_now()
         policy.active_version_id = version.id
@@ -271,6 +275,9 @@ class PolicyService:
         for chunk in self.store.chunks.get(version.id, []):
             if isinstance(chunk, RetrievalChunk):
                 chunk.publication_status = "published"
+                self.store.mark_modified("retrieval_chunks", chunk.id, chunk)
+        self.store.mark_modified("policy_versions", version.id, version)
+        self.store.mark_modified("policies", policy.id, policy)
         self._jobs_transition(
             [
                 job
@@ -300,12 +307,19 @@ class PolicyService:
         current = self.store.versions.get(policy.active_version_id or "")
         if current:
             current.status = VersionStatus.SUPERSEDED
+            self.store.mark_modified("policy_versions", current.id, current)
         target.status = VersionStatus.PUBLISHED
         policy.active_version_id = target.id
         policy.status = PolicyStatus.ACTIVE
         policy.updated_at = utc_now()
+        self.store.mark_modified("policy_versions", target.id, target)
+        self.store.mark_modified("policies", policy.id, policy)
         self.audit.record(
-            organization_id, actor_id, "policy.rolled_back", "policy", policy.id,
+            organization_id,
+            actor_id,
+            "policy.rolled_back",
+            "policy",
+            policy.id,
             {"target_version_id": target.id},
         )
         return target
@@ -314,9 +328,8 @@ class PolicyService:
         policy = self._policy(organization_id, policy_id)
         policy.status = PolicyStatus.INACTIVE
         policy.updated_at = utc_now()
-        self.audit.record(
-            organization_id, actor_id, "policy.deactivated", "policy", policy.id
-        )
+        self.store.mark_modified("policies", policy.id, policy)
+        self.audit.record(organization_id, actor_id, "policy.deactivated", "policy", policy.id)
         return policy
 
     def diff(
@@ -332,9 +345,13 @@ class PolicyService:
                 kind = SectionChangeKind.ADDED
             elif new_section is None and old_section is not None:
                 kind = SectionChangeKind.REMOVED
-            elif old_section and new_section and (
-                old_section.content_hash != new_section.content_hash
-                or old_section.access != new_section.access
+            elif (
+                old_section
+                and new_section
+                and (
+                    old_section.content_hash != new_section.content_hash
+                    or old_section.access != new_section.access
+                )
             ):
                 kind = SectionChangeKind.CHANGED
             else:
@@ -396,9 +413,7 @@ class PolicyService:
         return version
 
     @staticmethod
-    def _jobs_transition(
-        jobs: list[IngestionJob], state: IngestionState, detail: str
-    ) -> None:
+    def _jobs_transition(jobs: list[IngestionJob], state: IngestionState, detail: str) -> None:
         for job in jobs:
             job.state = state
             job.error_code = "index_failed" if state is IngestionState.FAILED else None

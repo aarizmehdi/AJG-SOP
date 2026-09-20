@@ -16,9 +16,7 @@ class ParserRouter(DocumentParser):
 
     def capabilities(self, organization_id: str) -> list[ParserCapability]:
         capabilities = [
-            item
-            for parser in self._parsers
-            for item in parser.capabilities(organization_id)
+            item for parser in self._parsers for item in parser.capabilities(organization_id)
         ]
         result: list[ParserCapability] = []
         for source_format in SourceFormat:
@@ -33,9 +31,7 @@ class ParserRouter(DocumentParser):
             if selected:
                 result.append(selected)
                 continue
-            details = [
-                item.detail for item in capabilities if item.source_format is source_format
-            ]
+            details = [item.detail for item in capabilities if item.source_format is source_format]
             result.append(
                 ParserCapability(
                     organization_id=organization_id,

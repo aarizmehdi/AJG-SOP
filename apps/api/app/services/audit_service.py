@@ -27,4 +27,5 @@ class AuditService:
             metadata=metadata or {},
         )
         self._store.audit_events.append(event)
+        self._store.mark_appended("audit_events", event)
         return event

@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+const appMode = import.meta.env.VITE_APP_MODE ?? 'fixture';
+const rawApiUrl = import.meta.env.VITE_API_URL;
+if (appMode === 'live' && !rawApiUrl) {
+  throw new Error(
+    'VITE_API_URL environment variable must be configured in live mode',
+  );
+}
+const apiUrl = rawApiUrl ?? 'http://localhost:8000/api/v1';
+
 let accessTokenProvider: () => Promise<string | null> = () =>
   Promise.resolve(null);
 

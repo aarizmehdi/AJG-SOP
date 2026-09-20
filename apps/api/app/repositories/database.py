@@ -59,9 +59,7 @@ class MongoCanonicalDatabase:
     async def get_one(
         self, collection: str, organization_id: str, query: Mapping[str, Any]
     ) -> dict[str, Any] | None:
-        return await self._database[collection].find_one(
-            self._tenant_query(organization_id, query)
-        )
+        return await self._database[collection].find_one(self._tenant_query(organization_id, query))
 
     async def insert_one(
         self, collection: str, organization_id: str, document: Mapping[str, Any]

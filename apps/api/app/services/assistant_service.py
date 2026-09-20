@@ -116,6 +116,7 @@ class AssistantService:
             language=language,
         )
         self.store.chat_sessions[session.id] = session
+        self.store.mark_modified("chat_sessions", session.id, session)
         return session
 
     def _message(
@@ -135,11 +136,10 @@ class AssistantService:
             verified=verified,
         )
         self.store.chat_messages.append(message)
+        self.store.mark_appended("chat_messages", message)
 
     @staticmethod
-    def _no_answer(
-        language: Language, session_id: str, organization_id: str
-    ) -> VerifiedAnswer:
+    def _no_answer(language: Language, session_id: str, organization_id: str) -> VerifiedAnswer:
         text = {
             Language.ENGLISH: "I couldn't find guidance for that in the SOPs available to you.",
             Language.URDU: "مجھے آپ کے لیے دستیاب ایس او پیز میں اس بارے میں رہنمائی نہیں ملی۔",

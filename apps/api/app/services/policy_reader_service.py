@@ -19,9 +19,7 @@ class PolicyReaderService:
         self.authorization = authorization
         self.artifacts = artifacts
 
-    def read_policy(
-        self, profile: EmployeeProfile, policy_id: str
-    ) -> PolicyReaderDocument | None:
+    def read_policy(self, profile: EmployeeProfile, policy_id: str) -> PolicyReaderDocument | None:
         resolved = self._active(profile, policy_id)
         if not resolved:
             return None

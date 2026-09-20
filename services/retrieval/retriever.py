@@ -46,9 +46,7 @@ class RetrievalService:
             )
         except Exception:
             if self.metrics:
-                self.metrics.observe(
-                    "retrieval", (perf_counter() - started) * 1000, failed=True
-                )
+                self.metrics.observe("retrieval", (perf_counter() - started) * 1000, failed=True)
             raise
         fused = self.fusion.fuse(lexical, semantic)
         chunks = {chunk.id: chunk for chunk in eligible}

@@ -26,12 +26,14 @@ def test_router_reports_every_source_format_and_explicit_availability() -> None:
     capabilities = router.capabilities("ajt")
 
     assert {item.source_format for item in capabilities} == set(SourceFormat)
-    assert next(
-        item for item in capabilities if item.source_format is SourceFormat.IMAGE
-    ).available is False
-    assert next(
-        item for item in capabilities if item.source_format is SourceFormat.XLSX
-    ).available is True
+    assert (
+        next(item for item in capabilities if item.source_format is SourceFormat.IMAGE).available
+        is False
+    )
+    assert (
+        next(item for item in capabilities if item.source_format is SourceFormat.XLSX).available
+        is True
+    )
 
 
 def test_azure_normalization_preserves_native_payload_spans_and_coordinates() -> None:
@@ -45,17 +47,13 @@ def test_azure_normalization_preserves_native_payload_spans_and_coordinates() ->
                     "role": "sectionHeading",
                     "content": "4.3 Damaged Stock",
                     "spans": [{"offset": 10, "length": 17}],
-                    "boundingRegions": [
-                        {"pageNumber": 1, "polygon": [1, 2, 9, 2, 9, 4, 1, 4]}
-                    ],
+                    "boundingRegions": [{"pageNumber": 1, "polygon": [1, 2, 9, 2, 9, 4, 1, 4]}],
                 }
             ],
             "tables": [
                 {
                     "spans": [{"offset": 30, "length": 8}],
-                    "boundingRegions": [
-                        {"pageNumber": 1, "polygon": [1, 5, 9, 5, 9, 10, 1, 10]}
-                    ],
+                    "boundingRegions": [{"pageNumber": 1, "polygon": [1, 5, 9, 5, 9, 10, 1, 10]}],
                     "cells": [
                         {
                             "rowIndex": 0,

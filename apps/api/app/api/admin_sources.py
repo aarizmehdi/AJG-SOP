@@ -251,3 +251,83 @@ async def retry_source(request: Request, source_id: str, profile: CurrentProfile
         )
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/import", status_code=status.HTTP_201_CREATED)
+async def import_source(
+    request: Request,
+    profile: CurrentProfile,
+    policy_id: Annotated[str, Form()],
+    version_id: Annotated[str, Form()],
+    original_file: Annotated[UploadFile, File()],
+    structured_file: Annotated[UploadFile, File()],
+) -> SourceDocument:
+    """Import a pre-verified original PDF along with its corresponding structured Markdown/JSON file."""
+    require_system_admin(profile)
+    store = cast(FoundationStore, request.app.state.foundation_store)
+    version = store.versions.get(version_id)
+    if (
+        not version
+        or version.organization_id != profile.organization_id
+        or version.policy_id != policy_id
+    ):
+        raise HTTPException(status_code=404, detail="Policy version not found")
+    if version.status in {VersionStatus.PUBLISHED, VersionStatus.SUPERSEDED}:
+        raise HTTPException(status_code=409, detail="Published versions are immutable")
+    require_management_scope(profile, version.access)
+
+    # Validate file sizes (200MB max)
+    pdf_content = await original_file.read()
+    structured_content = await structured_file.read()
+    max_bytes = 200 * 1024 * 1024
+    if len(pdf_content) > max_bytes or len(structured_content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail="File size exceeds maximum allowed limit of 200MB",
+        )
+
+    # Validate file formats
+    pdf_name = original_file.filename or "original.pdf"
+    if not pdf_name.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=422,
+            detail="Original file must be a PDF document (.pdf)",
+        )
+
+    struct_name = structured_file.filename or "content.md"
+    is_markdown = struct_name.lower().endswith(".md") or struct_name.lower().endswith(".markdown")
+    is_json = struct_name.lower().endswith(".json")
+    if not (is_markdown or is_json):
+        raise HTTPException(
+            status_code=422,
+            detail="Structured file must be Markdown (.md) or JSON (.json)",
+        )
+
+    source_format = SourceFormat.MARKDOWN if is_markdown else SourceFormat.STRUCTURED_TEXT
+    pipeline = cast(IngestionPipeline, request.app.state.ingestion_pipeline)
+    try:
+        source = await pipeline.ingest(
+            organization_id=profile.organization_id,
+            policy_id=policy_id,
+            version_id=version_id,
+            file_name=struct_name,
+            media_type="text/markdown" if is_markdown else "application/json",
+            source_format=source_format,
+            content=structured_content,
+        )
+        # Store original PDF artifact as well
+        artifacts = cast(ArtifactStore, request.app.state.artifact_store)
+        pdf_uri = await artifacts.put(
+            profile.organization_id, f"sources/{source.id}/{pdf_name}", pdf_content
+        )
+        # Update source document with original PDF artifact URI
+        updated_source = source.model_copy(update={"original_artifact_uri": pdf_uri})
+        store.sources[source.id] = updated_source
+        store.mark_modified("source_documents", source.id, updated_source)
+
+        cast(PolicyService, request.app.state.policy_service).attach_source(
+            profile.organization_id, version_id, source.id
+        )
+        return updated_source
+    except DuplicateSourceError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error

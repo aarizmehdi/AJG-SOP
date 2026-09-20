@@ -183,9 +183,7 @@ class Canonicalizer:
             id=f"block-list-{index}-{uuid4().hex[:6]}",
             kind=kind or BlockKind.UNORDERED_LIST,
             list_items=items,
-            source=items[0].source
-            if items
-            else SourceLocator(source_document_id=source_id),
+            source=items[0].source if items else SourceLocator(source_document_id=source_id),
         )
 
     @staticmethod
@@ -199,9 +197,7 @@ class Canonicalizer:
         return ""
 
     @staticmethod
-    def _section_locator(
-        source_id: str, blocks: list[CanonicalBlock]
-    ) -> SourceLocator:
+    def _section_locator(source_id: str, blocks: list[CanonicalBlock]) -> SourceLocator:
         pages = [block.source.page_start for block in blocks if block.source.page_start]
         first = blocks[0].source if blocks else SourceLocator(source_document_id=source_id)
         return first.model_copy(

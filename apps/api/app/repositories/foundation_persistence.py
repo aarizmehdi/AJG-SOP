@@ -35,7 +35,12 @@ class FixtureFoundationPersistence:
 
 
 class MongoFoundationPersistence:
-    """Mongo is canonical; FoundationStore is a process-local unit-of-work cache."""
+    """Mongo is canonical; FoundationStore is a process-local unit-of-work cache.
+
+    flush() persists only the mutations recorded during the current request.
+    It never deletes records that are absent from the process snapshot, preventing
+    data loss from concurrent processes, stale restarts, or multi-worker deployments.
+    """
 
     _models: dict[str, type[BaseModel]] = {
         "source_documents": SourceDocument,
@@ -49,6 +54,9 @@ class MongoFoundationPersistence:
         "chat_sessions": ChatSession,
         "chat_messages": ChatMessage,
     }
+
+    # Collections where items are only inserted, never updated or deleted.
+    _append_only: frozenset[str] = frozenset({"audit_events", "chat_messages"})
 
     def __init__(self, uri: str, database: str) -> None:
         self._client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(uri)
@@ -64,8 +72,7 @@ class MongoFoundationPersistence:
                 items.append(model.model_validate(document))
             records[collection] = items
         store.sources = {
-            item.id: item
-            for item in self._typed(records["source_documents"], SourceDocument)
+            item.id: item for item in self._typed(records["source_documents"], SourceDocument)
         }
         store.canonicals = {
             item.source_document_ids[0]: item
@@ -94,29 +101,17 @@ class MongoFoundationPersistence:
         store.chat_messages = self._typed(records["chat_messages"], ChatMessage)
 
     async def flush(self, store: FoundationStore) -> None:
-        records: dict[str, list[BaseModel]] = {
-            "source_documents": list(store.sources.values()),
-            "canonical_sops": list(store.canonicals.values()),
-            "raw_parser_results": [
-                item for item in store.raw_results.values() if isinstance(item, RawDocumentResult)
-            ],
-            "policies": list(store.policies.values()),
-            "policy_versions": list(store.versions.values()),
-            "ingestion_jobs": list(store.jobs.values()),
-            "retrieval_chunks": [item for items in store.chunks.values() for item in items],
-            "audit_events": list(store.audit_events),
-            "chat_sessions": list(store.chat_sessions.values()),
-            "chat_messages": list(store.chat_messages),
-        }
-        organizations = {
-            self._organization_id(item) for items in records.values() for item in items
-        }
-        for collection, items in records.items():
-            keys_by_organization: defaultdict[str, list[str]] = defaultdict(list)
-            for item in items:
-                key = self._key(item)
+        """Persist only the mutations recorded since the last flush."""
+        mutations = store.get_mutations()
+        if not mutations:
+            return
+
+        for collection, mutation_set in mutations.items():
+            # Upserted (keyed) records: replace or insert, never delete
+            for key, item in mutation_set.upserted.items():
+                if not isinstance(item, BaseModel):
+                    continue
                 organization_id = self._organization_id(item)
-                keys_by_organization[organization_id].append(key)
                 await self._database[collection].replace_one(
                     {"organization_id": organization_id, "_foundation_key": key},
                     {
@@ -125,13 +120,22 @@ class MongoFoundationPersistence:
                     },
                     upsert=True,
                 )
-            for organization_id in organizations:
-                keys = keys_by_organization[organization_id]
-                await self._database[collection].delete_many(
+
+            # Appended (insert-only) records: just insert, never upsert or delete
+            for item in mutation_set.appended:
+                if not isinstance(item, BaseModel):
+                    continue
+                organization_id = self._organization_id(item)
+                key = self._key(item)
+                await self._database[collection].update_one(
+                    {"organization_id": organization_id, "_foundation_key": key},
                     {
-                        "organization_id": organization_id,
-                        "_foundation_key": {"$nin": keys},
-                    }
+                        "$setOnInsert": {
+                            **item.model_dump(mode="json"),
+                            "_foundation_key": key,
+                        }
+                    },
+                    upsert=True,
                 )
 
     async def close(self) -> None:
