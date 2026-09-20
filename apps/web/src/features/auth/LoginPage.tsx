@@ -7,17 +7,37 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { useLanguage } from '../language/useLanguage';
 
 function LiveLoginButton() {
-  const { loginWithRedirect, isLoading } = useAuth0();
+  const { loginWithRedirect, isLoading, error } = useAuth0();
   const { t } = useLanguage();
   return (
-    <Button
-      disabled={isLoading}
-      onClick={() => {
-        void loginWithRedirect();
-      }}
-    >
-      {t('loginAction')} <ArrowRight size={18} aria-hidden="true" />
-    </Button>
+    <div className="login-actions" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {error ? (
+        <div
+          role="alert"
+          style={{
+            padding: '12px',
+            borderRadius: '8px',
+            background: '#fef2f2',
+            border: '1px solid #fca5a5',
+            color: '#991b1b',
+            fontSize: '14px',
+            lineHeight: '1.4',
+            textAlign: 'left',
+          }}
+        >
+          <strong>Auth0 Login Error:</strong>
+          <div style={{ marginTop: '4px', wordBreak: 'break-word' }}>{error.message}</div>
+        </div>
+      ) : null}
+      <Button
+        disabled={isLoading}
+        onClick={() => {
+          void loginWithRedirect();
+        }}
+      >
+        {t('loginAction')} <ArrowRight size={18} aria-hidden="true" />
+      </Button>
+    </div>
   );
 }
 
