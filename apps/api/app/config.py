@@ -62,12 +62,19 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         """Return the list of allowed CORS origins."""
-        origins = [self.web_origin]
+        raw_origins = [self.web_origin.rstrip("/")]
         if self.cors_origins:
-            origins.extend(
-                origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
+            raw_origins.extend(
+                origin.strip().rstrip("/")
+                for origin in self.cors_origins.split(",")
+                if origin.strip()
             )
-        return origins
+        extended: list[str] = []
+        for origin in raw_origins:
+            if origin:
+                extended.append(origin)
+                extended.append(f"{origin}/")
+        return list(dict.fromkeys(extended))
 
     @model_validator(mode="after")
     def validate_live_configuration(self) -> "Settings":
