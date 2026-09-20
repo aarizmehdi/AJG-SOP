@@ -29,16 +29,11 @@ function IdentityProvider({ children }: PropsWithChildren) {
     throw new Error('Auth0 web configuration is incomplete');
 
   const onRedirectCallback = (appState?: { returnTo?: string }) => {
-    if (window.location.search.includes('code=')) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
     const target =
       appState?.returnTo && appState.returnTo !== '/login'
         ? appState.returnTo
         : '/home';
-    if (window.location.pathname !== target) {
-      window.location.href = target;
-    }
+    window.history.replaceState({}, document.title, target);
   };
 
   return (
@@ -47,7 +42,7 @@ function IdentityProvider({ children }: PropsWithChildren) {
       clientId={clientId}
       authorizationParams={{ redirect_uri: window.location.origin, audience }}
       onRedirectCallback={onRedirectCallback}
-      cacheLocation="memory"
+      cacheLocation="localstorage"
       useRefreshTokens
     >
       <Auth0Bridge>{children}</Auth0Bridge>
