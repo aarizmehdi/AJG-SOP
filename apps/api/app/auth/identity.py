@@ -33,7 +33,8 @@ class Auth0IdentityProvider(IdentityProvider):
     def __init__(self, settings: Settings) -> None:
         if not settings.auth0_domain or not settings.auth0_audience:
             raise ValueError("Auth0 domain and audience are required")
-        self._issuer = f"https://{settings.auth0_domain}/"
+        domain = settings.auth0_domain.strip().rstrip("/")
+        self._issuer = f"https://{domain}/"
         self._audience = settings.auth0_audience
         self._jwks = PyJWKClient(
             f"{self._issuer}.well-known/jwks.json",

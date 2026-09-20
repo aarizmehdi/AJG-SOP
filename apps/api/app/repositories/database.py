@@ -49,33 +49,31 @@ class MongoCanonicalDatabase:
             organization = await self._database["organizations"].find_one(
                 {"auth0_organization_id": external_organization_id}
             )
-            if not organization:
-                return None
-            profile = await self._database["employee_profiles"].find_one(
-                {
-                    "organization_id": organization["organization_id"],
-                    "identity_subject": identity_subject,
-                    "active": True,
-                }
-            )
-            if profile:
-                return profile
-            if email:
+            if organization:
                 profile = await self._database["employee_profiles"].find_one(
                     {
                         "organization_id": organization["organization_id"],
-                        "email": email,
+                        "identity_subject": identity_subject,
                         "active": True,
                     }
                 )
                 if profile:
-                    await self._database["employee_profiles"].update_one(
-                        {"_id": profile["_id"]},
-                        {"$set": {"identity_subject": identity_subject}},
-                    )
-                    profile["identity_subject"] = identity_subject
                     return profile
-            return None
+                if email:
+                    profile = await self._database["employee_profiles"].find_one(
+                        {
+                            "organization_id": organization["organization_id"],
+                            "email": email,
+                            "active": True,
+                        }
+                    )
+                    if profile:
+                        await self._database["employee_profiles"].update_one(
+                            {"_id": profile["_id"]},
+                            {"$set": {"identity_subject": identity_subject}},
+                        )
+                        profile["identity_subject"] = identity_subject
+                        return profile
 
         # Standard single-tenant MVP resolution by identity_subject:
         profile = await self._database["employee_profiles"].find_one(

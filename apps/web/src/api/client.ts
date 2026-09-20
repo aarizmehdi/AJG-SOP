@@ -7,7 +7,10 @@ if (appMode === 'live' && !rawApiUrl) {
     'VITE_API_URL environment variable must be configured in live mode',
   );
 }
-const apiUrl = rawApiUrl ?? 'http://localhost:8000/api/v1';
+const apiUrl = (rawApiUrl ?? 'http://localhost:8000/api/v1').replace(
+  /\/+$/,
+  '',
+);
 
 let accessTokenProvider: () => Promise<string | null> = () =>
   Promise.resolve(null);
@@ -25,8 +28,13 @@ async function authorizedHeaders(supplied?: HeadersInit) {
     if (!fixtureIdentity) throw new ApiError('Authentication required', 401);
     headers.set('Authorization', `Fixture ${fixtureIdentity}`);
   } else {
-    const token = await accessTokenProvider();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    try {
+      const token = await accessTokenProvider();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ApiError(`Authentication token error: ${msg}`, 401);
+    }
   }
   return headers;
 }
@@ -48,7 +56,18 @@ export async function apiRequest<T>(
   const headers = await authorizedHeaders(init?.headers);
   if (!(init?.body instanceof FormData))
     headers.set('Content-Type', 'application/json');
-  const response = await fetch(`${apiUrl}${path}`, { ...init, headers });
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, { ...init, headers });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    throw new ApiError(
+      `Cannot connect to API backend at ${apiUrl} (${errorMsg})`,
+      0,
+    );
+  }
+
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
     const detail = z.object({ detail: z.string() }).safeParse(body);

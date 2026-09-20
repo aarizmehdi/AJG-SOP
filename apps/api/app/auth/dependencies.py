@@ -39,6 +39,8 @@ async def current_profile(
         stored = await request.app.state.database.resolve_identity_profile(
             identity.subject,
             identity.external_organization_id,
+            email=identity.claims.get("email"),
+            display_name=identity.claims.get("name") or identity.claims.get("nickname"),
         )
         profile = EmployeeProfile.model_validate(stored) if stored else None
     if not profile or not profile.active:
