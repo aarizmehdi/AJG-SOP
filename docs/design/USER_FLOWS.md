@@ -2,7 +2,7 @@
 
 ## Employee
 
-1. Authenticate with Auth0 or select a clearly labeled fixture identity.
+1. Authenticate with Firebase email/password inside the AJT login page, or select a clearly labeled fixture identity in local fixture mode.
 2. Select English, Urdu, or Roman Urdu; the application keeps the selected language and direction.
 3. Search published authorized SOPs or open the canonical policy reader.
 4. Ask the assistant. Progress can be shown, while answer text appears only after citation and grounding checks pass.

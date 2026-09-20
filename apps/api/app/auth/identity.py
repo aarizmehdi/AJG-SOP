@@ -1,9 +1,11 @@
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-import jwt
-from jwt import PyJWKClient
+import anyio
+import firebase_admin  # type: ignore[import-untyped]
+from firebase_admin import auth, credentials
 
 from apps.api.app.config import Settings
 from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
@@ -15,11 +17,6 @@ class AuthenticatedIdentity:
     subject: str
     claims: dict[str, Any]
 
-    @property
-    def external_organization_id(self) -> str | None:
-        value = self.claims.get("org_id")
-        return str(value) if value else None
-
 
 class IdentityProvider(ABC):
     @abstractmethod
@@ -27,37 +24,41 @@ class IdentityProvider(ABC):
         raise NotImplementedError
 
 
-class Auth0IdentityProvider(IdentityProvider):
-    """Validates Auth0 access tokens; browser OAuth is handled by Auth0's supported React SDK."""
+class FirebaseIdentityProvider(IdentityProvider):
+    """Verify Firebase ID tokens and expose only the authenticated Firebase UID."""
 
     def __init__(self, settings: Settings) -> None:
-        if not settings.auth0_domain or not settings.auth0_audience:
-            raise ValueError("Auth0 domain and audience are required")
-        domain = settings.auth0_domain.strip().rstrip("/")
-        self._issuer = f"https://{domain}/"
-        self._audience = settings.auth0_audience
-        self._jwks = PyJWKClient(
-            f"{self._issuer}.well-known/jwks.json",
-            cache_keys=True,
-            cache_jwk_set=True,
-            lifespan=3600,
-        )
+        if not settings.firebase_project_id or not settings.firebase_service_account_json:
+            raise ValueError("Firebase project ID and service account JSON are required")
+        try:
+            service_account = json.loads(settings.firebase_service_account_json.get_secret_value())
+        except (TypeError, json.JSONDecodeError) as err:
+            raise ValueError("FIREBASE_SERVICE_ACCOUNT_JSON must be valid JSON") from err
+        if service_account.get("project_id") != settings.firebase_project_id:
+            raise ValueError("Firebase service account project does not match FIREBASE_PROJECT_ID")
+        try:
+            self._app = firebase_admin.get_app("ajt-sop-api")
+        except ValueError:
+            self._app = firebase_admin.initialize_app(
+                credentials.Certificate(service_account),
+                {"projectId": settings.firebase_project_id},
+                name="ajt-sop-api",
+            )
 
     async def authenticate(self, credential: str) -> AuthenticatedIdentity:
-        token = credential.removeprefix("Bearer ").strip()
+        scheme, separator, token = credential.partition(" ")
+        if not separator or scheme.lower() != "bearer" or not token.strip():
+            raise ValueError("Bearer credential required")
         try:
-            key = self._jwks.get_signing_key_from_jwt(token)
-            claims = jwt.decode(
-                token,
-                key.key,
-                algorithms=["RS256"],
-                audience=self._audience,
-                issuer=self._issuer,
-                options={"verify_exp": True, "verify_iss": True, "verify_aud": True},
+            claims = await anyio.to_thread.run_sync(
+                lambda: auth.verify_id_token(token.strip(), app=self._app, check_revoked=True)
             )
-            return AuthenticatedIdentity(subject=str(claims["sub"]), claims=claims)
+            uid = claims.get("uid") or claims.get("sub")
+            if not uid:
+                raise ValueError("Firebase token does not contain a UID")
+            return AuthenticatedIdentity(subject=str(uid), claims=dict(claims))
         except Exception as err:
-            raise ValueError(f"Invalid JWT credential: {err}") from err
+            raise ValueError("Invalid Firebase ID token") from err
 
 
 class FixtureIdentityProvider(IdentityProvider):

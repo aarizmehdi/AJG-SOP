@@ -1,12 +1,14 @@
-import { useAuth0 } from '@auth0/auth0-react';
 import type { PropsWithChildren } from 'react';
 import { Navigate } from 'react-router-dom';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
+import { useFirebaseAuth } from './firebase-auth-context';
+import { useLanguage } from '../language/useLanguage';
 
 function LiveAuthGuard({ children }: PropsWithChildren) {
-  const { isAuthenticated, isLoading, error } = useAuth0();
-  if (isLoading) return <RouteSkeleton />;
-  if (error) {
+  const { authenticated, initialized, initializationError } = useFirebaseAuth();
+  const { t } = useLanguage();
+  if (!initialized) return <RouteSkeleton />;
+  if (initializationError) {
     return (
       <div
         style={{
@@ -20,7 +22,9 @@ function LiveAuthGuard({ children }: PropsWithChildren) {
           fontFamily: 'sans-serif',
         }}
       >
-        <h2 style={{ marginTop: 0, fontSize: '20px' }}>Authentication Error</h2>
+        <h2 style={{ marginTop: 0, fontSize: '20px' }}>
+          {t('authenticationError')}
+        </h2>
         <p
           style={{
             fontSize: '14px',
@@ -28,7 +32,7 @@ function LiveAuthGuard({ children }: PropsWithChildren) {
             wordBreak: 'break-word',
           }}
         >
-          {error.message}
+          {t('authInitializationFailed')}
         </p>
         <button
           onClick={() => {
@@ -44,12 +48,12 @@ function LiveAuthGuard({ children }: PropsWithChildren) {
             cursor: 'pointer',
           }}
         >
-          Return to Login
+          {t('returnToLogin')}
         </button>
       </div>
     );
   }
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!authenticated) return <Navigate to="/login" replace />;
   return children;
 }
 

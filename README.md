@@ -12,7 +12,7 @@ answers are derived artifacts.
 4. Run the API with `uv run uvicorn apps.api.app.main:app --reload`.
 5. Run the web app with `npm run dev`.
 
-Fixture login accepts the identities shown on the login page. Live mode requires Auth0, MongoDB,
+Fixture login accepts the identities shown on the login page. Live mode requires Firebase Authentication, MongoDB,
 private S3-compatible storage, Pinecone, and configured model providers.
 
 The Phase 1 LLM adapter is DeepSeek (`deepseek-v4-flash`) behind the provider-neutral

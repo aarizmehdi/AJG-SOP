@@ -1,17 +1,18 @@
-import { useAuth0 } from '@auth0/auth0-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { apiRequest } from '../../api/client';
+import { ApiError, apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import { profileSchema } from '../../types/profile';
 import { useLanguage } from './useLanguage';
+import { useFirebaseAuth } from '../auth/firebase-auth-context';
 
 export function ProfileLocaleGate() {
   const { bindProfile, hasPreference, profileId, t } = useLanguage();
   const location = useLocation();
-  const { logout } = useAuth0();
+  const queryClient = useQueryClient();
+  const { signOut } = useFirebaseAuth();
   const profile = useQuery({
     queryKey: ['profile'],
     queryFn: () => apiRequest('/profile/me', profileSchema),
@@ -22,7 +23,11 @@ export function ProfileLocaleGate() {
   }, [bindProfile, profile.data]);
 
   if (profile.isPending) return <RouteSkeleton />;
-  if (profile.isError)
+  if (profile.isError) {
+    const unavailable =
+      profile.error instanceof ApiError && profile.error.status === 0;
+    const noAccess =
+      profile.error instanceof ApiError && profile.error.status === 403;
     return (
       <div
         style={{
@@ -37,17 +42,26 @@ export function ProfileLocaleGate() {
         <ErrorState
           title={t('workspaceUnavailable')}
           detail={
-            profile.error.message
-              ? `${t('workspaceErrorDetail')} (${profile.error.message})`
-              : t('workspaceErrorDetail')
+            noAccess
+              ? t('accountAccessError')
+              : unavailable
+                ? t('backendUnavailable')
+                : t('workspaceErrorDetail')
           }
         />
+        {unavailable ? (
+          <button
+            className="button button--primary"
+            onClick={() => void profile.refetch()}
+          >
+            {t('retry')}
+          </button>
+        ) : null}
         {(import.meta.env.VITE_APP_MODE ?? 'fixture') === 'live' ? (
           <button
             onClick={() => {
-              void logout({
-                logoutParams: { returnTo: `${window.location.origin}/login` },
-              });
+              queryClient.clear();
+              void signOut();
             }}
             style={{
               marginTop: '20px',
@@ -60,11 +74,12 @@ export function ProfileLocaleGate() {
               cursor: 'pointer',
             }}
           >
-            Sign Out &amp; Switch Account
+            {t('switchAccount')}
           </button>
         ) : null}
       </div>
     );
+  }
   if (profileId !== profile.data.id) return <RouteSkeleton />;
   if (!hasPreference && location.pathname !== '/language')
     return <Navigate to="/language" replace />;
