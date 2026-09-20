@@ -3,7 +3,7 @@
 > **Target Audience:** Principal Engineer & ChatGPT Independent Reviewer  
 > **Repository:** `aarizmehdi/AJG-SOP`  
 > **Date:** September 20, 2026  
-> **Status:** Root Cause Solved (`cacheLocation="localstorage"`); All CI Checks Passing  
+> **Status:** Code Clean & Hardened; CORS & Auth Token Persistence Verified; All CI Checks Passing  
 
 ---
 
@@ -12,7 +12,7 @@
 | Parameter | Observed Value / Setting |
 |---|---|
 | **Git Branch** | `main` |
-| **Latest Commit SHA** | [`e7b4b434ff60b64be814e511fd3a5f4354c46fca`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge) |
+| **Latest Commit SHA** | [`b65810fe158ea9cbb0fe697fbfb264906f2df792`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge) |
 | **Primary Frontend Deployment** | Vercel (`https://ajg-sop-web.vercel.app`) |
 | **Primary Backend Deployment** | Railway (`https://<your-railway-app>.up.railway.app`) |
 | **App Environment Mode** | Production / Live (`VITE_APP_MODE=live`, `APP_MODE=live`) |
@@ -20,22 +20,17 @@
 
 ---
 
-## B. The Auth0 Token Memory Wipe Issue — Root Cause & Resolution
+## B. Auth0 Login & API Access Audit — Root Cause & Resolution
 
 ### 1. Root Cause Analysis
 
-- **Observed Symptom:** User authenticates on Auth0, browser redirects to Vercel, workspace skeleton briefly flashes, then immediately bounces back to `/login`.
-- **Underlying Root Cause:**
-  1. `Auth0Provider` was configured with `cacheLocation="memory"`.
-  2. When Auth0 redirected back to `https://ajg-sop-web.vercel.app/?code=...`, `onRedirectCallback` executed `window.location.href = target` to navigate to `/home`.
-  3. `window.location.href` forced a full browser page reload, wiping the in-memory JavaScript cache where Auth0 stored tokens.
-  4. Upon hard reload at `/home`, `@auth0/auth0-react` found zero tokens in memory, set `isAuthenticated = false`, and `AuthGuard` on `/home` bounced the browser back to `/login`.
+- **Initial Symptom (Resolved):** User authenticates on Auth0, browser redirects to Vercel, workspace skeleton briefly flashes, then immediately bounces back to `/login`.
+  - **Cause:** `Auth0Provider` used `cacheLocation="memory"`. In `onRedirectCallback`, `window.location.href = target` forced a full browser reload, wiping in-memory tokens.
+  - **Fix:** Changed `cacheLocation` to `"localstorage"` in `providers.tsx` and used clean SPA history replacement.
 
-### 2. Resolution Applied in Commit `e7b4b43`
-
-1. **Persistent Token Storage:** Changed `cacheLocation="memory"` to `cacheLocation="localstorage"` in `providers.tsx`. Auth0 tokens now persist in browser `localStorage` across page reloads and navigations.
-2. **Clean SPA Navigation:** Replaced `window.location.href` with `window.history.replaceState` in `onRedirectCallback`.
-3. **No Reload Memory Wipe:** Authentication state survives intact; users land on `/home` cleanly without bouncing back to `/login`.
+- **Secondary Symptom — `(Failed to fetch)` (Resolved):**
+  - **Cause:** Browser preflight `fetch()` to Railway backend failed when `WEB_ORIGIN` lacked trailing slash variants or differed from the exact Vercel deployment URL.
+  - **Fix:** Updated `config.py` to normalize trailing slashes in `allowed_origins` and added `allow_origin_regex=r"https://.*\.vercel\.app"` to `CORSMiddleware` in `main.py`.
 
 ---
 
@@ -55,4 +50,4 @@
 - **Prettier Format Check (`npm run format:check`):** `All matched files use Prettier code style!` (0 errors).
 - **Backend Pytest Suite:** `27 passed` (100%).
 - **Ruff Code Inspection:** `All checks passed!` (0 errors).
-- **Git Commit:** Pushed to GitHub `main` at `e7b4b434ff60b64be814e511fd3a5f4354c46fca`.
+- **Git Commit:** Pushed to GitHub `main` at `b65810fe158ea9cbb0fe697fbfb264906f2df792`.
