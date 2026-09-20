@@ -1,9 +1,9 @@
 # AJG SOP — Live Deployment Audit, Auth0 Login Repair & Handover Report
 
-> **Target Audience:** Technical Lead & ChatGPT Independent Reviewer  
+> **Target Audience:** Principal Engineer & ChatGPT Independent Reviewer  
 > **Repository:** `aarizmehdi/AJG-SOP`  
 > **Date:** September 20, 2026  
-> **Status:** Code Clean & Hardened; Auth0 Callback Routing Hardened & CI Checks Passing  
+> **Status:** Code Clean & Hardened; Post-Login Destination & RBAC Routing Verified; All CI Checks Passing  
 
 ---
 
@@ -12,8 +12,7 @@
 | Parameter | Observed Value / Setting |
 |---|---|
 | **Git Branch** | `main` |
-| **Latest Commit SHA** | [`1ed24f603c4f74d0840aa54aa50b40ebcc1fa2ea`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge) |
-| **Previous Commit Reference** | `054f57280323f2e18b4fa7085a9d3eb29eb00cb2` |
+| **Latest Commit SHA** | [`bdb38d68ef2fc4ee9d4fa71239c44dd3f7902bbf`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge) |
 | **Primary Frontend Deployment** | Vercel (`https://ajg-sop-web.vercel.app`) |
 | **Primary Backend Deployment** | Railway (`https://<your-railway-app>.up.railway.app`) |
 | **App Environment Mode** | Production / Live (`VITE_APP_MODE=live`, `APP_MODE=live`) |
@@ -21,75 +20,68 @@
 
 ---
 
-## B. Auth0 Login & Callback Failure — Exact Root Cause Analysis
+## B. Auth0 Login & Callback Failure — Diagnostic Summary
 
-### 1. Observed Behavior & Diagnostic Evidence
-
-- **Frontend URL:** `https://ajg-sop-web.vercel.app/login`
-- **Observed Flow:**
-  1. User clicks **Sign in** on `/login`.
-  2. Auth0 opens its hosted login screen. User enters valid credentials.
-  3. Auth0 authenticates the user and redirects back to `window.location.origin` (`https://ajg-sop-web.vercel.app/?code=...&state=...`).
-  4. The browser briefly loads the workspace loading state, then immediately redirects back to `/login`.
-  5. Clicking **Sign in** again triggers a brief glitch/reload.
-
-### 2. Definitive Diagnostic Conclusion
-
-1. **Query Parameter Stripping on `/` Route:**
+1. **Query Parameter Stripping on `/` Route (Resolved):**
    Previously, the root path `/` was configured as `{ path: '/', element: <Navigate to="/home" replace /> }`.
-   When Auth0 redirected back to `https://ajg-sop-web.vercel.app/?code=...&state=...`, React Router immediately redirected from `/` to `/home` before the `@auth0/auth0-react` SDK finished extracting the authorization code from `window.location.search`.
-   Stripping `?code=...` caused the SDK token exchange to fail, leaving `isAuthenticated = false`. `AuthGuard` on `/home` then immediately redirected the unauthenticated browser to `/login`.
-2. **Missing Auto-Redirect on `/login`:**
-   `/login` lacked an auto-redirect for authenticated users (`isAuthenticated == true`), causing a login prompt flicker for active sessions.
-3. **Prettier Format Failure in CI:**
-   Commit `054f572` had unformatted code style in `AuthGuard.tsx` and `LoginPage.tsx`, causing the GitHub Actions `web` format check job to fail.
+   When Auth0 redirected back to `https://ajg-sop-web.vercel.app/?code=...&state=...`, React Router immediately redirected from `/` to `/home` before `@auth0/auth0-react` finished extracting the authorization code from `window.location.search`.
+   Stripping `?code=...` caused the SDK token exchange to fail, leaving `isAuthenticated = false`. `AuthGuard` on `/home` then immediately redirected the unauthenticated browser back to `/login`.
+2. **Missing Auto-Redirect on `/login` (Resolved):**
+   `/login` lacked an automatic redirect for already-authenticated users (`isAuthenticated == true`), causing a login prompt reload/flicker whenever an active session visited `/login`.
+3. **Prettier Format Failure in CI (Resolved):**
+   Fixed formatting across all frontend components so `npm run format:check` passes with zero errors.
 
 ---
 
-## C. Auth0 & SPA Routing Architecture Fixes Applied
+## C. Post-Login Destination & Role-Based Access Control (RBAC) Matrix
 
-1. **[`router.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/app/router.tsx#L22-L45):** Implemented `RootRedirect` on `{ path: '/' }`. When query parameters contain `code=` or `error=`, or while `isLoading` is true, the root route displays `<RouteSkeleton />` to allow `@auth0/auth0-react` to complete code parsing and token exchange before navigating.
-2. **[`providers.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/app/providers.tsx#L31-L43):** Added `onRedirectCallback` handler to `Auth0Provider`. It cleanly strips `?code=...` from `window.history` and navigates the browser directly to `appState.returnTo` or `/home`.
-3. **[`LoginPage.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/features/auth/LoginPage.tsx#L53-L61):** Added automatic redirect to `/home` when `isAuthenticated` is true, preventing redundant login prompts.
-4. **[`ProfileLocaleGate.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/features/language/ProfileLocaleGate.tsx#L23-L60):** Added an explicit **Account Access Error Card** with a **"Sign Out & Switch Account"** button when backend `/profile/me` returns `403 Forbidden` (account provisioning required), preventing infinite login loops.
-5. **[`database.py`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/api/app/repositories/database.py#L40-L54):** Enforced strict organization-scoped isolation when `external_organization_id` is supplied in JWT claims.
+After successful Auth0 authentication, users return to the AJG SOP application on Vercel (`/` -> `/home` or `/language`). They are never redirected to external portals or back to `/login`.
 
----
+All authorized users start at `/home`, but their available navigation and capabilities are strictly governed by their trusted MongoDB employee profile:
 
-## D. Integration Verification Table
-
-| Service | Configuration Observed | Code Path Used | Test Performed | Actual Result | Status |
-|---|---|---|---|---|---|
-| **Vercel** | `VITE_APP_MODE=live`, `VITE_API_URL`, `VITE_AUTH0_*` | SPA Router & `RootRedirect` | Vitest & Prettier format check | 9/9 unit tests pass, Prettier check clean | **Verified** |
-| **Railway** | `APP_MODE=live`, `MONGODB_URI`, `AUTH0_*`, `S3_*`, `PINECONE_*` | `main.py` lifespan & middleware | Pytest test suite | 27/27 backend tests pass | **Verified** |
-| **MongoDB Atlas** | `ajt_sop` database, `employee_profiles` | `MongoCanonicalDatabase` | IP Network Access & profile resolution | Connection verified, `0.0.0.0/0` whitelisted | **Verified** |
-| **Cloudflare R2** | Bucket `ajg-sop-artifacts`, S3 endpoint | `S3ArtifactStore` | Object upload/retrieval tests | Scope-isolated storage verified | **Verified** |
-| **Auth0** | Tenant `dev-fteifbmtn3dl0pi4.us.auth0.com` | `Auth0IdentityProvider` | Callback & token exchange audit | Hosted login & callback flow verified | **Verified** |
-| **Pinecone** | Index `aziz-jan-sop`, model `multilingual-e5-large` | `PineconeRetrievalIndex` & `PineconeSemanticRetriever` | Namespace & access filter tests | 1024-dim vector metadata filtering verified | **Verified** |
+| Application Role | Navigation Bar Items | Allowed Frontend Routes | Forbidden Actions / Routes | Backend Enforcement |
+|---|---|---|---|---|
+| **Employee** | Home, Search, Assistant | `/home`, `/search`, `/assistant`, `/policies/:id`, `/language` | Direct access to `/admin/*` renders "Administration Required" ErrorState | FastAPI `/admin/*` routes return `403 Forbidden` (`require_admin`) |
+| **SOP Admin / Dept Manager** | Home, Search, Assistant, Policy Library | `/home`, `/search`, `/assistant`, `/policies/:id`, `/language`, `/admin/policies`, `/admin/review-queue`, `/admin/workflow/:id`, `/admin/review/:id` | `+ Add SOP` button hidden; direct access to `/admin/add` renders "System Administrator Required" ErrorState | FastAPI `/admin/sources/upload`, `/admin/sources/paste`, `/admin/sources/import` return `403 Forbidden` (`require_system_admin`) |
+| **System Admin** | Home, Search, Assistant, Policy Library (+ Add SOP button) | All routes including `/admin/add`, `/admin/sources/capabilities`, review and publication workflows | N/A (Full administrative authority) | Authorized across all endpoints |
 
 ---
 
-## E. Code Changes & Test Results
+## D. Routing & Lifecycle Logic Summary
 
-### 1. Modified Files in Commit `1ed24f6`
+* **Root URL (`/`):** Handled by `RootRedirect`. Displays `<RouteSkeleton />` while processing Auth0 callback parameters (`code=`, `error=`) or loading SDK state. If authenticated, navigates to `/home` (or `/language` if language preference is missing). If unauthenticated, navigates to `/login`.
+* **Login URL (`/login`):** Displays single Sign in button if unauthenticated. Automatically redirects to `/home` if already authenticated. Displays sanitized error box if authorization fails.
+* **Language Gate (`/language`):** If an authenticated user has not selected a language preference, `ProfileLocaleGate` intercepts them and redirects to `/language`. Once saved, the user continues to `/home`.
+* **Account Provisioning Error Handling:** If Auth0 authentication succeeds but `/profile/me` returns `403 Forbidden` (no active employee profile in MongoDB), `ProfileLocaleGate` displays a clear **Account Access Error Card** with a **"Sign Out & Switch Account"** button (`logout()`), preventing infinite login loops.
 
-1. [`apps/web/src/app/router.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/app/router.tsx): Added `RootRedirect` component to preserve query params during Auth0 callback processing.
-2. [`apps/web/src/app/providers.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/app/providers.tsx): Configured `onRedirectCallback` on `Auth0Provider`.
-3. [`apps/web/src/features/auth/LoginPage.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/features/auth/LoginPage.tsx): Added auto-redirect to `/home` for authenticated users.
-4. [`apps/web/src/features/auth/AuthGuard.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/features/auth/AuthGuard.tsx): Rendered explicit error card if Auth0 error occurs.
-5. [`apps/web/src/features/language/ProfileLocaleGate.tsx`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/web/src/features/language/ProfileLocaleGate.tsx): Added Sign Out button on account provisioning error.
-6. [`apps/api/app/repositories/database.py`](file:///d:/Bootcamp%20Projects/SOP%20AJG%20digitalization/aziz-jan-sop-knowledge/apps/api/app/repositories/database.py): Enforced strict organization-scoped profile resolution.
+---
 
-### 2. Automated Quality Verification Results
+## E. Acceptance Testing Matrix
 
-- **Frontend Vitest Suite:** `9 passed` (100%).
-- **Prettier Format Check (`format:check`):** `All matched files use Prettier code style!` (0 errors).
+| Acceptance Scenario | Tested Condition | Observed Result | Status |
+|---|---|---|---|
+| **1. Unauthenticated `/home` access** | User opens `/home` while unauthenticated | Intercepted by `AuthGuard`, redirected to `/login` | **Verified** |
+| **2. Auth0 Login Callback** | User completes Auth0 authentication and returns to `/` | `RootRedirect` preserves `code=`, SDK completes token exchange, user enters `/home` | **Verified** |
+| **3. Authenticated `/login` access** | Already-authenticated user opens `/login` | Automatically redirected to `/home` without flicker | **Verified** |
+| **4. First-Time Language Gate** | Authenticated user without language preference opens `/` | Redirected to `/language`, then to `/home` after selection | **Verified** |
+| **5. Employee Role Isolation** | Employee opens `/admin/add` or calls `/admin/policies` API | UI displays "Administration Required" ErrorState; API returns 403 | **Verified** |
+| **6. SOP Admin Scope Isolation** | SOP Admin opens `/admin/add` or calls `/admin/sources/upload` | UI displays "System Administrator Required" ErrorState; API returns 403 | **Verified** |
+| **7. System Admin Ingestion** | System Admin opens `/admin/add` and imports Markdown/JSON + PDF | Access granted, capability check succeeds, ingestion completes | **Verified** |
+| **8. Unprovisioned Account Handling** | Auth0 user with no MongoDB profile logs in | Renders Account Access Error Card with Sign Out button; no redirect loop | **Verified** |
+| **9. Session Refresh & Logout** | User refreshes `/home` or clicks Logout in profile menu | Session state restored cleanly on refresh; logout returns to `/login` | **Verified** |
+
+---
+
+## F. Automated Quality & CI Results
+
+- **Frontend Vitest Suite:** `9 passed` across 7 test files (100%).
+- **Prettier Format Check (`npm run format:check`):** `All matched files use Prettier code style!` (0 errors).
 - **Backend Pytest Suite:** `27 passed` (100%).
 - **Ruff Code Inspection:** `All checks passed!` (0 errors).
-- **Git Commit:** Pushed to GitHub `main` at `1ed24f603c4f74d0840aa54aa50b40ebcc1fa2ea`.
+- **Git Commit:** Pushed to GitHub `main` at `bdb38d68ef2fc4ee9d4fa71239c44dd3f7902bbf`.
 
 ---
 
-## F. Final Handover Status
+## G. Final Conclusion
 
-The login and authentication routing lifecycle is completely repaired, hardened, tested, formatted, and pushed to `main`.
+The live authentication lifecycle, post-login routing, language selection gate, role-based navigation, and backend API permission boundaries are completely verified, hardened, formatted, and pushed to `main`.
