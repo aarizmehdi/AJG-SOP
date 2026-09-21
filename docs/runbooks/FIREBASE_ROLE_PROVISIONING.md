@@ -13,7 +13,7 @@ The SOP Admin can read the admin policy library and manage only explicit selecte
 
 ## Production activation
 
-1. In Firebase Authentication, confirm both users are enabled and send each user an email-verification link. Both current accounts exist and are enabled, but their email addresses are not yet verified.
+1. In Firebase Authentication, confirm both users are enabled. Both current accounts exist and are enabled, but their email addresses are not yet verified. The current AJG API authorizes the verified Firebase UID and does not require the `email_verified` claim, so this does not block sign-in. If verified email is an organizational requirement, send verification from a signed-in client with Firebase `sendEmailVerification`, or generate an Admin SDK verification link and deliver it through an approved private channel.
 2. Run the guarded script from the repository with Railway production variables. Do not copy the MongoDB URI or service-account JSON into the command or a local file.
 
    ```bash
@@ -32,7 +32,7 @@ The SOP Admin can read the admin policy library and manage only explicit selecte
      --apply
    ```
 
-5. Ask each user to complete Firebase email verification, then sign in at the production login page. Existing passwords remain in Firebase and are never handled by this script.
+5. Give each user their existing Firebase sign-in credentials through an approved private channel, then ask them to sign in at the production login page. Existing passwords remain in Firebase and are never handled by this script. If the organization requires verified email, have each user complete the verification flow described in step 1.
 6. Confirm `GET /api/v1/profile/me` returns organization `ajt` and the exact assigned roles for each account.
 7. Confirm the Employee receives `403` from `GET /api/v1/admin/policies`.
 8. Confirm the SOP Admin receives `200` from `GET /api/v1/admin/policies` and `403` from `GET /api/v1/admin/sources/capabilities`.
