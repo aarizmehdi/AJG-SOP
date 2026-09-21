@@ -26,9 +26,12 @@ async def link_identity(
     database = client[database_name]
     profiles = database["employee_profiles"]
     try:
-        await profiles.create_index(
-            "identity_subject", unique=True, name="uq_employee_identity_subject"
-        )
+        # Keep dry-run strictly read-only. The unique index is created only for
+        # the guarded apply path, before the transaction performs the update.
+        if apply:
+            await profiles.create_index(
+                "identity_subject", unique=True, name="uq_employee_identity_subject"
+            )
         async with client.start_session() as session:
             async with await session.start_transaction():
                 profile = await profiles.find_one(
