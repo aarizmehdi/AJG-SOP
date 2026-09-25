@@ -85,16 +85,14 @@ a {
   height: 92px;
   padding: 8px;
   flex: none;
-  border: 1px solid #c9d6e2;
+  border: 1px solid transparent;
   border-radius: var(--radius-medium);
-  background: #eaf1f6;
-  box-shadow: 0 10px 24px rgba(8, 27, 48, 0.12);
+  background: transparent;
 }
 .brand-mark img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: white;
   border-radius: 6px;
 }
 .brand-mark--compact {
@@ -148,6 +146,36 @@ a {
 }
 .workspace {
   min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Page transition (fade + slide) ── */
+.page-transition {
+  width: 100%;
+  height: 100%;
+}
+.page-enter {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    transform 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.page-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+.page-exit-active {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition:
+    opacity 200ms cubic-bezier(0.55, 0.06, 0.68, 0.19),
+    transform 200ms cubic-bezier(0.55, 0.06, 0.68, 0.19);
 }
 .topbar {
   height: var(--header-height);
@@ -397,6 +425,14 @@ a {
   position: relative;
   overflow: hidden;
 }
+.login-geometry {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
 .auth-brand:after {
   content: '';
   position: absolute;
@@ -413,9 +449,12 @@ a {
 }
 .auth-brand .brand-mark {
   margin-bottom: 64px;
-  background: #ecf2f6;
-  border-color: rgba(255, 255, 255, 0.75);
-  box-shadow: 0 12px 28px rgba(3, 16, 30, 0.21);
+  margin-left: -8px;
+  background: transparent;
+  border-color: transparent;
+}
+.auth-brand .brand-mark img {
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.7));
 }
 .auth-brand h1 {
   font-size: clamp(2.3rem, 4.5vw, 4.3rem);
@@ -2108,6 +2147,28 @@ a {
 }
 .home-page .trust-note {
   margin-top: 22px;
+}
+.search-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 30px;
+  gap: 20px;
+}
+.search-title-group h1 {
+  margin: 0;
+}
+.search-header .search-box.compact {
+  margin-top: 0;
+  width: 320px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(26, 54, 86, 0.05);
+  border: 1px solid var(--border);
+}
+.search-header .search-box.compact input {
+  padding: 6px 0;
+  font-size: 0.9rem;
 }
 .home-policies,
 .available-policies-page .available-policy-list {

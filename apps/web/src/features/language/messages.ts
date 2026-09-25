@@ -2,7 +2,7 @@ import type { Language } from './language-context';
 
 const english = {
   brandTitle: 'SOP Knowledge',
-  brandName: 'Aziz Jan Trust',
+  brandName: 'Aziz Jan Group',
   home: 'Home',
   searchNav: 'Search SOPs',
   assistantNav: 'SOP Assistant',
@@ -13,7 +13,7 @@ const english = {
   roleEmployee: 'Employee',
   roleSopAdmin: 'SOP administrator',
   roleSystemAdmin: 'System administrator',
-  loginEyebrow: 'Aziz Jan Trust · SOP Knowledge',
+  loginEyebrow: 'Aziz Jan Group · SOP Knowledge',
   loginBrandTitle: 'Policy guidance you can trust.',
   loginBrandDetail:
     'Find the organizational rule you need, with a clear source every time.',
@@ -33,7 +33,7 @@ const english = {
     'Secure sign-in could not initialize. Reload the page and try again.',
   returnToLogin: 'Return to login',
   accountAccessError:
-    'This Firebase account is not linked to an active Aziz Jan Trust employee profile.',
+    'This Firebase account is not linked to an active Aziz Jan Group employee profile.',
   backendUnavailable:
     'The AJT service could not be reached. Your login is still active; retry the connection.',
   retry: 'Retry',
@@ -138,7 +138,7 @@ export type MessageKey = keyof typeof english;
 
 const urdu: Record<MessageKey, string> = {
   brandTitle: 'ایس او پی معلومات',
-  brandName: 'عزیز جان ٹرسٹ',
+  brandName: 'عزیز جان گروپ',
   home: 'مرکزی صفحہ',
   searchNav: 'ایس او پیز تلاش کریں',
   assistantNav: 'ایس او پی معاون',
@@ -149,7 +149,7 @@ const urdu: Record<MessageKey, string> = {
   roleEmployee: 'ملازم',
   roleSopAdmin: 'ایس او پی منتظم',
   roleSystemAdmin: 'سسٹم منتظم',
-  loginEyebrow: 'عزیز جان ٹرسٹ · ایس او پی معلومات',
+  loginEyebrow: 'عزیز جان گروپ · ایس او پی معلومات',
   loginBrandTitle: 'قابلِ اعتماد پالیسی رہنمائی۔',
   loginBrandDetail:
     'اپنی ضرورت کی تنظیمی ہدایت اس کے واضح ماخذ کے ساتھ تلاش کریں۔',
@@ -169,7 +169,7 @@ const urdu: Record<MessageKey, string> = {
     'محفوظ سائن اِن شروع نہیں ہو سکا۔ صفحہ دوبارہ لوڈ کریں۔',
   returnToLogin: 'لاگ اِن پر واپس جائیں',
   accountAccessError:
-    'یہ فائر بیس اکاؤنٹ عزیز جان ٹرسٹ کے فعال ملازم پروفائل سے منسلک نہیں ہے۔',
+    'یہ فائر بیس اکاؤنٹ عزیز جان گروپ کے فعال ملازم پروفائل سے منسلک نہیں ہے۔',
   backendUnavailable:
     'اے جے ٹی سروس سے رابطہ نہیں ہو سکا۔ آپ کا لاگ اِن فعال ہے؛ دوبارہ کوشش کریں۔',
   retry: 'دوبارہ کوشش کریں',
@@ -270,7 +270,7 @@ const urdu: Record<MessageKey, string> = {
 
 const romanUrdu: Record<MessageKey, string> = {
   brandTitle: 'SOP Maloomat',
-  brandName: 'Aziz Jan Trust',
+  brandName: 'Aziz Jan Group',
   home: 'Home',
   searchNav: 'SOPs talash karein',
   assistantNav: 'SOP Assistant',
@@ -281,7 +281,7 @@ const romanUrdu: Record<MessageKey, string> = {
   roleEmployee: 'Mulazim',
   roleSopAdmin: 'SOP administrator',
   roleSystemAdmin: 'System administrator',
-  loginEyebrow: 'Aziz Jan Trust · SOP Maloomat',
+  loginEyebrow: 'Aziz Jan Group · SOP Maloomat',
   loginBrandTitle: 'Bharosemand policy rehnumai.',
   loginBrandDetail:
     'Zaroori tanzeemi hidayat us ke wazeh source ke sath talash karein.',
@@ -302,7 +302,7 @@ const romanUrdu: Record<MessageKey, string> = {
     'Secure sign in shuru nahin ho saka. Page reload karke dobara koshish karein.',
   returnToLogin: 'Login par wapas jayein',
   accountAccessError:
-    'Yeh Firebase account Aziz Jan Trust ke active employee profile se linked nahin hai.',
+    'Yeh Firebase account Aziz Jan Group ke active employee profile se linked nahin hai.',
   backendUnavailable:
     'AJT service se rabta nahin ho saka. Aap ka login active hai; dobara koshish karein.',
   retry: 'Dobara koshish karein',
