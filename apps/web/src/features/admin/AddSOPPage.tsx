@@ -70,9 +70,9 @@ export default function AddSOPPage() {
   const [category, setCategory] = useState('Operations');
   const [versionLabel, setVersionLabel] = useState('1.0');
   const [access, setAccess] = useState<AccessScope>({
-    departments: { mode: 'selected', values: ['store'] },
-    locations: { mode: 'selected', values: ['peshawar-main'] },
-    roles: { mode: 'selected', values: ['store_keeper'] },
+    departments: { mode: 'selected', values: [] },
+    locations: { mode: 'selected', values: [] },
+    roles: { mode: 'selected', values: [] },
   });
   const navigate = useNavigate();
   const profile = useQuery({
@@ -129,6 +129,18 @@ export default function AddSOPPage() {
   const isPaste =
     format === 'structured_text' ||
     (format === 'markdown' && markdownMode === 'paste');
+  const accessComplete = Object.values(access).every(
+    (dimension) =>
+      dimension.mode === 'all' ||
+      dimension.values.some((value) => value.trim()),
+  );
+  const scopeSummary = (
+    dimension: AccessScope['departments'],
+    allLabel: string,
+  ) =>
+    dimension.mode === 'all'
+      ? allLabel
+      : dimension.values.join(', ') || 'Not selected';
   if (profile.isPending) return <RouteSkeleton />;
   if (!canIngest)
     return (
@@ -178,6 +190,40 @@ export default function AddSOPPage() {
         </label>
       </div>
       <AccessScopeEditor value={access} onChange={setAccess} />
+      <section
+        className="scope-confirmation surface"
+        aria-labelledby="scope-confirmation-title"
+      >
+        <div>
+          <span className="eyebrow">Authorization check</span>
+          <h3 id="scope-confirmation-title">
+            Who will be able to access this SOP?
+          </h3>
+          <p>
+            These three fields control employee visibility. Category is
+            descriptive and does not grant access.
+          </p>
+        </div>
+        <dl>
+          <div>
+            <dt>Department(s)</dt>
+            <dd>{scopeSummary(access.departments, 'All departments')}</dd>
+          </div>
+          <div>
+            <dt>Location(s)</dt>
+            <dd>{scopeSummary(access.locations, 'All locations')}</dd>
+          </div>
+          <div>
+            <dt>Organizational role(s)</dt>
+            <dd>{scopeSummary(access.roles, 'All organizational roles')}</dd>
+          </div>
+        </dl>
+        <strong className="scope-warning">
+          Employees must match Department AND Location AND Organizational Role.
+          Confirm the values against production employee profiles before
+          ingestion.
+        </strong>
+      </section>
       <div className="format-grid">
         {formats.map(({ id, label, note, icon: Icon }) => {
           const capability = capabilities.data?.find(
@@ -284,6 +330,7 @@ export default function AddSOPPage() {
             disabled={
               upload.isPending ||
               !title.trim() ||
+              !accessComplete ||
               (isPaste ? !text.trim() : !file)
             }
             onClick={() => {

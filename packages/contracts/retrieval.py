@@ -1,3 +1,4 @@
+from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -64,3 +65,15 @@ class PolicyReaderDocument(BaseModel):
     version_label: str
     sections: list[PolicyReaderSection]
     original_download_allowed: bool
+
+
+class AvailablePolicySummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    policy_id: str
+    title: str
+    policy_number: str | None = None
+    category: str
+    version_label: str
+    effective_date: date | None = None
+    updated_at: datetime
+    recently_updated: bool

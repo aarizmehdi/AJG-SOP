@@ -38,6 +38,12 @@ class ReviewConfirmationRequest(BaseModel):
     confirmed: bool
 
 
+class CorrectAccessVersionRequest(BaseModel):
+    version_label: str = Field(min_length=1)
+    effective_date: date | None = None
+    access: AccessScope
+
+
 def _service(request: Request) -> PolicyService:
     return cast(PolicyService, request.app.state.policy_service)
 
@@ -260,6 +266,32 @@ async def update_access(
     return _service(request).set_access(
         profile.organization_id, profile.id, version_id, payload.access
     )
+
+
+@router.post("/policies/{policy_id}/versions", status_code=status.HTTP_201_CREATED)
+async def create_corrected_access_version(
+    request: Request,
+    policy_id: str,
+    payload: CorrectAccessVersionRequest,
+    profile: CurrentProfile,
+) -> dict[str, object]:
+    require_system_admin(profile)
+    require_management_scope(profile, payload.access)
+    try:
+        version, sources = _service(request).create_corrected_access_version(
+            profile.organization_id,
+            profile.id,
+            policy_id,
+            payload.version_label,
+            payload.access,
+            payload.effective_date,
+        )
+    except (KeyError, PublicationError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {
+        "version": version.model_dump(mode="json"),
+        "sources": [source.model_dump(mode="json") for source in sources],
+    }
 
 
 @router.post("/sources/{source_id}/approve")

@@ -8,6 +8,9 @@ export const Assistant = lazy(
   () => import('../features/assistant/AssistantPage'),
 );
 export const Policy = lazy(() => import('../features/policies/PolicyPage'));
+export const AvailablePolicies = lazy(
+  () => import('../features/policies/AvailablePoliciesPage'),
+);
 export const Admin = lazy(() => import('../features/admin/AdminPage'));
 export const AdminLibrary = lazy(
   () => import('../features/admin/AdminLibraryPage'),

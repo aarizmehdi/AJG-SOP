@@ -231,6 +231,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/policies/{policy_id}/versions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create Corrected Access Version */
+    post: operations['create_corrected_access_version_api_v1_admin_policies__policy_id__versions_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/sources/{source_id}/approve': {
     parameters: {
       query?: never;
@@ -344,6 +361,23 @@ export interface paths {
     put?: never;
     /** Deactivate Policy */
     post: operations['deactivate_policy_api_v1_admin_policies__policy_id__deactivate_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/policies': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Available Policies */
+    get: operations['list_available_policies_api_v1_policies_get'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -571,6 +605,28 @@ export interface components {
       language: components['schemas']['Language'];
       /** Session Id */
       session_id?: string | null;
+    };
+    /** AvailablePolicySummary */
+    AvailablePolicySummary: {
+      /** Policy Id */
+      policy_id: string;
+      /** Title */
+      title: string;
+      /** Policy Number */
+      policy_number?: string | null;
+      /** Category */
+      category: string;
+      /** Version Label */
+      version_label: string;
+      /** Effective Date */
+      effective_date?: string | null;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+      /** Recently Updated */
+      recently_updated: boolean;
     };
     /**
      * BlockKind
@@ -825,6 +881,14 @@ export interface components {
        */
       is_header: boolean;
       source: components['schemas']['SourceLocator'];
+    };
+    /** CorrectAccessVersionRequest */
+    CorrectAccessVersionRequest: {
+      /** Version Label */
+      version_label: string;
+      /** Effective Date */
+      effective_date?: string | null;
+      access: components['schemas']['AccessScope'];
     };
     /** CreatePolicyRequest */
     CreatePolicyRequest: {
@@ -1780,6 +1844,45 @@ export interface operations {
       };
     };
   };
+  create_corrected_access_version_api_v1_admin_policies__policy_id__versions_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        policy_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CorrectAccessVersionRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   approve_structure_api_v1_admin_sources__source_id__approve_post: {
     parameters: {
       query?: never;
@@ -2005,6 +2108,37 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SOPPolicy'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  list_available_policies_api_v1_policies_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AvailablePolicySummary'][];
         };
       };
       /** @description Validation Error */
