@@ -138,7 +138,7 @@ export type MessageKey = keyof typeof english;
 
 const urdu: Record<MessageKey, string> = {
   brandTitle: 'ایس او پی معلومات',
-  brandName: 'عزیز جان ٹرسٹ',
+  brandName: 'عزیز جان گروپ',
   home: 'مرکزی صفحہ',
   searchNav: 'ایس او پیز تلاش کریں',
   assistantNav: 'ایس او پی معاون',
@@ -149,7 +149,7 @@ const urdu: Record<MessageKey, string> = {
   roleEmployee: 'ملازم',
   roleSopAdmin: 'ایس او پی منتظم',
   roleSystemAdmin: 'سسٹم منتظم',
-  loginEyebrow: 'عزیز جان ٹرسٹ · ایس او پی معلومات',
+  loginEyebrow: 'عزیز جان گروپ · ایس او پی معلومات',
   loginBrandTitle: 'قابلِ اعتماد پالیسی رہنمائی۔',
   loginBrandDetail:
     'اپنی ضرورت کی تنظیمی ہدایت اس کے واضح ماخذ کے ساتھ تلاش کریں۔',
@@ -169,7 +169,7 @@ const urdu: Record<MessageKey, string> = {
     'محفوظ سائن اِن شروع نہیں ہو سکا۔ صفحہ دوبارہ لوڈ کریں۔',
   returnToLogin: 'لاگ اِن پر واپس جائیں',
   accountAccessError:
-    'یہ فائر بیس اکاؤنٹ عزیز جان ٹرسٹ کے فعال ملازم پروفائل سے منسلک نہیں ہے۔',
+    'یہ فائر بیس اکاؤنٹ عزیز جان گروپ کے فعال ملازم پروفائل سے منسلک نہیں ہے۔',
   backendUnavailable:
     'اے جے ٹی سروس سے رابطہ نہیں ہو سکا۔ آپ کا لاگ اِن فعال ہے؛ دوبارہ کوشش کریں۔',
   retry: 'دوبارہ کوشش کریں',

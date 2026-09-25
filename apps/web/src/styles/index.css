@@ -411,8 +411,7 @@ a {
   color: var(--navy);
 }
 .auth-page {
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1.06fr) minmax(380px, 0.94fr);
 }

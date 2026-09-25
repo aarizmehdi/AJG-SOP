@@ -5,6 +5,10 @@ import gsap from 'gsap';
  * Premium animated background for the login brand panel.
  * Features glowing aurora orbs, a network mesh with pulsing nodes,
  * and flowing particles along curved paths.
+ *
+ * Respects `prefers-reduced-motion`: when the user has enabled
+ * reduced-motion, the canvas draws a single static frame with no
+ * GSAP tweens, no particle movement, and no pulse intervals.
  */
 export function LoginGeometry() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -16,7 +20,11 @@ export function LoginGeometry() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animationId: number;
+    const prefersReducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches;
+
+    let animationId: number | undefined;
     let width: number;
     let height: number;
 
@@ -125,7 +133,7 @@ export function LoginGeometry() {
     ];
 
     // Master opacity for entrance
-    const master = { opacity: 0 };
+    const master = { opacity: prefersReducedMotion ? 1 : 0 };
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio, 2);
@@ -134,8 +142,8 @@ export function LoginGeometry() {
       height = rect?.height ?? window.innerHeight;
       canvas.width = width * dpr;
       canvas.height = height * dpr;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      canvas.style.width = String(width) + 'px';
+      canvas.style.height = String(height) + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
@@ -159,57 +167,83 @@ export function LoginGeometry() {
       );
     };
 
-    // ── GSAP Animations ──
+    // Helper to build hsla/rgba strings without template-literal number coercion
+    const hsla = (h: number, s: number, l: number, a: number) =>
+      'hsla(' +
+      String(h) +
+      ', ' +
+      String(s) +
+      '%, ' +
+      String(l) +
+      '%, ' +
+      String(a) +
+      ')';
 
-    // Entrance fade
-    gsap.to(master, { opacity: 1, duration: 2.5, ease: 'power2.inOut' });
+    const rgba = (r: number, g: number, b: number, a: number) =>
+      'rgba(' +
+      String(r) +
+      ', ' +
+      String(g) +
+      ', ' +
+      String(b) +
+      ', ' +
+      String(a) +
+      ')';
 
-    // Orbs: slow drift + breathing
-    orbs.forEach((orb) => {
-      gsap.to(orb, {
-        x: `+=${0.08 + Math.random() * 0.12}`,
-        y: `+=${0.06 + Math.random() * 0.1}`,
-        duration: 12 + Math.random() * 10,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      });
-      gsap.to(orb, {
-        r: orb.r + 0.06 + Math.random() * 0.08,
-        opacity: orb.opacity + 0.04,
-        duration: 6 + Math.random() * 6,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      });
-    });
+    // ── GSAP Animations (skipped entirely for reduced motion) ──
+    let pulseInterval: ReturnType<typeof setInterval> | undefined;
 
-    // Nodes: gentle sway
-    nodes.forEach((node) => {
-      gsap.to(node, {
-        x: node.baseX + (Math.random() - 0.5) * 0.04,
-        y: node.baseY + (Math.random() - 0.5) * 0.04,
-        duration: 4 + Math.random() * 4,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      });
-    });
+    if (!prefersReducedMotion) {
+      // Entrance fade
+      gsap.to(master, { opacity: 1, duration: 2.5, ease: 'power2.inOut' });
 
-    // Random node pulses
-    const pulseRandom = () => {
-      const n = nodes[Math.floor(Math.random() * nodes.length)];
-      if (!n) return;
-      gsap.to(n, {
-        pulse: 1,
-        duration: 0.6,
-        ease: 'power2.out',
-        onComplete: () => {
-          gsap.to(n, { pulse: 0, duration: 1.2, ease: 'power2.in' });
-        },
+      // Orbs: slow drift + breathing
+      orbs.forEach((orb) => {
+        gsap.to(orb, {
+          x: '+=' + String(0.08 + Math.random() * 0.12),
+          y: '+=' + String(0.06 + Math.random() * 0.1),
+          duration: 12 + Math.random() * 10,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+        });
+        gsap.to(orb, {
+          r: orb.r + 0.06 + Math.random() * 0.08,
+          opacity: orb.opacity + 0.04,
+          duration: 6 + Math.random() * 6,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+        });
       });
-    };
-    const pulseInterval = setInterval(pulseRandom, 400);
+
+      // Nodes: gentle sway
+      nodes.forEach((node) => {
+        gsap.to(node, {
+          x: node.baseX + (Math.random() - 0.5) * 0.04,
+          y: node.baseY + (Math.random() - 0.5) * 0.04,
+          duration: 4 + Math.random() * 4,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+        });
+      });
+
+      // Random node pulses
+      const pulseRandom = () => {
+        const n = nodes[Math.floor(Math.random() * nodes.length)];
+        if (!n) return;
+        gsap.to(n, {
+          pulse: 1,
+          duration: 0.6,
+          ease: 'power2.out',
+          onComplete: () => {
+            gsap.to(n, { pulse: 0, duration: 1.2, ease: 'power2.in' });
+          },
+        });
+      };
+      pulseInterval = setInterval(pulseRandom, 400);
+    }
 
     // ── Render loop ──
     const draw = () => {
@@ -224,16 +258,13 @@ export function LoginGeometry() {
         const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
         gradient.addColorStop(
           0,
-          `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, ${orb.opacity})`,
+          hsla(orb.hue, orb.sat, orb.light, orb.opacity),
         );
         gradient.addColorStop(
           0.5,
-          `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, ${orb.opacity * 0.4})`,
+          hsla(orb.hue, orb.sat, orb.light, orb.opacity * 0.4),
         );
-        gradient.addColorStop(
-          1,
-          `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, 0)`,
-        );
+        gradient.addColorStop(1, hsla(orb.hue, orb.sat, orb.light, 0));
         ctx.fillStyle = gradient;
         ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
       }
@@ -254,7 +285,7 @@ export function LoginGeometry() {
           if (dist < maxDist) {
             const alpha =
               0.06 * (1 - dist / maxDist) + (ni.pulse + nj.pulse) * 0.12;
-            ctx.strokeStyle = `rgba(75, 169, 212, ${alpha})`;
+            ctx.strokeStyle = rgba(75, 169, 212, alpha);
             ctx.beginPath();
             ctx.moveTo(ni.x * width, ni.y * height);
             ctx.lineTo(nj.x * width, nj.y * height);
@@ -272,7 +303,7 @@ export function LoginGeometry() {
         if (node.pulse > 0.05) {
           const glowR = node.r + node.pulse * 18;
           const glowGrad = ctx.createRadialGradient(nx, ny, 0, nx, ny, glowR);
-          glowGrad.addColorStop(0, `rgba(75, 169, 212, ${node.pulse * 0.4})`);
+          glowGrad.addColorStop(0, rgba(75, 169, 212, node.pulse * 0.4));
           glowGrad.addColorStop(1, 'rgba(75, 169, 212, 0)');
           ctx.fillStyle = glowGrad;
           ctx.beginPath();
@@ -281,16 +312,23 @@ export function LoginGeometry() {
         }
 
         // Node dot
-        ctx.fillStyle = `rgba(165, 205, 228, ${node.glowOpacity + node.pulse * 0.5})`;
+        ctx.fillStyle = rgba(
+          165,
+          205,
+          228,
+          node.glowOpacity + node.pulse * 0.5,
+        );
         ctx.beginPath();
         ctx.arc(nx, ny, node.r + node.pulse * 2, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Draw flowing particles along curves
+      // Draw flowing particles along curves (skip movement in reduced motion)
       for (const particle of particles) {
-        particle.progress += particle.speed;
-        if (particle.progress > 1) particle.progress -= 1;
+        if (!prefersReducedMotion) {
+          particle.progress += particle.speed;
+          if (particle.progress > 1) particle.progress -= 1;
+        }
 
         const p = paths[particle.pathIndex];
         if (!p) continue;
@@ -319,10 +357,7 @@ export function LoginGeometry() {
           py,
           particle.size * 5,
         );
-        trailGrad.addColorStop(
-          0,
-          `rgba(75, 169, 212, ${particle.opacity * 0.4})`,
-        );
+        trailGrad.addColorStop(0, rgba(75, 169, 212, particle.opacity * 0.4));
         trailGrad.addColorStop(1, 'rgba(75, 169, 212, 0)');
         ctx.fillStyle = trailGrad;
         ctx.beginPath();
@@ -330,7 +365,7 @@ export function LoginGeometry() {
         ctx.fill();
 
         // Core
-        ctx.fillStyle = `rgba(160, 215, 240, ${particle.opacity})`;
+        ctx.fillStyle = rgba(160, 215, 240, particle.opacity);
         ctx.beginPath();
         ctx.arc(px, py, particle.size, 0, Math.PI * 2);
         ctx.fill();
@@ -353,18 +388,29 @@ export function LoginGeometry() {
         ctx.stroke();
       }
 
-      animationId = requestAnimationFrame(draw);
+      // Only loop when motion is allowed; static frame otherwise
+      if (!prefersReducedMotion) {
+        animationId = requestAnimationFrame(draw);
+      }
     };
 
     draw();
 
     return () => {
-      cancelAnimationFrame(animationId);
-      clearInterval(pulseInterval);
+      if (animationId != null) {
+        cancelAnimationFrame(animationId);
+      }
+      if (pulseInterval != null) {
+        clearInterval(pulseInterval);
+      }
       window.removeEventListener('resize', resize);
       gsap.killTweensOf(master);
-      orbs.forEach((o) => gsap.killTweensOf(o));
-      nodes.forEach((n) => gsap.killTweensOf(n));
+      orbs.forEach((o) => {
+        gsap.killTweensOf(o);
+      });
+      nodes.forEach((n) => {
+        gsap.killTweensOf(n);
+      });
     };
   }, []);
 

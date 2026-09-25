@@ -37,8 +37,11 @@ export default function SearchPage() {
             onChange={(event) => {
               setQuery(event.target.value);
             }}
-            placeholder="Search policies & SOPs..."
+            placeholder={t('searchPlaceholder')}
           />
+          <button disabled={search.isPending || !query.trim()}>
+            {t('searchButton')}
+          </button>
         </form>
       </header>
       {search.isPending && (
