@@ -1,6 +1,6 @@
-from apps.api.app.models.organization import EmployeeProfile
+from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
-from packages.contracts.access import EmployeeScope
+from packages.contracts.access import AccessScope, EmployeeScope
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.policy import PolicyStatus
 
@@ -21,7 +21,6 @@ class AuthorizationFilter:
         )
 
     def eligible_chunks(self, profile: EmployeeProfile) -> list[RetrievalChunk]:
-        scope = self.employee_scope(profile)
         active_version_ids = {
             policy.active_version_id
             for policy in self._store.policies.values()
@@ -36,8 +35,17 @@ class AuthorizationFilter:
             if chunk.organization_id == profile.organization_id
             and chunk.version_id == version_id
             and chunk.publication_status == "published"
-            and chunk.access.allows(scope)
+            and self.allows(profile, chunk.access)
         ]
+
+    @staticmethod
+    def is_organization_wide_reader(profile: EmployeeProfile) -> bool:
+        return ApplicationRole.SYSTEM_ADMIN in profile.application_roles
+
+    def allows(self, profile: EmployeeProfile, access: AccessScope) -> bool:
+        return self.is_organization_wide_reader(profile) or access.allows(
+            self.employee_scope(profile)
+        )
 
     def revalidate(self, profile: EmployeeProfile, chunk: RetrievalChunk) -> bool:
         policy = self._store.policies.get(chunk.policy_id)
@@ -48,5 +56,5 @@ class AuthorizationFilter:
             and policy.active_version_id == chunk.version_id
             and chunk.organization_id == profile.organization_id
             and chunk.publication_status == "published"
-            and chunk.access.allows(self.employee_scope(profile))
+            and self.allows(profile, chunk.access)
         )

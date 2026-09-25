@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from apps.api.app.auth.dependencies import CurrentProfile
 from apps.api.app.services.policy_reader_service import PolicyReaderService
 from packages.contracts.retrieval import (
+    AvailablePolicySummary,
     PolicyReaderDocument,
     SearchRequest,
     SearchResponse,
@@ -12,6 +13,14 @@ from packages.contracts.retrieval import (
 from services.retrieval.retriever import RetrievalService
 
 router = APIRouter(tags=["employee-knowledge"])
+
+
+@router.get("/policies")
+async def list_available_policies(
+    request: Request, profile: CurrentProfile
+) -> list[AvailablePolicySummary]:
+    reader = cast(PolicyReaderService, request.app.state.policy_reader_service)
+    return reader.list_available(profile)
 
 
 @router.post("/search")

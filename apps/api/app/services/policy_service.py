@@ -1,10 +1,11 @@
 from datetime import date
+from typing import Any, cast
 from uuid import uuid4
 
 from apps.api.app.services.audit_service import AuditService
 from apps.api.app.services.foundation_store import FoundationStore
 from packages.contracts.access import AccessScope
-from packages.contracts.canonical import BlockKind, CanonicalSection, RetrievalChunk
+from packages.contracts.canonical import BlockKind, CanonicalSection, CanonicalSOP, RetrievalChunk
 from packages.contracts.common import utc_now
 from packages.contracts.policy import (
     DuplicateSectionGroup,
@@ -19,9 +20,10 @@ from packages.contracts.policy import (
     SOPVersion,
     VersionStatus,
 )
-from packages.contracts.source import SourceStatus
+from packages.contracts.source import SourceDocument, SourceStatus
 from services.ingestion.chunking.semantic_chunker import Chunker
 from services.ingestion.embeddings.base import EmbeddingProvider
+from services.ingestion.extractors.base import RawDocumentResult
 from services.ingestion.indexing.pinecone_index import DerivedRetrievalIndex
 
 
@@ -88,6 +90,131 @@ class PolicyService:
             organization_id, actor_id, "version.created", "policy_version", version.id
         )
         return version
+
+    def create_corrected_access_version(
+        self,
+        organization_id: str,
+        actor_id: str,
+        policy_id: str,
+        version_label: str,
+        access: AccessScope,
+        effective_date: date | None = None,
+    ) -> tuple[SOPVersion, list[SourceDocument]]:
+        policy = self._policy(organization_id, policy_id)
+        if not policy.active_version_id:
+            raise PublicationError("A published version is required to carry content forward")
+        current = self._version(organization_id, policy.active_version_id)
+        if current.status is not VersionStatus.PUBLISHED:
+            raise PublicationError("The active version is not published")
+        published_sources: list[tuple[SourceDocument, CanonicalSOP]] = []
+        for source_id in current.source_document_ids:
+            source = self.store.sources.get(source_id)
+            canonical = self.store.canonicals.get(source_id)
+            if (
+                not source
+                or not canonical
+                or source.organization_id != organization_id
+                or canonical.organization_id != organization_id
+                or source.version_id != current.id
+                or canonical.version_id != current.id
+            ):
+                raise PublicationError("Published source content could not be carried forward")
+            published_sources.append((source, canonical))
+        version = self.create_version(
+            organization_id,
+            actor_id,
+            policy_id,
+            version_label,
+            access,
+            effective_date if effective_date is not None else current.effective_date,
+        )
+        cloned_sources: list[SourceDocument] = []
+        for source, canonical in published_sources:
+            new_source_id = f"source-{uuid4().hex[:12]}"
+            cloned_source = source.model_copy(
+                update={
+                    "id": new_source_id,
+                    "version_id": version.id,
+                    "status": SourceStatus.REVIEW_REQUIRED,
+                    "canonical_artifact_uri": None,
+                    "reviewed_artifact_uri": None,
+                    "error_code": None,
+                    "created_at": utc_now(),
+                }
+            )
+            canonical_payload = cast(
+                dict[str, Any],
+                self._replace_source_id(
+                    canonical.model_dump(mode="python"), source.id, new_source_id
+                ),
+            )
+            canonical_payload.update(
+                {
+                    "id": f"canonical-{uuid4().hex[:12]}",
+                    "version_id": version.id,
+                    "source_document_ids": (new_source_id,),
+                    "approved": False,
+                    "approved_at": None,
+                }
+            )
+            for section in canonical_payload["sections"]:
+                section["access"] = access.model_dump(mode="python")
+            cloned_canonical = CanonicalSOP.model_validate(canonical_payload)
+            raw = self.store.raw_results.get(source.id)
+            if isinstance(raw, RawDocumentResult):
+                cloned_raw = raw.model_copy(update={"source_document_id": new_source_id})
+                self.store.raw_results[new_source_id] = cloned_raw
+                self.store.mark_modified("raw_parser_results", new_source_id, cloned_raw)
+            job = IngestionJob(
+                id=f"job-{uuid4().hex[:12]}",
+                organization_id=organization_id,
+                source_document_id=new_source_id,
+                version_id=version.id,
+                state=IngestionState.REVIEW_REQUIRED,
+                events=[
+                    IngestionEvent(
+                        organization_id=organization_id,
+                        state=IngestionState.REVIEW_REQUIRED,
+                        detail="Published canonical content carried forward for access review",
+                    )
+                ],
+            )
+            self.store.sources[new_source_id] = cloned_source
+            self.store.canonicals[new_source_id] = cloned_canonical
+            self.store.jobs[job.id] = job
+            self.store.mark_modified("source_documents", new_source_id, cloned_source)
+            self.store.mark_modified("canonical_sops", new_source_id, cloned_canonical)
+            self.store.mark_modified("ingestion_jobs", job.id, job)
+            version.source_document_ids.append(new_source_id)
+            cloned_sources.append(cloned_source)
+        version.status = VersionStatus.EXTRACTION_REVIEW
+        self.store.mark_modified("policy_versions", version.id, version)
+        self.audit.record(
+            organization_id,
+            actor_id,
+            "version.access_correction_created",
+            "policy_version",
+            version.id,
+            {"carried_from_version_id": current.id},
+        )
+        return version, cloned_sources
+
+    @classmethod
+    def _replace_source_id(cls, value: object, old_id: str, new_id: str) -> object:
+        if isinstance(value, dict):
+            return {
+                key: (
+                    new_id
+                    if key == "source_document_id" and item == old_id
+                    else cls._replace_source_id(item, old_id, new_id)
+                )
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [cls._replace_source_id(item, old_id, new_id) for item in value]
+        if isinstance(value, tuple):
+            return tuple(cls._replace_source_id(item, old_id, new_id) for item in value)
+        return value
 
     def set_access(
         self,
@@ -220,9 +347,9 @@ class PolicyService:
         chunks: list[RetrievalChunk] = []
         for document in canonicals:
             chunks.extend(self.chunker.chunk(document, "staged"))
-        self._jobs_transition(jobs, IngestionState.EMBEDDING, "Creating provisional embeddings")
-        vectors = await self.embeddings.embed([chunk.text for chunk in chunks])
         try:
+            self._jobs_transition(jobs, IngestionState.EMBEDDING, "Creating E5 passage embeddings")
+            vectors = await self.embeddings.embed_documents([chunk.text for chunk in chunks])
             self._jobs_transition(jobs, IngestionState.INDEXING, "Staging derived retrieval index")
             revision = await self.index.stage(organization_id, version_id, chunks, vectors)
             self._jobs_transition(jobs, IngestionState.VERIFYING, "Verifying staged index")
@@ -257,11 +384,35 @@ class PolicyService:
         )
         return version
 
-    def publish(self, organization_id: str, actor_id: str, version_id: str) -> SOPVersion:
+    async def publish(
+        self, organization_id: str, actor_id: str, version_id: str
+    ) -> SOPVersion:
         version = self._version(organization_id, version_id)
         if version.status is not VersionStatus.READY_TO_PUBLISH or not version.index_revision:
             raise PublicationError("Version must pass index verification before publication")
         policy = self._policy(organization_id, version.policy_id)
+        chunks = [
+            chunk
+            for chunk in self.store.chunks.get(version.id, [])
+            if isinstance(chunk, RetrievalChunk)
+        ]
+        try:
+            await self.index.activate(organization_id, version_id, chunks)
+        except Exception as error:
+            version.status = VersionStatus.FAILED
+            self.store.mark_modified("policy_versions", version.id, version)
+            self._jobs_transition(
+                [
+                    job
+                    for job in self.store.jobs.values()
+                    if job.version_id == version.id and job.organization_id == organization_id
+                ],
+                IngestionState.FAILED,
+                "Index activation failed; published version unchanged",
+            )
+            raise PublicationError(
+                "Index activation failed; current version remains active"
+            ) from error
         previous_id = policy.active_version_id
         previous = self.store.versions.get(previous_id) if previous_id else None
         if previous and previous.organization_id == organization_id:
@@ -272,10 +423,9 @@ class PolicyService:
         policy.active_version_id = version.id
         policy.status = PolicyStatus.ACTIVE
         policy.updated_at = utc_now()
-        for chunk in self.store.chunks.get(version.id, []):
-            if isinstance(chunk, RetrievalChunk):
-                chunk.publication_status = "published"
-                self.store.mark_modified("retrieval_chunks", chunk.id, chunk)
+        for chunk in chunks:
+            chunk.publication_status = "published"
+            self.store.mark_modified("retrieval_chunks", chunk.id, chunk)
         self.store.mark_modified("policy_versions", version.id, version)
         self.store.mark_modified("policies", policy.id, policy)
         self._jobs_transition(

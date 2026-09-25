@@ -922,6 +922,50 @@ a {
   padding: 28px;
   margin-top: 18px;
 }
+.scope-confirmation {
+  margin: 18px 0;
+  padding: 22px;
+  border-inline-start: 3px solid var(--blue);
+}
+.scope-confirmation h3 {
+  margin: 4px 0 6px;
+  color: var(--navy);
+  font-size: 1.05rem;
+}
+.scope-confirmation p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.scope-confirmation dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.scope-confirmation dl > div {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #f8fbfd;
+}
+.scope-confirmation dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+.scope-confirmation dd {
+  margin: 4px 0 0;
+  color: var(--navy);
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.scope-warning {
+  display: block;
+  color: #765311;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
 .upload-panel > label:first-child {
   display: block;
   font-size: 0.78rem;
@@ -1233,6 +1277,36 @@ a {
 .workflow-card p {
   font-size: 0.76rem;
 }
+.access-correction {
+  padding: 22px;
+  margin-top: 18px;
+}
+.access-correction .section-heading {
+  margin-bottom: 18px;
+}
+.access-correction .section-heading p {
+  max-width: 760px;
+}
+.access-correction-version {
+  display: block;
+  max-width: 420px;
+  margin-bottom: 18px;
+  color: var(--navy);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.access-correction-version input {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  padding: 11px;
+  border: 1px solid #cad6e4;
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.access-correction .scope-editor {
+  background: #fbfcfe;
+}
 .version-list {
   margin-top: 18px;
   padding: 20px;
@@ -1255,6 +1329,9 @@ a {
 }
 @media (max-width: 800px) {
   .workflow-grid {
+    grid-template-columns: 1fr;
+  }
+  .scope-confirmation dl {
     grid-template-columns: 1fr;
   }
 }
@@ -2070,6 +2147,7 @@ a {
 .home-page .trust-note {
   margin-top: 22px;
 }
+<<<<<<< HEAD
 .search-header {
   display: flex;
   align-items: flex-end;
@@ -2091,6 +2169,90 @@ a {
 .search-header .search-box.compact input {
   padding: 6px 0;
   font-size: 0.9rem;
+=======
+.home-policies,
+.available-policies-page .available-policy-list {
+  margin-top: 34px;
+}
+.home-policies-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+.home-policies-heading h2 {
+  margin: 3px 0 0;
+  color: var(--navy);
+  font-size: 1.45rem;
+}
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--blue-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.text-link svg {
+  width: 16px;
+}
+.available-policy-list {
+  display: grid;
+  gap: 10px;
+}
+.available-policy-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--navy);
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+.available-policy-card:hover {
+  border-color: #9fc7df;
+  background: #fbfdff;
+}
+.available-policy-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #edf6fb;
+  color: var(--blue-dark);
+}
+.available-policy-icon svg {
+  width: 20px;
+}
+.available-policy-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.available-policy-copy > span,
+.available-policy-copy small {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+.available-policy-skeleton {
+  height: 76px;
+  border-radius: 11px;
+}
+.available-policies-page {
+  max-width: 920px;
+}
+.search-page .search-box {
+  margin-top: 22px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-soft);
 }
 .assistant-page {
   min-height: 100vh;
@@ -2208,6 +2370,24 @@ a {
 }
 .admin-policy-actions {
   margin: 0 0 14px;
+}
+.admin-action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.admin-action-link--danger {
+  color: #98483f;
+}
+.admin-action-link:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 .admin-viewer-surface {
   margin-top: 14px;

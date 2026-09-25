@@ -59,6 +59,21 @@ const english = {
   homeTrustTitle: 'Answers stay grounded.',
   homeTrustDetail:
     'The assistant uses published SOP evidence you are allowed to access.',
+  availableToYou: 'Available to you',
+  mySops: 'My SOPs',
+  viewAllSops: 'View all SOPs',
+  allAvailableSops: 'Available SOPs',
+  availableSopsLead:
+    'Published policies available for your department, location and organizational role.',
+  availableSopsLoading: 'Loading available SOPs',
+  availableSopsEmpty: 'No SOPs are available to you yet',
+  availableSopsEmptyDetail:
+    'Published policies matching your access scope will appear here.',
+  availableSopsError: 'Available SOPs could not be loaded',
+  availableSopsErrorDetail: 'Please retry shortly. Search remains available.',
+  availableVersion: 'Version',
+  availableEffective: 'Effective',
+  availableRecent: 'Recently updated',
   searchEyebrow: 'Authorized policies',
   searchTitle: 'Search SOPs',
   searchLead:
@@ -180,6 +195,21 @@ const urdu: Record<MessageKey, string> = {
   homeTrustTitle: 'جوابات ماخذ پر مبنی ہیں۔',
   homeTrustDetail:
     'معاون صرف وہ شائع شدہ ایس او پی معلومات استعمال کرتا ہے جن تک آپ کی رسائی ہے۔',
+  availableToYou: 'آپ کے لیے دستیاب',
+  mySops: 'میرے ایس او پیز',
+  viewAllSops: 'تمام ایس او پیز دیکھیں',
+  allAvailableSops: 'دستیاب ایس او پیز',
+  availableSopsLead:
+    'آپ کے شعبے، مقام اور تنظیمی کردار کے مطابق شائع شدہ پالیسیاں۔',
+  availableSopsLoading: 'دستیاب ایس او پیز لوڈ ہو رہے ہیں',
+  availableSopsEmpty: 'ابھی آپ کے لیے کوئی ایس او پی دستیاب نہیں',
+  availableSopsEmptyDetail:
+    'آپ کے رسائی دائرے سے مطابقت رکھنے والی شائع شدہ پالیسیاں یہاں نظر آئیں گی۔',
+  availableSopsError: 'دستیاب ایس او پیز لوڈ نہیں ہو سکے',
+  availableSopsErrorDetail: 'کچھ دیر بعد دوبارہ کوشش کریں۔ تلاش دستیاب ہے۔',
+  availableVersion: 'ورژن',
+  availableEffective: 'نافذ از',
+  availableRecent: 'حال ہی میں اپ ڈیٹ',
   searchEyebrow: 'دستیاب پالیسیوں',
   searchTitle: 'ایس او پیز تلاش کریں',
   searchLead:
@@ -298,6 +328,22 @@ const romanUrdu: Record<MessageKey, string> = {
   homeTrustTitle: 'Jawab source par mabni hain.',
   homeTrustDetail:
     'Assistant sirf woh published SOP maloomat istemal karta hai jin tak aap ki rasai hai.',
+  availableToYou: 'Aap ke liye dastiyab',
+  mySops: 'Mere SOPs',
+  viewAllSops: 'Tamam SOPs dekhein',
+  allAvailableSops: 'Dastiyab SOPs',
+  availableSopsLead:
+    'Aap ke department, location aur organizational role ke mutabiq published policies.',
+  availableSopsLoading: 'Dastiyab SOPs load ho rahe hain',
+  availableSopsEmpty: 'Abhi aap ke liye koi SOP dastiyab nahin',
+  availableSopsEmptyDetail:
+    'Aap ke access scope se milne wali published policies yahan nazar aayengi.',
+  availableSopsError: 'Dastiyab SOPs load nahin ho sake',
+  availableSopsErrorDetail:
+    'Thori dair baad dobara koshish karein. Search dastiyab hai.',
+  availableVersion: 'Version',
+  availableEffective: 'Effective',
+  availableRecent: 'Haal hi mein update hua',
   searchEyebrow: 'Dastiyab policies',
   searchTitle: 'SOPs talash karein',
   searchLead:

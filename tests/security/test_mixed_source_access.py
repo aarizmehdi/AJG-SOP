@@ -10,6 +10,7 @@ from packages.contracts.canonical import (
     CanonicalBlock,
     CanonicalSection,
     CanonicalSOP,
+    RetrievalChunk,
     SourceLocator,
 )
 from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
@@ -97,6 +98,42 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
                 approved=True,
             )
         },
+        chunks={
+            "version": [
+                RetrievalChunk(
+                    id="store-chunk",
+                    organization_id="ajt",
+                    policy_id="policy",
+                    version_id="version",
+                    source_document_id="source",
+                    section_id="store-section",
+                    heading_path=("store-section",),
+                    text="Policy content",
+                    access=scope("store"),
+                    source=SourceLocator(
+                        source_document_id="source", page_start=1, page_end=1
+                    ),
+                    chunk_index=0,
+                    publication_status="published",
+                ),
+                RetrievalChunk(
+                    id="hr-chunk",
+                    organization_id="ajt",
+                    policy_id="policy",
+                    version_id="version",
+                    source_document_id="source",
+                    section_id="hr-section",
+                    heading_path=("hr-section",),
+                    text="Policy content",
+                    access=scope("hr"),
+                    source=SourceLocator(
+                        source_document_id="source", page_start=1, page_end=1
+                    ),
+                    chunk_index=1,
+                    publication_status="published",
+                ),
+            ]
+        },
     )
     profile = EmployeeProfile(
         id="employee",
@@ -110,9 +147,32 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
     reader = PolicyReaderService(store, AuthorizationFilter(store), artifact_store)
 
     document = reader.read_policy(profile, "policy")
+    available = reader.list_available(profile)
     original = await reader.read_original(profile, "policy", "source")
 
     assert document is not None
     assert [item.section_id for item in document.sections] == ["store-section"]
+    assert [item.policy_id for item in available] == ["policy"]
     assert not document.original_download_allowed
     assert original is None
+
+    system_admin = profile.model_copy(
+        update={
+            "id": "system-admin",
+            "application_roles": frozenset(
+                {ApplicationRole.EMPLOYEE, ApplicationRole.SYSTEM_ADMIN}
+            ),
+            "departments": frozenset({"technology"}),
+        }
+    )
+    system_document = reader.read_policy(system_admin, "policy")
+    system_original = await reader.read_original(system_admin, "policy", "source")
+
+    assert system_document is not None
+    assert {item.section_id for item in system_document.sections} == {
+        "store-section",
+        "hr-section",
+    }
+    assert system_document.original_download_allowed
+    assert system_original is not None
+    assert system_original[1] == b"private"

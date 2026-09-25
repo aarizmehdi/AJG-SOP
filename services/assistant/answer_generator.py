@@ -70,7 +70,7 @@ class UnavailableLLMProvider(LLMProvider):
 class DeepSeekLLMProvider(LLMProvider):
     provider_id = "deepseek"
 
-    def __init__(self, api_key: str, base_url: str, model: str = "deepseek-v4-flash") -> None:
+    def __init__(self, api_key: str, base_url: str, model: str = "deepseek-flash") -> None:
         self.model_id = model
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -112,6 +112,7 @@ class CanonicalSOP(OrganizationOwned):
     source_document_ids: tuple[str, ...]
     title: str
     policy_number: str | None = None
+    effective_date: date | None = None
     sections: list[CanonicalSection]
     review_revisions: list[ReviewRevision] = Field(default_factory=list)
     approved: bool = False

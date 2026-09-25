@@ -1,4 +1,7 @@
 from collections.abc import Sequence
+from types import SimpleNamespace
+
+import pytest
 
 from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
@@ -6,12 +9,13 @@ from packages.contracts.access import AccessDimension, AccessMode, AccessScope
 from packages.contracts.canonical import RetrievalChunk, SourceLocator
 from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
+from services.ingestion.embeddings.base import FixtureEmbeddingProvider
 from services.retrieval.authorization_filter import AuthorizationFilter
 from services.retrieval.fusion import ReciprocalRankFusion
 from services.retrieval.lexical_search import LexicalCandidateRetriever
 from services.retrieval.reranker import FixtureReranker
 from services.retrieval.retriever import RetrievalService
-from services.retrieval.semantic_search import SemanticCandidateRetriever
+from services.retrieval.semantic_search import PineconeSemanticRetriever, SemanticCandidateRetriever
 
 
 def selected(department: str) -> AccessScope:
@@ -128,3 +132,115 @@ async def test_unauthorized_chunks_never_enter_candidate_retrievers() -> None:
     assert lexical.seen == ["allowed"]
     assert semantic.seen == ["allowed"]
     assert [item.chunk_id for item in results] == ["allowed"]
+
+
+def test_system_admin_reads_tenant_wide_but_sop_admin_keeps_employee_scope() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected("store"),
+            )
+        },
+        chunks={"version": [chunk("store", "store"), chunk("hr", "hr")]},
+    )
+    authorization = AuthorizationFilter(store)
+    sop_admin = EmployeeProfile(
+        id="sop-admin",
+        organization_id="ajt",
+        identity_subject="fixture|sop-admin",
+        display_name="SOP Administrator",
+        email="sop-admin@example.test",
+        application_roles=frozenset(
+            {ApplicationRole.EMPLOYEE, ApplicationRole.SOP_ADMIN}
+        ),
+        departments=frozenset({"store"}),
+    )
+    system_admin = sop_admin.model_copy(
+        update={
+            "id": "system-admin",
+            "identity_subject": "fixture|system-admin",
+            "application_roles": frozenset(
+                {
+                    ApplicationRole.EMPLOYEE,
+                    ApplicationRole.SOP_ADMIN,
+                    ApplicationRole.SYSTEM_ADMIN,
+                }
+            ),
+        }
+    )
+    other_tenant_admin = system_admin.model_copy(
+        update={"id": "other-admin", "organization_id": "other"}
+    )
+
+    assert [item.id for item in authorization.eligible_chunks(sop_admin)] == ["store"]
+    assert {item.id for item in authorization.eligible_chunks(system_admin)} == {
+        "store",
+        "hr",
+    }
+    assert authorization.eligible_chunks(other_tenant_admin) == []
+
+
+class RecordingPineconeIndex:
+    def __init__(self) -> None:
+        self.query_kwargs: dict[str, object] = {}
+
+    def query(self, **kwargs: object) -> SimpleNamespace:
+        self.query_kwargs = kwargs
+        return SimpleNamespace(
+            matches=[
+                SimpleNamespace(id="restricted", score=0.99),
+                SimpleNamespace(id="allowed", score=0.9),
+            ]
+        )
+
+
+async def test_pinecone_semantic_query_rejects_noneligible_matches() -> None:
+    index = RecordingPineconeIndex()
+    retriever = PineconeSemanticRetriever(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "aziz-jan-trust",
+        FixtureEmbeddingProvider(),
+        index=index,
+    )
+
+    results = await retriever.search("damaged stock", [chunk("allowed", "store")], 5)
+
+    assert [result.chunk_id for result in results] == ["allowed"]
+    assert index.query_kwargs["namespace"] == "aziz-jan-trust--ajt"
+    assert index.query_kwargs["filter"] == {
+        "$and": [
+            {"organization_id": {"$eq": "ajt"}},
+            {"publication_status": {"$eq": "published"}},
+            {"chunk_id": {"$in": ["allowed"]}},
+        ]
+    }
+
+
+async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
+    other = chunk("other", "store").model_copy(update={"organization_id": "other-org"})
+    retriever = PineconeSemanticRetriever(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "aziz-jan-trust",
+        FixtureEmbeddingProvider(),
+        index=RecordingPineconeIndex(),
+    )
+
+    with pytest.raises(PermissionError, match="cannot cross organizations"):
+        await retriever.search("damaged stock", [chunk("allowed", "store"), other], 5)

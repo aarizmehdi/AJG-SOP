@@ -123,6 +123,8 @@ export const canonicalSopSchema = z
     policy_id: z.string(),
     version_id: z.string(),
     title: z.string(),
+    policy_number: z.string().nullable().optional().default(null),
+    effective_date: z.string().nullable().optional().default(null),
     sections: z.array(canonicalSectionSchema),
     approved: z.boolean(),
   })
@@ -131,6 +133,8 @@ export const canonicalSopSchema = z
 export const rawDocumentSchema = z
   .object({
     title: z.string(),
+    policy_number: z.string().nullable().optional().default(null),
+    effective_date: z.string().nullable().optional().default(null),
     blocks: z.array(
       z
         .object({

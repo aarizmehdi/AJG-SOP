@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import date
 from enum import StrEnum
 from typing import Any
 
@@ -56,6 +57,8 @@ class RawDocumentResult(BaseModel):
     provider_version: str
     source_document_id: str
     title: str
+    policy_number: str | None = None
+    effective_date: date | None = None
     blocks: list[RawBlock]
     warnings: list[str] = Field(default_factory=list)
     provider_artifact_uri: str | None = None

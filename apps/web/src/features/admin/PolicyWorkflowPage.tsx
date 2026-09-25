@@ -1,15 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { CheckCircle2, GitCompareArrows, RotateCcw } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import {
   policyListSchema,
+  correctedAccessVersionSchema,
   sectionChangesSchema,
+  type AccessScope,
   type Policy,
 } from '../../types/policy';
 import { profileSchema } from '../../types/profile';
+import { AccessScopeEditor } from './AccessScopeEditor';
 
 export default function PolicyWorkflowPage() {
   const { policyId = '' } = useParams();
@@ -41,11 +45,49 @@ export default function PolicyWorkflowPage() {
 }
 
 function PolicyWorkflow({ policy }: { policy: Policy }) {
+  const navigate = useNavigate();
   const versions = [...(policy.versions ?? [])].sort(
     (left, right) => Date.parse(right.created_at) - Date.parse(left.created_at),
   );
   const newest = versions[0];
   const previous = versions[1];
+  const published = versions.find(
+    (version) => version.id === policy.active_version_id,
+  );
+  const [versionLabel, setVersionLabel] = useState(
+    published ? `${published.version_label} access correction` : '',
+  );
+  const [access, setAccess] = useState<AccessScope>(
+    published?.access ?? {
+      departments: { mode: 'selected', values: [] },
+      locations: { mode: 'selected', values: [] },
+      roles: { mode: 'selected', values: [] },
+    },
+  );
+  const accessComplete = Object.values(access).every(
+    (dimension) =>
+      dimension.mode === 'all' || dimension.values.some((item) => item.trim()),
+  );
+  const correction = useMutation({
+    mutationFn: () =>
+      apiRequest(
+        `/admin/policies/${encodeURIComponent(policy.id)}/versions`,
+        correctedAccessVersionSchema,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            version_label: versionLabel,
+            access,
+          }),
+        },
+      ),
+    onSuccess: (result) => {
+      const source = result.sources[0];
+      void navigate(
+        source ? `/admin/review/${source.id}` : `/admin/policies/${policy.id}`,
+      );
+    },
+  });
   const comparison = useQuery({
     queryKey: ['version-diff', newest?.id, previous?.id],
     queryFn: () => {
@@ -97,6 +139,51 @@ function PolicyWorkflow({ policy }: { policy: Policy }) {
           </p>
         </section>
       </div>
+      {published && (
+        <section className="surface access-correction">
+          <div className="section-heading">
+            <div>
+              <h3>Create New Version / Correct Access</h3>
+              <p>
+                Published access is immutable. Carry the approved content into a
+                new reviewable version, change its scope, then verify and
+                publish it through the normal workflow.
+              </p>
+            </div>
+          </div>
+          <label className="access-correction-version">
+            New version label
+            <input
+              value={versionLabel}
+              onChange={(event) => {
+                setVersionLabel(event.target.value);
+              }}
+            />
+          </label>
+          <AccessScopeEditor value={access} onChange={setAccess} />
+          {correction.isError && (
+            <p className="form-error" role="alert">
+              {correction.error instanceof Error
+                ? correction.error.message
+                : 'The corrected version could not be created.'}
+            </p>
+          )}
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={
+              correction.isPending || !versionLabel.trim() || !accessComplete
+            }
+            onClick={() => {
+              correction.mutate();
+            }}
+          >
+            {correction.isPending
+              ? 'Creating review version…'
+              : 'Create review version'}
+          </button>
+        </section>
+      )}
       <div className="surface version-list">
         <h3>Version history</h3>
         {policy.versions?.map((version) => (

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sourceDocumentSchema } from './source';
 
 export const accessDimensionSchema = z.object({
   mode: z.enum(['all', 'selected']),
@@ -59,6 +60,10 @@ export const policyDraftSchema = z.object({
   policy: policySchema,
   version: versionSchema,
 });
+export const correctedAccessVersionSchema = z.object({
+  version: versionSchema,
+  sources: z.array(sourceDocumentSchema),
+});
 export const sectionChangeSchema = z.object({
   organization_id: z.string(),
   kind: z.enum(['added', 'removed', 'changed']),
@@ -90,6 +95,8 @@ export const viewerSchema = z.object({
       .object({
         id: z.string(),
         title: z.string(),
+        policy_number: z.string().nullable().optional().default(null),
+        effective_date: z.string().nullable().optional().default(null),
         approved: z.boolean(),
         sections: z.array(
           z

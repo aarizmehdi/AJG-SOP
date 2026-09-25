@@ -49,3 +49,16 @@ export const policyReaderSchema = z.object({
   sections: z.array(readerSectionSchema),
   original_download_allowed: z.boolean(),
 });
+
+export const availablePolicySchema = z.object({
+  policy_id: z.string(),
+  title: z.string(),
+  policy_number: z.string().nullable(),
+  category: z.string(),
+  version_label: z.string(),
+  effective_date: z.string().nullable(),
+  updated_at: z.string(),
+  recently_updated: z.boolean(),
+});
+export const availablePolicyListSchema = z.array(availablePolicySchema);
+export type AvailablePolicy = z.infer<typeof availablePolicySchema>;

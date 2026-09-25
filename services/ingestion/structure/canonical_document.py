@@ -79,6 +79,8 @@ class Canonicalizer:
             version_id=source.version_id,
             source_document_ids=(source.id,),
             title=raw.title,
+            policy_number=raw.policy_number,
+            effective_date=raw.effective_date,
             sections=sections,
         )
 
@@ -209,7 +211,15 @@ class Canonicalizer:
 
     @staticmethod
     def _policy_number(heading: str) -> str | None:
-        match = re.match(r"^([A-Z]{1,8}[- ]?\d+(?:\.\d+)*|\d+(?:\.\d+)+)\b", heading)
+        labelled = re.match(
+            r"^((?:SOP|Policy)\s*(?:No\.?|Number|#|-)?\s*"
+            r"(?=[A-Za-z0-9./-]*\d)[A-Za-z0-9][A-Za-z0-9./-]*)\b",
+            heading,
+            flags=re.IGNORECASE,
+        )
+        if labelled:
+            return labelled.group(1).strip()
+        match = re.match(r"^(\d+(?:\.\d+)*)(?:[.)]|\s|$)", heading)
         return match.group(1) if match else None
 
     @staticmethod
