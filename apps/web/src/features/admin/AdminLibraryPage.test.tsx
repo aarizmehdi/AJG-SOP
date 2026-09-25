@@ -141,15 +141,15 @@ describe('policy library role actions', () => {
       screen.queryByText('Archived returns policy'),
     ).not.toBeInTheDocument();
     const statusFilter = screen.getAllByRole('combobox').at(0);
-    expect(statusFilter).toBeDefined();
-    fireEvent.change(statusFilter!, {
+    if (!statusFilter) throw new Error('Status filter is missing');
+    fireEvent.change(statusFilter, {
       target: { value: 'Inactive / Archived' },
     });
 
     const policyTitle = await screen.findByText('Archived returns policy');
     expect(policyTitle).toBeVisible();
-    expect(
-      within(policyTitle.closest('a')!).getByText('Archived'),
-    ).toBeVisible();
+    const policyLink = policyTitle.closest('a');
+    if (!policyLink) throw new Error('Policy card link is missing');
+    expect(within(policyLink).getByText('Archived')).toBeVisible();
   });
 });
