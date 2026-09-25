@@ -7,6 +7,7 @@ import { BrandMark } from '../../components/ui/BrandMark';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import { useLanguage } from '../language/useLanguage';
 import { useFirebaseAuth } from './firebase-auth-context';
+import { LoginGeometry } from './LoginGeometry';
 
 function LiveLoginForm() {
   const { signIn } = useFirebaseAuth();
@@ -108,6 +109,7 @@ export default function LoginPage() {
   return (
     <main className="auth-page">
       <section className="auth-brand">
+        <LoginGeometry />
         <div className="auth-brand-inner">
           <BrandMark />
           <div>

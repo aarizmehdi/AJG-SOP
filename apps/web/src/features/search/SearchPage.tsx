@@ -23,24 +23,24 @@ export default function SearchPage() {
   };
   return (
     <main className="page search-page">
-      <span className="eyebrow">{t('searchEyebrow')}</span>
-      <h1>{t('searchTitle')}</h1>
-      <p className="lead">{t('searchLead')}</p>
-      <form className="search-box surface" onSubmit={submit}>
-        <Search aria-hidden="true" />
-        <input
-          aria-label={t('searchNav')}
-          dir="auto"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-          }}
-          placeholder={t('searchPlaceholder')}
-        />
-        <button disabled={search.isPending || !query.trim()}>
-          {t('searchButton')}
-        </button>
-      </form>
+      <header className="search-header">
+        <div className="search-title-group">
+          <span className="eyebrow">{t('searchEyebrow')}</span>
+          <h1>{t('searchTitle')}</h1>
+        </div>
+        <form className="search-box compact surface" onSubmit={submit}>
+          <Search aria-hidden="true" size={18} />
+          <input
+            aria-label={t('searchNav')}
+            dir="auto"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+            }}
+            placeholder="Search policies & SOPs..."
+          />
+        </form>
+      </header>
       {search.isPending && (
         <div
           className="result-skeletons"

@@ -1,9 +1,10 @@
 import { BookOpen, Library, MessageCircle, Search } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import { profileSchema } from '../../types/profile';
 import { ProfileMenu } from './ProfileMenu';
+import { AnimatedOutlet } from './AnimatedOutlet';
 import { BrandMark } from '../ui/BrandMark';
 import { useLanguage } from '../../features/language/useLanguage';
 
@@ -65,7 +66,7 @@ export function AppShell() {
           </NavLink>
           <ProfileMenu profile={profile.data} />
         </div>
-        <Outlet />
+        <AnimatedOutlet />
       </div>
     </div>
   );
