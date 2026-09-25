@@ -23,19 +23,38 @@ export function LoginGeometry() {
     // ── State objects animated by GSAP ──
     const orbs = [
       { x: 0.2, y: 0.3, r: 0.35, opacity: 0.12, hue: 200, sat: 80, light: 50 },
-      { x: 0.7, y: 0.2, r: 0.28, opacity: 0.10, hue: 195, sat: 70, light: 45 },
+      { x: 0.7, y: 0.2, r: 0.28, opacity: 0.1, hue: 195, sat: 70, light: 45 },
       { x: 0.5, y: 0.75, r: 0.32, opacity: 0.08, hue: 210, sat: 60, light: 40 },
-      { x: 0.85, y: 0.65, r: 0.22, opacity: 0.14, hue: 188, sat: 85, light: 48 },
+      {
+        x: 0.85,
+        y: 0.65,
+        r: 0.22,
+        opacity: 0.14,
+        hue: 188,
+        sat: 85,
+        light: 48,
+      },
     ];
 
     // Network nodes
     const nodeCount = 40;
-    const nodes: { x: number; y: number; baseX: number; baseY: number; r: number; pulse: number; glowOpacity: number }[] = [];
+    const nodes: {
+      x: number;
+      y: number;
+      baseX: number;
+      baseY: number;
+      r: number;
+      pulse: number;
+      glowOpacity: number;
+    }[] = [];
     for (let i = 0; i < nodeCount; i++) {
       const bx = Math.random();
       const by = Math.random();
       nodes.push({
-        x: bx, y: by, baseX: bx, baseY: by,
+        x: bx,
+        y: by,
+        baseX: bx,
+        baseY: by,
         r: 1 + Math.random() * 2,
         pulse: 0,
         glowOpacity: 0.15 + Math.random() * 0.2,
@@ -44,7 +63,13 @@ export function LoginGeometry() {
 
     // Flowing particles along curves
     const particleCount = 18;
-    const particles: { progress: number; speed: number; pathIndex: number; size: number; opacity: number }[] = [];
+    const particles: {
+      progress: number;
+      speed: number;
+      pathIndex: number;
+      size: number;
+      opacity: number;
+    }[] = [];
     for (let i = 0; i < particleCount; i++) {
       particles.push({
         progress: Math.random(),
@@ -57,10 +82,46 @@ export function LoginGeometry() {
 
     // Curved paths for particles (control points as fractions)
     const paths = [
-      { x0: 0.05, y0: 0.15, cx1: 0.35, cy1: 0.05, cx2: 0.65, cy2: 0.45, x1: 0.95, y1: 0.25 },
-      { x0: 0.1, y0: 0.85, cx1: 0.3, cy1: 0.55, cx2: 0.7, cy2: 0.75, x1: 0.9, y1: 0.45 },
-      { x0: 0.0, y0: 0.5, cx1: 0.25, cy1: 0.2, cx2: 0.75, cy2: 0.8, x1: 1.0, y1: 0.5 },
-      { x0: 0.15, y0: 0.0, cx1: 0.4, cy1: 0.4, cx2: 0.6, cy2: 0.6, x1: 0.85, y1: 1.0 },
+      {
+        x0: 0.05,
+        y0: 0.15,
+        cx1: 0.35,
+        cy1: 0.05,
+        cx2: 0.65,
+        cy2: 0.45,
+        x1: 0.95,
+        y1: 0.25,
+      },
+      {
+        x0: 0.1,
+        y0: 0.85,
+        cx1: 0.3,
+        cy1: 0.55,
+        cx2: 0.7,
+        cy2: 0.75,
+        x1: 0.9,
+        y1: 0.45,
+      },
+      {
+        x0: 0.0,
+        y0: 0.5,
+        cx1: 0.25,
+        cy1: 0.2,
+        cx2: 0.75,
+        cy2: 0.8,
+        x1: 1.0,
+        y1: 0.5,
+      },
+      {
+        x0: 0.15,
+        y0: 0.0,
+        cx1: 0.4,
+        cy1: 0.4,
+        cx2: 0.6,
+        cy2: 0.6,
+        x1: 0.85,
+        y1: 1.0,
+      },
     ];
 
     // Master opacity for entrance
@@ -82,9 +143,20 @@ export function LoginGeometry() {
     window.addEventListener('resize', resize);
 
     // Cubic bezier point helper
-    const bezierPoint = (t: number, p0: number, p1: number, p2: number, p3: number) => {
+    const bezierPoint = (
+      t: number,
+      p0: number,
+      p1: number,
+      p2: number,
+      p3: number,
+    ) => {
       const u = 1 - t;
-      return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+      return (
+        u * u * u * p0 +
+        3 * u * u * t * p1 +
+        3 * u * t * t * p2 +
+        t * t * t * p3
+      );
     };
 
     // ── GSAP Animations ──
@@ -150,9 +222,18 @@ export function LoginGeometry() {
         const cy = orb.y * height;
         const radius = orb.r * Math.max(width, height);
         const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-        gradient.addColorStop(0, `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, ${orb.opacity})`);
-        gradient.addColorStop(0.5, `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, ${orb.opacity * 0.4})`);
-        gradient.addColorStop(1, `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, 0)`);
+        gradient.addColorStop(
+          0,
+          `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, ${orb.opacity})`,
+        );
+        gradient.addColorStop(
+          0.5,
+          `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, ${orb.opacity * 0.4})`,
+        );
+        gradient.addColorStop(
+          1,
+          `hsla(${orb.hue}, ${orb.sat}%, ${orb.light}%, 0)`,
+        );
         ctx.fillStyle = gradient;
         ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
       }
@@ -171,7 +252,8 @@ export function LoginGeometry() {
           const dist = Math.sqrt(dx * dx + dy * dy);
           const maxDist = 140;
           if (dist < maxDist) {
-            const alpha = 0.06 * (1 - dist / maxDist) + (ni.pulse + nj.pulse) * 0.12;
+            const alpha =
+              0.06 * (1 - dist / maxDist) + (ni.pulse + nj.pulse) * 0.12;
             ctx.strokeStyle = `rgba(75, 169, 212, ${alpha})`;
             ctx.beginPath();
             ctx.moveTo(ni.x * width, ni.y * height);
@@ -213,12 +295,34 @@ export function LoginGeometry() {
         const p = paths[particle.pathIndex];
         if (!p) continue;
         const t = particle.progress;
-        const px = bezierPoint(t, p.x0 * width, p.cx1 * width, p.cx2 * width, p.x1 * width);
-        const py = bezierPoint(t, p.y0 * height, p.cy1 * height, p.cy2 * height, p.y1 * height);
+        const px = bezierPoint(
+          t,
+          p.x0 * width,
+          p.cx1 * width,
+          p.cx2 * width,
+          p.x1 * width,
+        );
+        const py = bezierPoint(
+          t,
+          p.y0 * height,
+          p.cy1 * height,
+          p.cy2 * height,
+          p.y1 * height,
+        );
 
         // Trail
-        const trailGrad = ctx.createRadialGradient(px, py, 0, px, py, particle.size * 5);
-        trailGrad.addColorStop(0, `rgba(75, 169, 212, ${particle.opacity * 0.4})`);
+        const trailGrad = ctx.createRadialGradient(
+          px,
+          py,
+          0,
+          px,
+          py,
+          particle.size * 5,
+        );
+        trailGrad.addColorStop(
+          0,
+          `rgba(75, 169, 212, ${particle.opacity * 0.4})`,
+        );
         trailGrad.addColorStop(1, 'rgba(75, 169, 212, 0)');
         ctx.fillStyle = trailGrad;
         ctx.beginPath();
@@ -239,9 +343,12 @@ export function LoginGeometry() {
         ctx.beginPath();
         ctx.moveTo(p.x0 * width, p.y0 * height);
         ctx.bezierCurveTo(
-          p.cx1 * width, p.cy1 * height,
-          p.cx2 * width, p.cy2 * height,
-          p.x1 * width, p.y1 * height,
+          p.cx1 * width,
+          p.cy1 * height,
+          p.cx2 * width,
+          p.cy2 * height,
+          p.x1 * width,
+          p.y1 * height,
         );
         ctx.stroke();
       }
@@ -262,10 +369,6 @@ export function LoginGeometry() {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="login-geometry"
-      aria-hidden="true"
-    />
+    <canvas ref={canvasRef} className="login-geometry" aria-hidden="true" />
   );
 }
