@@ -6,6 +6,25 @@ from packages.contracts.common import utc_now
 from packages.contracts.policy import AuditEvent
 
 
+def test_audit_event_accepts_structured_legacy_metadata() -> None:
+    event = AuditEvent.model_validate(
+        {
+            "id": "evt-legacy",
+            "organization_id": "ajt",
+            "actor_id": "system",
+            "action": "employee_profile.provisioned",
+            "entity_type": "employee_profile",
+            "entity_id": "employee-1",
+            "metadata": {
+                "application_roles": ["employee", "sop_admin"],
+                "scope": {"departments": ["operations"]},
+            },
+        }
+    )
+
+    assert event.metadata["application_roles"] == ["employee", "sop_admin"]
+
+
 def test_mutation_tracking_isolation():
     """Verify that FoundationStore tracks mutations explicitly."""
     store = FoundationStore()
