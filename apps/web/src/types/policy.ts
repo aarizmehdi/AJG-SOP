@@ -90,6 +90,8 @@ export const viewerSchema = z.object({
       .object({
         id: z.string(),
         title: z.string(),
+        policy_number: z.string().nullable().optional().default(null),
+        effective_date: z.string().nullable().optional().default(null),
         approved: z.boolean(),
         sections: z.array(
           z

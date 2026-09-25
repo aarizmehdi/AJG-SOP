@@ -1,4 +1,7 @@
 from collections.abc import Sequence
+from types import SimpleNamespace
+
+import pytest
 
 from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
@@ -6,12 +9,13 @@ from packages.contracts.access import AccessDimension, AccessMode, AccessScope
 from packages.contracts.canonical import RetrievalChunk, SourceLocator
 from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
+from services.ingestion.embeddings.base import FixtureEmbeddingProvider
 from services.retrieval.authorization_filter import AuthorizationFilter
 from services.retrieval.fusion import ReciprocalRankFusion
 from services.retrieval.lexical_search import LexicalCandidateRetriever
 from services.retrieval.reranker import FixtureReranker
 from services.retrieval.retriever import RetrievalService
-from services.retrieval.semantic_search import SemanticCandidateRetriever
+from services.retrieval.semantic_search import PineconeSemanticRetriever, SemanticCandidateRetriever
 
 
 def selected(department: str) -> AccessScope:
@@ -128,3 +132,54 @@ async def test_unauthorized_chunks_never_enter_candidate_retrievers() -> None:
     assert lexical.seen == ["allowed"]
     assert semantic.seen == ["allowed"]
     assert [item.chunk_id for item in results] == ["allowed"]
+
+
+class RecordingPineconeIndex:
+    def __init__(self) -> None:
+        self.query_kwargs: dict[str, object] = {}
+
+    def query(self, **kwargs: object) -> SimpleNamespace:
+        self.query_kwargs = kwargs
+        return SimpleNamespace(
+            matches=[
+                SimpleNamespace(id="restricted", score=0.99),
+                SimpleNamespace(id="allowed", score=0.9),
+            ]
+        )
+
+
+async def test_pinecone_semantic_query_rejects_noneligible_matches() -> None:
+    index = RecordingPineconeIndex()
+    retriever = PineconeSemanticRetriever(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "aziz-jan-trust",
+        FixtureEmbeddingProvider(),
+        index=index,
+    )
+
+    results = await retriever.search("damaged stock", [chunk("allowed", "store")], 5)
+
+    assert [result.chunk_id for result in results] == ["allowed"]
+    assert index.query_kwargs["namespace"] == "aziz-jan-trust--ajt"
+    assert index.query_kwargs["filter"] == {
+        "$and": [
+            {"organization_id": {"$eq": "ajt"}},
+            {"publication_status": {"$eq": "published"}},
+            {"chunk_id": {"$in": ["allowed"]}},
+        ]
+    }
+
+
+async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
+    other = chunk("other", "store").model_copy(update={"organization_id": "other-org"})
+    retriever = PineconeSemanticRetriever(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "aziz-jan-trust",
+        FixtureEmbeddingProvider(),
+        index=RecordingPineconeIndex(),
+    )
+
+    with pytest.raises(PermissionError, match="cannot cross organizations"):
+        await retriever.search("damaged stock", [chunk("allowed", "store"), other], 5)

@@ -50,4 +50,4 @@ in the receiving log.
     service.set_access("ajt", "fixture-system", version.id, access)
     service.approve_structure("ajt", "fixture-system", source.id)
     await service.prepare_for_publication("ajt", "fixture-system", version.id)
-    service.publish("ajt", "fixture-system", version.id)
+    await service.publish("ajt", "fixture-system", version.id)

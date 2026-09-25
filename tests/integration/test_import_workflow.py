@@ -57,7 +57,19 @@ def test_import_workflow_success(test_client):
             "original_file": ("original_sop.pdf", b"%PDF-1.4 Test PDF content", "application/pdf"),
             "structured_file": (
                 "content.md",
-                b"# Standard Operating Procedure\n\n## Section 1: Overview\nImported content.",
+                b"""---
+title: Imported Standard Operating Procedure
+policy_number: SOP-IMPORT-01
+effective_date: 2026-09-25
+---
+# Imported Standard Operating Procedure
+Imported introduction.
+## 1. Overview
+1. Follow the verified procedure.
+| Role | Responsibility |
+| --- | --- |
+| Manager | Approve |
+""",
                 "text/markdown",
             ),
         },
@@ -67,3 +79,31 @@ def test_import_workflow_success(test_client):
     assert source_doc["policy_id"] == policy_id
     assert source_doc["version_id"] == version_id
     assert "sources/" in source_doc["original_artifact_uri"]
+
+    review_res = test_client.get(
+        f"/api/v1/admin/sources/{source_doc['id']}/review", headers=admin_headers
+    )
+    assert review_res.status_code == 200
+    canonical = review_res.json()["canonical"]
+    assert canonical["title"] == "Imported Standard Operating Procedure"
+    assert canonical["policy_number"] == "SOP-IMPORT-01"
+    assert canonical["effective_date"] == "2026-09-25"
+    table = next(
+        block["table"]
+        for section in canonical["sections"]
+        for block in section["blocks"]
+        if block["kind"] == "table"
+    )
+    assert [cell["text"] for cell in table["cells"]] == [
+        "Role",
+        "Responsibility",
+        "Manager",
+        "Approve",
+    ]
+
+    viewer_res = test_client.get(
+        f"/api/v1/admin/policies/{policy_id}/viewer", headers=admin_headers
+    )
+    assert viewer_res.status_code == 200
+    assert viewer_res.json()["policy"]["policy_number"] == "SOP-IMPORT-01"
+    assert viewer_res.json()["version"]["effective_date"] == "2026-09-25"

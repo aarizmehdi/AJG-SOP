@@ -4,9 +4,11 @@
 
 Set `DOCUMENT_PARSER_PROVIDER` to `fixture`, `azure`, `docling`, or `auto`. Azure also requires its endpoint and key. `auto` prefers configured OCR, then optional Docling, then deterministic fixture parsers by format.
 
-Set `LLM_PROVIDER=deepseek`, `DEEPSEEK_BASE_URL=https://api.deepseek.com`, and `DEEPSEEK_MODEL=deepseek-v4-flash`. Put the key only in ignored `.env.local` or a deployment secret store. The assistant adapter makes a non-streaming structured request; verified content is released only after local validation.
+Set `LLM_PROVIDER=deepseek`, `DEEPSEEK_BASE_URL=https://api.deepseek.com`, and `DEEPSEEK_MODEL=deepseek-flash`. Put the key only in ignored `.env.local` or a deployment secret store. The assistant adapter makes a non-streaming structured request; verified content is released only after local validation. The model identifier was verified through the provider's authenticated `/models` endpoint on 2026-09-25.
 
-Pinecone, S3, Azure, Firebase Authentication, and MongoDB adapters are implemented but remain unverified where this environment has no credentials. Never interpret adapter construction as accuracy or readiness evidence.
+Production embeddings use `EMBEDDING_PROVIDER=pinecone_e5` and `EMBEDDING_MODEL=multilingual-e5-large`. The existing `aziz-jan-sop` managed index is configured for Pinecone-hosted integrated inference with passage writes, query reads, cosine similarity, and 1024-dimensional vectors. Startup validates that the configured model and returned vector dimension match the existing index. Fixture mode remains deterministic and never calls Pinecone.
+
+Pinecone is derived retrieval storage. MongoDB remains canonical. Never create or reconfigure an index from application startup, and never silently substitute fixture embeddings in live mode.
 
 ## Speech input
 

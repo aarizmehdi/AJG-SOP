@@ -220,9 +220,9 @@ class PolicyService:
         chunks: list[RetrievalChunk] = []
         for document in canonicals:
             chunks.extend(self.chunker.chunk(document, "staged"))
-        self._jobs_transition(jobs, IngestionState.EMBEDDING, "Creating provisional embeddings")
-        vectors = await self.embeddings.embed([chunk.text for chunk in chunks])
         try:
+            self._jobs_transition(jobs, IngestionState.EMBEDDING, "Creating E5 passage embeddings")
+            vectors = await self.embeddings.embed_documents([chunk.text for chunk in chunks])
             self._jobs_transition(jobs, IngestionState.INDEXING, "Staging derived retrieval index")
             revision = await self.index.stage(organization_id, version_id, chunks, vectors)
             self._jobs_transition(jobs, IngestionState.VERIFYING, "Verifying staged index")
@@ -257,11 +257,35 @@ class PolicyService:
         )
         return version
 
-    def publish(self, organization_id: str, actor_id: str, version_id: str) -> SOPVersion:
+    async def publish(
+        self, organization_id: str, actor_id: str, version_id: str
+    ) -> SOPVersion:
         version = self._version(organization_id, version_id)
         if version.status is not VersionStatus.READY_TO_PUBLISH or not version.index_revision:
             raise PublicationError("Version must pass index verification before publication")
         policy = self._policy(organization_id, version.policy_id)
+        chunks = [
+            chunk
+            for chunk in self.store.chunks.get(version.id, [])
+            if isinstance(chunk, RetrievalChunk)
+        ]
+        try:
+            await self.index.activate(organization_id, version_id, chunks)
+        except Exception as error:
+            version.status = VersionStatus.FAILED
+            self.store.mark_modified("policy_versions", version.id, version)
+            self._jobs_transition(
+                [
+                    job
+                    for job in self.store.jobs.values()
+                    if job.version_id == version.id and job.organization_id == organization_id
+                ],
+                IngestionState.FAILED,
+                "Index activation failed; published version unchanged",
+            )
+            raise PublicationError(
+                "Index activation failed; current version remains active"
+            ) from error
         previous_id = policy.active_version_id
         previous = self.store.versions.get(previous_id) if previous_id else None
         if previous and previous.organization_id == organization_id:
@@ -272,10 +296,9 @@ class PolicyService:
         policy.active_version_id = version.id
         policy.status = PolicyStatus.ACTIVE
         policy.updated_at = utc_now()
-        for chunk in self.store.chunks.get(version.id, []):
-            if isinstance(chunk, RetrievalChunk):
-                chunk.publication_status = "published"
-                self.store.mark_modified("retrieval_chunks", chunk.id, chunk)
+        for chunk in chunks:
+            chunk.publication_status = "published"
+            self.store.mark_modified("retrieval_chunks", chunk.id, chunk)
         self.store.mark_modified("policy_versions", version.id, version)
         self.store.mark_modified("policies", policy.id, policy)
         self._jobs_transition(

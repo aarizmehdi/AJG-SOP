@@ -12,7 +12,7 @@ from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
 from apps.api.app.services.audit_service import AuditService
 from apps.api.app.services.foundation_store import FoundationStore
 from packages.contracts.access import AccessDimension, AccessMode, AccessScope
-from packages.contracts.canonical import CanonicalSOP
+from packages.contracts.canonical import CanonicalSection, CanonicalSOP, SourceLocator
 from packages.contracts.policy import SOPPolicy, SOPVersion
 from packages.contracts.source import SourceDocument, SourceFormat
 
@@ -225,3 +225,65 @@ async def test_review_audit_uses_authenticated_profile_identity() -> None:
     assert event.actor_id == reviewer.id
     assert event.organization_id == reviewer.organization_id
     assert event.metadata == {"version_id": "version", "source_id": "source"}
+
+
+@pytest.mark.asyncio
+async def test_sop_admin_cannot_expand_section_scope_during_review() -> None:
+    reviewer = profile(ApplicationRole.SOP_ADMIN)
+    version = SOPVersion(
+        id="version",
+        organization_id="ajt",
+        policy_id="policy",
+        version_label="1",
+        access=access(),
+    )
+    source = SourceDocument(
+        id="source",
+        organization_id="ajt",
+        policy_id="policy",
+        version_id="version",
+        file_name="store.md",
+        media_type="text/markdown",
+        source_format=SourceFormat.MARKDOWN,
+        sha256="hash",
+        original_artifact_uri="fixture://source",
+    )
+    expanded_scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"hr"})),
+        locations=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"peshawar-main"})),
+        roles=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"store_keeper"})),
+    )
+    canonical = CanonicalSOP(
+        id="canonical",
+        organization_id="ajt",
+        policy_id="policy",
+        version_id="version",
+        source_document_ids=("source",),
+        title="Store SOP",
+        sections=[
+            CanonicalSection(
+                id="hr",
+                stable_key="hr",
+                heading="HR",
+                heading_level=1,
+                heading_path=("HR",),
+                blocks=[],
+                access=expanded_scope,
+                source=SourceLocator(source_document_id="source"),
+                content_hash="hash",
+            )
+        ],
+    )
+    store = FoundationStore(versions={"version": version}, sources={"source": source})
+    state = SimpleNamespace(
+        foundation_store=store,
+        ingestion_pipeline=PipelineStub(source, canonical),
+        policy_service=PolicyServiceStub(),
+        audit_service=AuditService(store),
+    )
+    request = Request({"type": "http", "app": SimpleNamespace(state=state)})
+
+    with pytest.raises(HTTPException, match="management scope") as denied:
+        await update_review(request, "source", ReviewUpdate(canonical=canonical), reviewer)
+
+    assert denied.value.status_code == 403
