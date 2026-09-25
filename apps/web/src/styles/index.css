@@ -2147,7 +2147,6 @@ a {
 .home-page .trust-note {
   margin-top: 22px;
 }
-<<<<<<< HEAD
 .search-header {
   display: flex;
   align-items: flex-end;
@@ -2169,7 +2168,7 @@ a {
 .search-header .search-box.compact input {
   padding: 6px 0;
   font-size: 0.9rem;
-=======
+}
 .home-policies,
 .available-policies-page .available-policy-list {
   margin-top: 34px;
