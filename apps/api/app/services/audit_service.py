@@ -1,5 +1,7 @@
 from uuid import uuid4
 
+from pydantic import JsonValue
+
 from apps.api.app.services.foundation_store import FoundationStore
 from packages.contracts.policy import AuditEvent
 
@@ -15,7 +17,7 @@ class AuditService:
         action: str,
         entity_type: str,
         entity_id: str,
-        metadata: dict[str, str] | None = None,
+        metadata: dict[str, JsonValue] | None = None,
     ) -> AuditEvent:
         event = AuditEvent(
             id=f"audit-{uuid4().hex[:12]}",

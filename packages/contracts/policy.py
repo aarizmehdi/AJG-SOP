@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from packages.contracts.access import AccessScope
 from packages.contracts.common import OrganizationOwned, utc_now
@@ -113,4 +113,4 @@ class AuditEvent(OrganizationOwned):
     entity_type: str
     entity_id: str
     occurred_at: datetime = Field(default_factory=utc_now)
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
