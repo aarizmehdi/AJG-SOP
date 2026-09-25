@@ -6,6 +6,7 @@ import { AuthGuard } from '../features/auth/AuthGuard';
 import { ProfileLocaleGate } from '../features/language/ProfileLocaleGate';
 import {
   AddSOP,
+  AvailablePolicies,
   Admin,
   AdminLibrary,
   AdminPolicyDetail,
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
           { path: '/search', element: loading(<Search />) },
           { path: '/assistant', element: loading(<Assistant />) },
           { path: '/policies/:policyId', element: loading(<Policy />) },
+          { path: '/policies', element: loading(<AvailablePolicies />) },
           {
             path: '/admin',
             element: loading(<Admin />),

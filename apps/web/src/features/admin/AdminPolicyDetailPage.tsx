@@ -1,6 +1,12 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, FileText, History } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Archive,
+  ArrowLeft,
+  ChevronDown,
+  FileText,
+  History,
+} from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiRequest, ApiError } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
@@ -9,6 +15,7 @@ import { AdminOriginalDocument } from './AdminOriginalDocument';
 import { localizedSource, localizedStatus, useAdminCopy } from './adminCopy';
 import {
   viewerSchema,
+  policySchema,
   type PolicyViewer,
   type AccessScope,
 } from '../../types/policy';
@@ -80,6 +87,7 @@ function Details({ viewer }: { viewer: PolicyViewer }) {
             documentStatus(
               version.status,
               sources.map((source) => source.status),
+              policy.status,
             ),
             copy,
           )}
@@ -179,6 +187,7 @@ function Versions({
 }
 export default function AdminPolicyDetailPage() {
   const { copy } = useAdminCopy();
+  const queryClient = useQueryClient();
   const { policyId = '' } = useParams();
   const [params, setParams] = useSearchParams();
   const versionId = params.get('version');
@@ -198,6 +207,22 @@ export default function AdminPolicyDetailPage() {
   });
   const canRunTechnicalWorkflow =
     profile.data?.application_roles.includes('system_admin');
+  const archive = useMutation({
+    mutationFn: () =>
+      apiRequest(
+        `/admin/policies/${encodeURIComponent(policyId)}/deactivate`,
+        policySchema,
+        { method: 'POST' },
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin-policies'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['admin-policy-viewer', policyId],
+        }),
+      ]);
+    },
+  });
   function selectVersion(id: string) {
     setParams(
       id === viewer.data?.policy.active_version_id ? {} : { version: id },
@@ -238,6 +263,7 @@ export default function AdminPolicyDetailPage() {
   const status = documentStatus(
     data.version.status,
     data.sources.map((source) => source.status),
+    data.policy.status,
   );
   const isCurrent = data.version.id === data.policy.active_version_id;
   const reviewSource = data.sources.find(
@@ -318,8 +344,28 @@ export default function AdminPolicyDetailPage() {
               {copy.versionWorkflow}
             </Link>
           )}
+          {canRunTechnicalWorkflow && data.policy.status === 'active' && (
+            <button
+              type="button"
+              className="admin-action-link admin-action-link--danger"
+              disabled={archive.isPending}
+              onClick={() => {
+                if (window.confirm(copy.archiveConfirm)) archive.mutate();
+              }}
+            >
+              <Archive size={15} />
+              {archive.isPending ? copy.archivingPolicy : copy.archivePolicy}
+            </button>
+          )}
         </div>
       </div>
+      {archive.isError && (
+        <div className="admin-failed-banner" role="alert">
+          {archive.error instanceof Error
+            ? archive.error.message
+            : copy.libraryError}
+        </div>
+      )}
       <div className="admin-viewer-surface surface">
         {tab === 'Content' && (
           <AdminCanonicalReader

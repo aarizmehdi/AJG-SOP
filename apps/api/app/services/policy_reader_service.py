@@ -1,9 +1,15 @@
+from datetime import UTC, datetime, timedelta
+
 from apps.api.app.models.organization import EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.storage_service import ArtifactStore
 from packages.contracts.canonical import BlockKind, CanonicalSection
-from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion
-from packages.contracts.retrieval import PolicyReaderDocument, PolicyReaderSection
+from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
+from packages.contracts.retrieval import (
+    AvailablePolicySummary,
+    PolicyReaderDocument,
+    PolicyReaderSection,
+)
 from packages.contracts.source import SourceDocument
 from services.retrieval.authorization_filter import AuthorizationFilter
 
@@ -24,13 +30,15 @@ class PolicyReaderService:
         if not resolved:
             return None
         policy, version = resolved
-        employee_scope = self.authorization.employee_scope(profile)
         sections = [
             section
             for source_id in version.source_document_ids
-            if source_id in self.store.canonicals
-            for section in self.store.canonicals[source_id].sections
-            if section.access.allows(employee_scope)
+            if (canonical := self.store.canonicals.get(source_id))
+            and canonical.organization_id == profile.organization_id
+            and canonical.policy_id == policy.id
+            and canonical.version_id == version.id
+            for section in canonical.sections
+            if self.authorization.allows(profile, section.access)
         ]
         if not sections:
             return None
@@ -47,6 +55,35 @@ class PolicyReaderService:
                 self._source_fully_authorized(profile, source_id)
                 for source_id in version.source_document_ids
             ),
+        )
+
+    def list_available(self, profile: EmployeeProfile) -> list[AvailablePolicySummary]:
+        cutoff = datetime.now(UTC) - timedelta(days=30)
+        eligible_version_ids = {
+            chunk.version_id for chunk in self.authorization.eligible_chunks(profile)
+        }
+        result: list[AvailablePolicySummary] = []
+        for policy in self.store.policies.values():
+            resolved = self._active(profile, policy.id)
+            if not resolved:
+                continue
+            _, version = resolved
+            if version.id not in eligible_version_ids:
+                continue
+            result.append(
+                AvailablePolicySummary(
+                    policy_id=policy.id,
+                    title=policy.title,
+                    policy_number=policy.policy_number,
+                    category=policy.category,
+                    version_label=version.version_label,
+                    effective_date=version.effective_date,
+                    updated_at=policy.updated_at,
+                    recently_updated=policy.updated_at >= cutoff,
+                )
+            )
+        return sorted(
+            result, key=lambda item: (-item.updated_at.timestamp(), item.title.casefold())
         )
 
     async def read_original(
@@ -71,9 +108,8 @@ class PolicyReaderService:
         canonical = self.store.canonicals.get(source_id)
         if not canonical or canonical.organization_id != profile.organization_id:
             return False
-        scope = self.authorization.employee_scope(profile)
         return bool(canonical.sections) and all(
-            section.access.allows(scope) for section in canonical.sections
+            self.authorization.allows(profile, section.access) for section in canonical.sections
         )
 
     def _active(
@@ -88,7 +124,12 @@ class PolicyReaderService:
         ):
             return None
         version = self.store.versions.get(policy.active_version_id)
-        if not version or version.organization_id != profile.organization_id:
+        if (
+            not version
+            or version.organization_id != profile.organization_id
+            or version.policy_id != policy.id
+            or version.status is not VersionStatus.PUBLISHED
+        ):
             return None
         return policy, version
 

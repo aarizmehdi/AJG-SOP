@@ -37,7 +37,7 @@ export default function AdminLibraryPage() {
   const location = useLocation();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState(
-    location.pathname.endsWith('/review-queue') ? 'Review Required' : 'all',
+    location.pathname.endsWith('/review-queue') ? 'Review Required' : 'current',
   );
   const [department, setDepartment] = useState('all');
   const [sourceType, setSourceType] = useState('all');
@@ -93,9 +93,11 @@ export default function AdminLibraryPage() {
       return (
         matches &&
         (status === 'all' ||
+          (status === 'current' && policy.status !== 'inactive') ||
           documentStatus(
             version?.status ?? policy.status,
             policy.sources?.map((source) => source.status) ?? [],
+            policy.status,
           ) === status) &&
         (department === 'all' ||
           scope?.mode === 'all' ||
@@ -118,10 +120,12 @@ export default function AdminLibraryPage() {
         return documentStatus(
           versionOf(a)?.status ?? a.status,
           a.sources?.map((source) => source.status) ?? [],
+          a.status,
         ).localeCompare(
           documentStatus(
             versionOf(b)?.status ?? b.status,
             b.sources?.map((source) => source.status) ?? [],
+            b.status,
           ),
         );
       return Date.parse(b.updated_at) - Date.parse(a.updated_at);
@@ -188,6 +192,7 @@ export default function AdminLibraryPage() {
                 setStatus(event.target.value);
               }}
             >
+              <option value="current">{copy.currentPolicies}</option>
               <option value="all">{copy.allStatuses}</option>
               {[
                 'Published',
@@ -197,6 +202,7 @@ export default function AdminLibraryPage() {
                 'Ready for Review',
                 'Failed',
                 'Superseded',
+                'Inactive / Archived',
               ].map((item) => (
                 <option key={item} value={item}>
                   {localizedStatus(item, copy)}
@@ -285,6 +291,7 @@ export default function AdminLibraryPage() {
             const label = documentStatus(
               version?.status ?? policy.status,
               policy.sources?.map((source) => source.status) ?? [],
+              policy.status,
             );
             const scope = version?.access.departments;
             return (

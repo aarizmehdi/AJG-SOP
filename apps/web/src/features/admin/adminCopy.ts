@@ -18,6 +18,7 @@ const english = {
   image: 'Image',
   structuredText: 'Text',
   allStatuses: 'All statuses',
+  currentPolicies: 'Current policies',
   department: 'Department',
   allDepartments: 'All departments',
   sourceType: 'Source Type',
@@ -112,6 +113,11 @@ const english = {
   statusReady: 'Ready for Review',
   statusFailed: 'Failed',
   statusSuperseded: 'Superseded',
+  statusArchived: 'Archived',
+  archivePolicy: 'Archive policy',
+  archivingPolicy: 'Archiving policy…',
+  archiveConfirm:
+    'Archive this policy? Employees will no longer see it in search, the assistant, or their policy list.',
   sortRecent: 'Recently Updated',
   sortTitle: 'Title A–Z',
   sortVersion: 'Newest Version',
@@ -172,6 +178,7 @@ const urdu: Copy = {
   image: 'تصویر',
   structuredText: 'متن',
   allStatuses: 'تمام حالتیں',
+  currentPolicies: 'موجودہ پالیسیاں',
   department: 'شعبہ',
   allDepartments: 'تمام شعبے',
   sourceType: 'دستاویز کی قسم',
@@ -265,6 +272,11 @@ const urdu: Copy = {
   statusReady: 'نظرثانی کے لیے تیار',
   statusFailed: 'ناکام',
   statusSuperseded: 'پرانا نسخہ',
+  statusArchived: 'محفوظ شدہ',
+  archivePolicy: 'پالیسی محفوظ کریں',
+  archivingPolicy: 'پالیسی محفوظ ہو رہی ہے…',
+  archiveConfirm:
+    'یہ پالیسی محفوظ کریں؟ ملازمین اسے تلاش، معاون یا اپنی پالیسی فہرست میں نہیں دیکھ سکیں گے۔',
   sortRecent: 'حالیہ تازہ کاری',
   sortTitle: 'عنوان الف سے ے',
   sortVersion: 'تازہ ترین نسخہ',
@@ -323,6 +335,7 @@ const roman_urdu: Copy = {
   image: 'Tasveer',
   structuredText: 'Matn',
   allStatuses: 'Tamam haalatein',
+  currentPolicies: 'Mojooda policies',
   department: 'Shoba',
   allDepartments: 'Tamam shobay',
   sourceType: 'Source ki qisam',
@@ -419,6 +432,11 @@ const roman_urdu: Copy = {
   statusReady: 'Review ke liye tayyar',
   statusFailed: 'Nakam',
   statusSuperseded: 'Purana version',
+  statusArchived: 'Archived',
+  archivePolicy: 'Policy archive karein',
+  archivingPolicy: 'Policy archive ho rahi hai…',
+  archiveConfirm:
+    'Yeh policy archive karein? Mulazimeen isay search, assistant ya apni policy list mein nahin dekh sakein ge.',
   sortRecent: 'Haal hi mein update',
   sortTitle: 'Unwan A–Z',
   sortVersion: 'Naya version',
@@ -483,6 +501,7 @@ export function localizedStatus(label: string, copy: Copy): string {
     'Ready for Review': 'statusReady',
     Failed: 'statusFailed',
     Superseded: 'statusSuperseded',
+    'Inactive / Archived': 'statusArchived',
   };
   return copy[key[label] ?? 'statusDraft'];
 }

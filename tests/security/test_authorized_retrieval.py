@@ -134,6 +134,67 @@ async def test_unauthorized_chunks_never_enter_candidate_retrievers() -> None:
     assert [item.chunk_id for item in results] == ["allowed"]
 
 
+def test_system_admin_reads_tenant_wide_but_sop_admin_keeps_employee_scope() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected("store"),
+            )
+        },
+        chunks={"version": [chunk("store", "store"), chunk("hr", "hr")]},
+    )
+    authorization = AuthorizationFilter(store)
+    sop_admin = EmployeeProfile(
+        id="sop-admin",
+        organization_id="ajt",
+        identity_subject="fixture|sop-admin",
+        display_name="SOP Administrator",
+        email="sop-admin@example.test",
+        application_roles=frozenset(
+            {ApplicationRole.EMPLOYEE, ApplicationRole.SOP_ADMIN}
+        ),
+        departments=frozenset({"store"}),
+    )
+    system_admin = sop_admin.model_copy(
+        update={
+            "id": "system-admin",
+            "identity_subject": "fixture|system-admin",
+            "application_roles": frozenset(
+                {
+                    ApplicationRole.EMPLOYEE,
+                    ApplicationRole.SOP_ADMIN,
+                    ApplicationRole.SYSTEM_ADMIN,
+                }
+            ),
+        }
+    )
+    other_tenant_admin = system_admin.model_copy(
+        update={"id": "other-admin", "organization_id": "other"}
+    )
+
+    assert [item.id for item in authorization.eligible_chunks(sop_admin)] == ["store"]
+    assert {item.id for item in authorization.eligible_chunks(system_admin)} == {
+        "store",
+        "hr",
+    }
+    assert authorization.eligible_chunks(other_tenant_admin) == []
+
+
 class RecordingPineconeIndex:
     def __init__(self) -> None:
         self.query_kwargs: dict[str, object] = {}

@@ -13,7 +13,7 @@ export function statusLabel(status: string): string {
     approved: 'Ready for Review',
     failed: 'Failed',
     superseded: 'Superseded',
-    inactive: 'Superseded',
+    inactive: 'Inactive / Archived',
   };
   return labels[status] ?? 'Draft';
 }
@@ -33,7 +33,9 @@ export function sourceLabel(format: string): string {
 export function documentStatus(
   versionStatus: string,
   sourceStatuses: string[],
+  policyStatus?: string,
 ): string {
+  if (policyStatus === 'inactive') return 'Inactive / Archived';
   if (versionStatus === 'published' || versionStatus === 'superseded')
     return statusLabel(versionStatus);
   if (versionStatus === 'failed' || sourceStatuses.includes('failed'))
