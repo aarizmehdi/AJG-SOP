@@ -63,6 +63,7 @@ const formats: {
 
 export default function AddSOPPage() {
   const [format, setFormat] = useState<SourceFormat>('pdf');
+  const [markdownMode, setMarkdownMode] = useState<'file' | 'paste'>('file');
   const [file, setFile] = useState<File | null>(null);
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
@@ -97,7 +98,8 @@ export default function AddSOPPage() {
           access,
         }),
       });
-      if (format === 'structured_text' || format === 'markdown') {
+      const pasteMarkdown = format === 'markdown' && markdownMode === 'paste';
+      if (format === 'structured_text' || pasteMarkdown) {
         return apiRequest('/admin/sources/paste', sourceDocumentSchema, {
           method: 'POST',
           body: JSON.stringify({
@@ -124,7 +126,9 @@ export default function AddSOPPage() {
       void navigate(`/admin/review/${source.id}`);
     },
   });
-  const isText = format === 'structured_text' || format === 'markdown';
+  const isPaste =
+    format === 'structured_text' ||
+    (format === 'markdown' && markdownMode === 'paste');
   if (profile.isPending) return <RouteSkeleton />;
   if (!canIngest)
     return (
@@ -185,6 +189,7 @@ export default function AddSOPPage() {
               className={`format-card${format === id ? ' selected' : ''}`}
               onClick={() => {
                 setFormat(id);
+                setFile(null);
               }}
             >
               <Icon />
@@ -200,7 +205,33 @@ export default function AddSOPPage() {
         })}
       </div>
       <div className="upload-panel surface">
-        {isText ? (
+        {format === 'markdown' && (
+          <>
+            <div className="form-actions" aria-label="Markdown input method">
+              <Button
+                variant={markdownMode === 'file' ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setMarkdownMode('file');
+                }}
+              >
+                Upload .md file
+              </Button>
+              <Button
+                variant={markdownMode === 'paste' ? 'primary' : 'secondary'}
+                onClick={() => {
+                  setMarkdownMode('paste');
+                }}
+              >
+                Paste Markdown
+              </Button>
+            </div>
+            <p className="field-help">
+              Optional metadata: title, policy_number and effective_date in a
+              leading --- block. Dates use YYYY-MM-DD.
+            </p>
+          </>
+        )}
+        {isPaste ? (
           <>
             <label htmlFor="source-text">Policy content</label>
             <textarea
@@ -212,7 +243,7 @@ export default function AddSOPPage() {
               }}
               placeholder={
                 format === 'markdown'
-                  ? '# Policy title\n\n## 1. Section'
+                  ? '---\ntitle: Policy title\npolicy_number: SOP-76\neffective_date: 2026-09-25\n---\n# Policy title\n\n## 1. Section'
                   : 'Paste the structured policy text here…'
               }
             />
@@ -226,6 +257,11 @@ export default function AddSOPPage() {
             </span>
             <input
               type="file"
+              accept={
+                format === 'markdown'
+                  ? '.md,.markdown,text/markdown'
+                  : undefined
+              }
               onChange={(event) => {
                 setFile(event.target.files?.[0] ?? null);
               }}
@@ -248,7 +284,7 @@ export default function AddSOPPage() {
             disabled={
               upload.isPending ||
               !title.trim() ||
-              (isText ? !text.trim() : !file)
+              (isPaste ? !text.trim() : !file)
             }
             onClick={() => {
               upload.mutate();

@@ -73,7 +73,7 @@ async def test_failed_new_index_keeps_current_version_active(tmp_path: Path) -> 
         tmp_path, service, pipeline, "ajt", policy.id, "1", b"# Policy\n## 1 Rule\nOld text"
     )
     await service.prepare_for_publication("ajt", "admin", first_id)
-    service.publish("ajt", "admin", first_id)
+    await service.publish("ajt", "admin", first_id)
     second_id = await build_version(
         tmp_path,
         service,
@@ -126,3 +126,37 @@ async def test_version_diff_reports_changed_and_added_sections(tmp_path: Path) -
         SectionChangeKind.CHANGED,
         SectionChangeKind.ADDED,
     }
+
+
+@pytest.mark.asyncio
+async def test_failed_index_activation_keeps_current_version_active(tmp_path: Path) -> None:
+    store = FoundationStore()
+    index = FixtureRetrievalIndex()
+    pipeline = IngestionPipeline(
+        FixtureDocumentParser(), Canonicalizer(), LocalArtifactStore(tmp_path), store
+    )
+    service = PolicyService(
+        store,
+        SectionAwareFixtureChunker(),
+        FixtureEmbeddingProvider(),
+        index,
+        AuditService(store),
+    )
+    policy = service.create_policy("ajt", "admin", "Test policy", "Operations", None)
+    first_id = await build_version(
+        tmp_path, service, pipeline, "ajt", policy.id, "1", b"# Policy\n## 1 Rule\nOld text"
+    )
+    await service.prepare_for_publication("ajt", "admin", first_id)
+    await service.publish("ajt", "admin", first_id)
+    second_id = await build_version(
+        tmp_path, service, pipeline, "ajt", policy.id, "2", b"# Policy\n## 1 Rule\nNew text"
+    )
+    await service.prepare_for_publication("ajt", "admin", second_id)
+    index.fail_next_activate = True
+
+    with pytest.raises(PublicationError, match="current version remains active"):
+        await service.publish("ajt", "admin", second_id)
+
+    assert policy.active_version_id == first_id
+    assert store.versions[first_id].status is VersionStatus.PUBLISHED
+    assert store.versions[second_id].status is VersionStatus.FAILED

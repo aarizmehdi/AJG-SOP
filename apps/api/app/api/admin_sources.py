@@ -196,6 +196,8 @@ async def update_review(
     _require_source_content_scope(store, source_id, version.id, profile)
     if version.status in {VersionStatus.PUBLISHED, VersionStatus.SUPERSEDED}:
         raise HTTPException(status_code=409, detail="Published versions are immutable")
+    if any(not can_manage_scope(profile, section.access) for section in payload.canonical.sections):
+        raise HTTPException(status_code=403, detail="Reviewed content exceeds management scope")
     pipeline = cast(IngestionPipeline, request.app.state.ingestion_pipeline)
     canonical = await pipeline.save_review(
         source_id, payload.canonical.model_dump_json(), profile.id

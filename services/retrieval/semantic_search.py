@@ -27,11 +27,13 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
-        vectors = await self._embeddings.embed([query, *(chunk.text for chunk in eligible_chunks)])
-        query_vector = vectors[0]
+        query_vector = await self._embeddings.embed_query(query)
+        vectors = await self._embeddings.embed_documents(
+            [chunk.text for chunk in eligible_chunks]
+        )
         scored = [
             (chunk, sum(left * right for left, right in zip(query_vector, vector, strict=True)))
-            for chunk, vector in zip(eligible_chunks, vectors[1:], strict=True)
+            for chunk, vector in zip(eligible_chunks, vectors, strict=True)
         ]
         scored.sort(key=lambda item: (-item[1], item[0].id))
         return [
@@ -56,8 +58,10 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         index_name: str,
         namespace_prefix: str,
         embeddings: EmbeddingProvider,
+        *,
+        index: Any | None = None,
     ) -> None:
-        self._index: Any = Pinecone(api_key=api_key).Index(index_name)
+        self._index: Any = index or Pinecone(api_key=api_key).Index(index_name)
         self._namespace_prefix = namespace_prefix
         self._embeddings = embeddings
 
@@ -69,7 +73,7 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         organization_id = eligible_chunks[0].organization_id
         if any(chunk.organization_id != organization_id for chunk in eligible_chunks):
             raise PermissionError("Semantic corpus cannot cross organizations")
-        vector = (await self._embeddings.embed([query]))[0]
+        vector = await self._embeddings.embed_query(query)
         eligible_ids = [chunk.id for chunk in eligible_chunks]
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
         response = await anyio.to_thread.run_sync(

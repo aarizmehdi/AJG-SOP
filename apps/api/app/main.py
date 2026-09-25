@@ -42,7 +42,7 @@ from services.assistant.citations import CitationValidator
 from services.assistant.grounding import GroundingVerifier
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
-from services.ingestion.embeddings.unavailable import UnavailableEmbeddingProvider
+from services.ingestion.embeddings.pinecone_e5 import PineconeE5EmbeddingProvider
 from services.ingestion.extractors.azure_document_intelligence import (
     AzureDocumentIntelligenceParser,
 )
@@ -139,7 +139,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.app_mode == "fixture":
         publication_embeddings = FixtureEmbeddingProvider()
     else:
-        publication_embeddings = UnavailableEmbeddingProvider()
+        publication_embeddings = PineconeE5EmbeddingProvider(
+            settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
+            settings.pinecone_index,
+            settings.embedding_model,
+        )
 
     app.state.audit_service = AuditService(app.state.foundation_store)
     app.state.policy_service = PolicyService(
@@ -162,7 +166,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
             settings.pinecone_index,
             settings.pinecone_namespace_prefix,
-            UnavailableEmbeddingProvider(),
+            publication_embeddings,
         )
     app.state.retrieval_service = RetrievalService(
         app.state.foundation_store,

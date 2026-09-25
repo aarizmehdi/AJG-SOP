@@ -131,6 +131,14 @@ class IngestionPipeline:
             if not version or version.organization_id != source.organization_id:
                 raise PermissionError("Source version ownership could not be verified")
             canonical = self.canonicalizer.canonicalize(source, raw, version.access)
+            policy = self.store.policies.get(source.policy_id)
+            if policy and policy.organization_id == organization_id:
+                if canonical.policy_number and not policy.policy_number:
+                    policy.policy_number = canonical.policy_number
+                    self.store.mark_modified("policies", policy.id, policy)
+                if canonical.effective_date and version.effective_date is None:
+                    version.effective_date = canonical.effective_date
+                    self.store.mark_modified("policy_versions", version.id, version)
             canonical_uri = await self.artifacts.put(
                 organization_id,
                 f"sources/{source_id}/canonical/canonical.json",

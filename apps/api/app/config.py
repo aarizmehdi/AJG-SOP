@@ -45,10 +45,10 @@ class Settings(BaseSettings):
     llm_provider: Literal["fixture", "deepseek"] = "deepseek"
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-v4-flash"
+    deepseek_model: str = "deepseek-flash"
 
-    embedding_provider: str = "fixture"
-    embedding_model: str = "provisional-multilingual"
+    embedding_provider: Literal["fixture", "pinecone_e5"] = "fixture"
+    embedding_model: str = "multilingual-e5-large"
     reranker_provider: str = "fixture"
     document_parser_provider: Literal["fixture", "azure", "docling", "auto"] = "fixture"
     speech_provider: Literal["disabled"] = "disabled"
@@ -85,6 +85,8 @@ class Settings(BaseSettings):
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
+            if self.embedding_provider != "pinecone_e5":
+                raise ValueError("EMBEDDING_PROVIDER must be pinecone_e5 in live mode")
             if "localhost" in self.web_origin:
                 raise ValueError(
                     "WEB_ORIGIN must not be localhost in live mode; "

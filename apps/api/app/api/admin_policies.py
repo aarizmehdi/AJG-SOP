@@ -301,7 +301,7 @@ async def publish_version(request: Request, version_id: str, profile: CurrentPro
     require_system_admin(profile)
     _authorize_complete_version(request, profile, version_id)
     try:
-        return _service(request).publish(profile.organization_id, profile.id, version_id)
+        return await _service(request).publish(profile.organization_id, profile.id, version_id)
     except (KeyError, PublicationError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
 

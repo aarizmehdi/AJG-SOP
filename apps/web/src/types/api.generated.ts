@@ -158,6 +158,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/sources/import': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Import Source
+     * @description Import a pre-verified original PDF along with its corresponding structured file
+     *     (Markdown or JSON).
+     */
+    post: operations['import_source_api_v1_admin_sources_import_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/policies': {
     parameters: {
       query?: never;
@@ -556,6 +577,17 @@ export interface components {
      * @enum {string}
      */
     BlockKind: 'paragraph' | 'ordered_list' | 'unordered_list' | 'table';
+    /** Body_import_source_api_v1_admin_sources_import_post */
+    Body_import_source_api_v1_admin_sources_import_post: {
+      /** Policy Id */
+      policy_id: string;
+      /** Version Id */
+      version_id: string;
+      /** Original File */
+      original_file: string;
+      /** Structured File */
+      structured_file: string;
+    };
     /** Body_transcribe_speech_api_v1_speech_transcribe_post */
     Body_transcribe_speech_api_v1_speech_transcribe_post: {
       /** Audio */
@@ -662,6 +694,8 @@ export interface components {
       title: string;
       /** Policy Number */
       policy_number?: string | null;
+      /** Effective Date */
+      effective_date?: string | null;
       /** Sections */
       sections: components['schemas']['CanonicalSection-Input'][];
       /** Review Revisions */
@@ -695,6 +729,8 @@ export interface components {
       title: string;
       /** Policy Number */
       policy_number?: string | null;
+      /** Effective Date */
+      effective_date?: string | null;
       /** Sections */
       sections: components['schemas']['CanonicalSection-Output'][];
       /** Review Revisions */
@@ -1547,6 +1583,41 @@ export interface operations {
     responses: {
       /** @description Successful Response */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SourceDocument'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  import_source_api_v1_admin_sources_import_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_import_source_api_v1_admin_sources_import_post'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
         headers: {
           [name: string]: unknown;
         };
