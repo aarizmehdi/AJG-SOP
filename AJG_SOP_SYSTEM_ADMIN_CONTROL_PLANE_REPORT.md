@@ -5,7 +5,7 @@
 - Starting remote `main` SHA: `e7e77f2703dd26846e5ddb31cda0ecb7376fa201`
 - Implementation branch: `feat/system-admin-control-plane`
 - Final implementation code SHA: `33883faf4944d15bcf8e9f6c80fd5fdf66b39415`
-- Pull request: created after this report is committed and the branch is pushed
+- Pull request: `https://github.com/aarizmehdi/AJG-SOP/pull/10`
 - Railway deployment: not performed
 - Vercel deployment: not performed
 - Production data mutation: not performed
@@ -181,8 +181,9 @@ control plane is deployed and accepted.
 - `git diff --check`: passed.
 - Local fixture API/UI smoke test: passed for overview, users, create-user,
   catalog, desktop, tablet, and mobile rendering.
-- Docker build: not run because the `docker` executable is unavailable on this
-  host.
+- Docker build: passed in GitHub Actions. The local executable is unavailable on
+  this host, so Docker validation relied on the clean CI runner.
+- GitHub Actions: API, web, Docker, secrets, and Vercel preview checks passed.
 
 Tests cover anonymous access, unknown fixture identity, Employee and SOP Admin
 denial, direct HTTP privilege-escalation attempts, rejected client tenant ids,
@@ -229,11 +230,10 @@ Firebase UID, reconcile its tenant profile, and record the operational action.
 - The complete PRD acceptance scenario, including two controlled production
   employees, scoped SOP publication, Pinecone retrieval, and DeepSeek answer,
   has not been executed on production.
-- Docker image validation remains pending on a host with Docker available.
 - Automated organizational email delivery is not implemented; the System
   Administrator receives the one-time Firebase reset/setup link for delivery
   through an approved private channel.
 
 **Verdict: Not Ready for controlled AJT production use until the reviewed
-bootstrap, deployment smoke tests, Docker/CI validation, and full controlled
-acceptance scenario are completed.**
+bootstrap, deployment smoke tests, and full controlled acceptance scenario are
+completed.**
