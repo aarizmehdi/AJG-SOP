@@ -367,6 +367,213 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/users': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Users */
+    get: operations['list_users_api_v1_admin_users_get'];
+    put?: never;
+    /** Create User */
+    post: operations['create_user_api_v1_admin_users_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/users/{user_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get User */
+    get: operations['get_user_api_v1_admin_users__user_id__get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update User */
+    patch: operations['update_user_api_v1_admin_users__user_id__patch'];
+    trace?: never;
+  };
+  '/api/v1/admin/users/{user_id}/disable': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Disable User */
+    post: operations['disable_user_api_v1_admin_users__user_id__disable_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/users/{user_id}/reactivate': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reactivate User */
+    post: operations['reactivate_user_api_v1_admin_users__user_id__reactivate_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/users/{user_id}/password-reset': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reset Password */
+    post: operations['reset_password_api_v1_admin_users__user_id__password_reset_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/audit-events': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Audit Events */
+    get: operations['list_audit_events_api_v1_admin_audit_events_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/overview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Overview */
+    get: operations['overview_api_v1_admin_overview_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/access/users/{user_id}/policies/{policy_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Inspect Access */
+    get: operations['inspect_access_api_v1_admin_access_users__user_id__policies__policy_id__get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/organization': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Organization Summary */
+    get: operations['organization_summary_api_v1_admin_organization_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/{catalog_kind}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Catalog */
+    get: operations['list_catalog_api_v1_admin__catalog_kind__get'];
+    put?: never;
+    /** Create Catalog Item */
+    post: operations['create_catalog_item_api_v1_admin__catalog_kind__post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/{catalog_kind}/{item_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update Catalog Item */
+    patch: operations['update_catalog_item_api_v1_admin__catalog_kind___item_id__patch'];
+    trace?: never;
+  };
+  '/api/v1/admin/organization/bootstrap-report': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Catalog Bootstrap Report */
+    get: operations['catalog_bootstrap_report_api_v1_admin_organization_bootstrap_report_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/policies': {
     parameters: {
       query?: never;
@@ -582,6 +789,11 @@ export interface components {
     AccessUpdateRequest: {
       access: components['schemas']['AccessScope'];
     };
+    /**
+     * ApplicationRole
+     * @enum {string}
+     */
+    ApplicationRole: 'employee' | 'sop_admin' | 'system_admin';
     /** AssistantCitation */
     AssistantCitation: {
       /** Chunk Id */
@@ -890,6 +1102,15 @@ export interface components {
       effective_date?: string | null;
       access: components['schemas']['AccessScope'];
     };
+    /** CreateCatalogItemRequest */
+    CreateCatalogItemRequest: {
+      /** Key */
+      key: string;
+      /** Name */
+      name: string;
+      /** Description */
+      description?: string | null;
+    };
     /** CreatePolicyRequest */
     CreatePolicyRequest: {
       /** Title */
@@ -903,6 +1124,14 @@ export interface components {
       /** Effective Date */
       effective_date?: string | null;
       access: components['schemas']['AccessScope'];
+    };
+    /** DisableUserRequest */
+    DisableUserRequest: {
+      /**
+       * Confirmation Email
+       * @default
+       */
+      confirmation_email: string;
     };
     /** DuplicateSectionGroup */
     DuplicateSectionGroup: {
@@ -983,6 +1212,44 @@ export interface components {
      * @enum {string}
      */
     Language: 'english' | 'urdu' | 'roman_urdu';
+    /**
+     * MembershipStatus
+     * @enum {string}
+     */
+    MembershipStatus: 'pending_activation' | 'active' | 'disabled';
+    /** OrganizationCatalogItem */
+    OrganizationCatalogItem: {
+      /** Organization Id */
+      organization_id: string;
+      /** Id */
+      id: string;
+      /** Key */
+      key: string;
+      /** Name */
+      name: string;
+      /** Description */
+      description?: string | null;
+      /**
+       * Active
+       * @default true
+       */
+      active: boolean;
+      /**
+       * Version
+       * @default 1
+       */
+      version: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at?: string;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at?: string;
+    };
     /** PasteSourceRequest */
     PasteSourceRequest: {
       /** Policy Id */
@@ -1271,6 +1538,70 @@ export interface components {
       raw_transcript: string;
       /** Normalized Transcript */
       normalized_transcript: string;
+    };
+    /** UpdateCatalogItemRequest */
+    UpdateCatalogItemRequest: {
+      /** Name */
+      name?: string | null;
+      /** Description */
+      description?: string | null;
+      /** Active */
+      active?: boolean | null;
+      /** Expected Version */
+      expected_version: number;
+    };
+    /** UpdateUserRequest */
+    UpdateUserRequest: {
+      /** Display Name */
+      display_name: string;
+      /** Email */
+      email: string;
+      /** @default english */
+      preferred_language: components['schemas']['Language'];
+      /** Application Roles */
+      application_roles: components['schemas']['ApplicationRole'][];
+      /** Departments */
+      departments: string[];
+      /** Locations */
+      locations: string[];
+      /** Organizational Roles */
+      organizational_roles: string[];
+      /** Management Departments */
+      management_departments?: string[];
+      /** Management Locations */
+      management_locations?: string[];
+      /** Management Roles */
+      management_roles?: string[];
+      /** Expected Version */
+      expected_version: number;
+      /**
+       * Confirm Self Role Change
+       * @default false
+       */
+      confirm_self_role_change: boolean;
+    };
+    /** UserMutationRequest */
+    UserMutationRequest: {
+      /** Display Name */
+      display_name: string;
+      /** Email */
+      email: string;
+      /** @default english */
+      preferred_language: components['schemas']['Language'];
+      /** Application Roles */
+      application_roles: components['schemas']['ApplicationRole'][];
+      /** Departments */
+      departments: string[];
+      /** Locations */
+      locations: string[];
+      /** Organizational Roles */
+      organizational_roles: string[];
+      /** Management Departments */
+      management_departments?: string[];
+      /** Management Locations */
+      management_locations?: string[];
+      /** Management Roles */
+      management_roles?: string[];
     };
     /** ValidationError */
     ValidationError: {
@@ -2108,6 +2439,552 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SOPPolicy'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  list_users_api_v1_admin_users_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        limit?: number;
+        search?: string | null;
+        status?: components['schemas']['MembershipStatus'] | null;
+        application_role?: components['schemas']['ApplicationRole'] | null;
+        department?: string | null;
+        location?: string | null;
+        organizational_role?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  create_user_api_v1_admin_users_post: {
+    parameters: {
+      query?: never;
+      header: {
+        'Idempotency-Key': string;
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserMutationRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  get_user_api_v1_admin_users__user_id__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  update_user_api_v1_admin_users__user_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateUserRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  disable_user_api_v1_admin_users__user_id__disable_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DisableUserRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  reactivate_user_api_v1_admin_users__user_id__reactivate_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  reset_password_api_v1_admin_users__user_id__password_reset_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: string;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  list_audit_events_api_v1_admin_audit_events_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        limit?: number;
+        actor_id?: string | null;
+        action?: string | null;
+        entity_type?: string | null;
+        entity_id?: string | null;
+        occurred_from?: string | null;
+        occurred_to?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  overview_api_v1_admin_overview_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  inspect_access_api_v1_admin_access_users__user_id__policies__policy_id__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        user_id: string;
+        policy_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  organization_summary_api_v1_admin_organization_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  list_catalog_api_v1_admin__catalog_kind__get: {
+    parameters: {
+      query?: {
+        include_inactive?: boolean;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        catalog_kind: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          }[];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  create_catalog_item_api_v1_admin__catalog_kind__post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        catalog_kind: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateCatalogItemRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationCatalogItem'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  update_catalog_item_api_v1_admin__catalog_kind___item_id__patch: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        catalog_kind: string;
+        item_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateCatalogItemRequest'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationCatalogItem'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  catalog_bootstrap_report_api_v1_admin_organization_bootstrap_report_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
         };
       };
       /** @description Validation Error */

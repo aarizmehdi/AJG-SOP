@@ -60,13 +60,47 @@ class FirebaseIdentityProvider(IdentityProvider):
         except Exception as err:
             raise ValueError("Invalid Firebase ID token") from err
 
+    @property
+    def firebase_app(self) -> firebase_admin.App:
+        return self._app
+
+
+class FixtureIdentityDirectory:
+    def __init__(self) -> None:
+        self.identities: dict[str, dict[str, Any]] = {
+            "fixture|employee": {
+                "uid": "fixture|employee",
+                "email": "ayesha@example.test",
+                "display_name": "Ayesha Khan",
+                "disabled": False,
+            },
+            "fixture|sop-admin": {
+                "uid": "fixture|sop-admin",
+                "email": "hamza@example.test",
+                "display_name": "Hamza Shah",
+                "disabled": False,
+            },
+            "fixture|system-admin": {
+                "uid": "fixture|system-admin",
+                "email": "admin@example.test",
+                "display_name": "System Administrator",
+                "disabled": False,
+            },
+        }
+
 
 class FixtureIdentityProvider(IdentityProvider):
+    def __init__(self, directory: FixtureIdentityDirectory | None = None) -> None:
+        self._directory = directory or FixtureIdentityDirectory()
+
     async def authenticate(self, credential: str) -> AuthenticatedIdentity:
         subject = credential.removeprefix("Fixture ").strip()
-        if subject not in {"employee", "sop-admin", "system-admin"}:
+        if subject in {"employee", "sop-admin", "system-admin"}:
+            subject = f"fixture|{subject}"
+        identity = self._directory.identities.get(subject)
+        if not identity or identity.get("disabled"):
             raise ValueError("Unknown fixture identity")
-        return AuthenticatedIdentity(subject=f"fixture|{subject}", claims={"fixture": True})
+        return AuthenticatedIdentity(subject=subject, claims={"fixture": True})
 
 
 FIXTURE_PROFILES = {

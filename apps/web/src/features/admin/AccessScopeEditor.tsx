@@ -1,4 +1,6 @@
 import type { AccessScope } from '../../types/policy';
+import { CatalogMultiSelect } from '../system-admin/CatalogMultiSelect';
+import { useOrganizationCatalogs } from '../system-admin/catalogs';
 
 type Dimension = keyof AccessScope;
 const labels: Record<Dimension, string> = {
@@ -14,6 +16,7 @@ export function AccessScopeEditor({
   value: AccessScope;
   onChange: (scope: AccessScope) => void;
 }) {
+  const catalogs = useOrganizationCatalogs(true);
   const update = (
     dimension: Dimension,
     mode: 'all' | 'selected',
@@ -59,24 +62,30 @@ export function AccessScopeEditor({
             Selected {labels[dimension]}
           </label>
           {value[dimension].mode === 'selected' && (
-            <input
-              aria-label={`Selected ${labels[dimension]}`}
-              value={value[dimension].values.join(', ')}
-              placeholder="Comma-separated values"
-              onChange={(event) => {
-                update(
-                  dimension,
-                  'selected',
-                  event.target.value
-                    .split(',')
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                );
+            <CatalogMultiSelect
+              label={`Selected ${labels[dimension]}`}
+              items={
+                catalogs.data?.[
+                  dimension === 'roles' ? 'organizational_roles' : dimension
+                ] ?? []
+              }
+              value={value[dimension].values}
+              disabled={catalogs.isPending || catalogs.isError}
+              onChange={(values) => {
+                update(dimension, 'selected', values);
               }}
             />
           )}
         </div>
       ))}
+      {catalogs.isPending && (
+        <small role="status">Loading organization access options…</small>
+      )}
+      {catalogs.isError && (
+        <small className="form-error" role="alert">
+          Organization access options could not be loaded.
+        </small>
+      )}
       <small>
         “Selected” must contain at least one value. An empty selection is never
         unrestricted.

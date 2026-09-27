@@ -9,7 +9,15 @@ export const profileSchema = z.object({
   departments: z.array(z.string()),
   locations: z.array(z.string()),
   organizational_roles: z.array(z.string()),
+  management_departments: z.array(z.string()).default([]),
+  management_locations: z.array(z.string()).default([]),
+  management_roles: z.array(z.string()).default([]),
   preferred_language: z.string().nullable(),
+  active: z.boolean().default(true),
+  status: z
+    .enum(['pending_activation', 'active', 'disabled'])
+    .default('active'),
+  version: z.number().default(1),
 });
 
 export type Profile = z.infer<typeof profileSchema>;

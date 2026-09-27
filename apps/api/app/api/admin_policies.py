@@ -12,6 +12,7 @@ from apps.api.app.auth.permissions import (
     require_system_admin,
 )
 from apps.api.app.services.foundation_store import FoundationStore
+from apps.api.app.services.organization_service import CatalogReferenceError, OrganizationService
 from apps.api.app.services.policy_service import PolicyService, PublicationError
 from packages.contracts.access import AccessScope
 from packages.contracts.canonical import CanonicalSOP
@@ -50,6 +51,22 @@ def _service(request: Request) -> PolicyService:
 
 def _store(request: Request) -> FoundationStore:
     return cast(FoundationStore, request.app.state.foundation_store)
+
+
+async def _validate_catalog_scope(
+    request: Request,
+    organization_id: str,
+    access: AccessScope,
+    existing_access: AccessScope | None = None,
+) -> None:
+    try:
+        service = getattr(request.app.state, "organization_service", None)
+        if service is None:
+            return
+        service = cast(OrganizationService, service)
+        await service.validate_access_scope(organization_id, access, existing_access)
+    except CatalogReferenceError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 def _authorize_version(request: Request, profile: CurrentProfile, version_id: str) -> SOPVersion:
@@ -234,6 +251,7 @@ async def create_policy(
 ) -> dict[str, object]:
     require_system_admin(profile)
     require_management_scope(profile, payload.access)
+    await _validate_catalog_scope(request, profile.organization_id, payload.access)
     service = _service(request)
     policy = service.create_policy(
         profile.organization_id,
@@ -262,7 +280,8 @@ async def update_access(
 ) -> SOPVersion:
     require_system_admin(profile)
     require_management_scope(profile, payload.access)
-    _authorize_complete_version(request, profile, version_id)
+    current = _authorize_complete_version(request, profile, version_id)
+    await _validate_catalog_scope(request, profile.organization_id, payload.access, current.access)
     return _service(request).set_access(
         profile.organization_id, profile.id, version_id, payload.access
     )
@@ -277,6 +296,18 @@ async def create_corrected_access_version(
 ) -> dict[str, object]:
     require_system_admin(profile)
     require_management_scope(profile, payload.access)
+    policy = _store(request).policies.get(policy_id)
+    existing = (
+        _store(request).versions.get(policy.active_version_id)
+        if policy and policy.active_version_id
+        else None
+    )
+    await _validate_catalog_scope(
+        request,
+        profile.organization_id,
+        payload.access,
+        existing.access if existing else None,
+    )
     try:
         version, sources = _service(request).create_corrected_access_version(
             profile.organization_id,

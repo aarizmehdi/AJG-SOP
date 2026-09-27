@@ -8,14 +8,22 @@ import structlog
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.app.api.admin_audit import router as admin_audit_router
+from apps.api.app.api.admin_control_plane import router as admin_control_plane_router
+from apps.api.app.api.admin_organization import router as admin_organization_router
 from apps.api.app.api.admin_policies import router as admin_policies_router
 from apps.api.app.api.admin_sources import router as admin_sources_router
+from apps.api.app.api.admin_users import router as admin_users_router
 from apps.api.app.api.assistant import router as assistant_router
 from apps.api.app.api.operations import router as operations_router
 from apps.api.app.api.profile import router as profile_router
 from apps.api.app.api.search import router as search_router
 from apps.api.app.api.speech import router as speech_router
-from apps.api.app.auth.identity import FirebaseIdentityProvider, FixtureIdentityProvider
+from apps.api.app.auth.identity import (
+    FirebaseIdentityProvider,
+    FixtureIdentityDirectory,
+    FixtureIdentityProvider,
+)
 from apps.api.app.config import Settings, get_settings
 from apps.api.app.repositories.database import InMemoryCanonicalDatabase, MongoCanonicalDatabase
 from apps.api.app.repositories.foundation_persistence import (
@@ -23,14 +31,21 @@ from apps.api.app.repositories.foundation_persistence import (
     FoundationPersistence,
     MongoFoundationPersistence,
 )
+from apps.api.app.services.admin_audit_service import AdminAuditService
 from apps.api.app.services.assistant_service import AssistantService
 from apps.api.app.services.audit_service import AuditService
 from apps.api.app.services.fixture_seed import seed_fixture_data
 from apps.api.app.services.foundation_store import FoundationStore
+from apps.api.app.services.identity_admin_service import (
+    FirebaseAdminIdentityService,
+    FixtureIdentityAdminService,
+)
 from apps.api.app.services.metrics import MetricsRegistry
+from apps.api.app.services.organization_service import OrganizationService
 from apps.api.app.services.policy_reader_service import PolicyReaderService
 from apps.api.app.services.policy_service import PolicyService
 from apps.api.app.services.storage_service import LocalArtifactStore, S3ArtifactStore
+from apps.api.app.services.user_admin_service import UserAdminService
 from services.assistant.answer_generator import (
     DeepSeekLLMProvider,
     FixtureLLMProvider,
@@ -92,14 +107,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.settings = settings
     app.state.metrics = MetricsRegistry()
     if settings.app_mode == "fixture":
-        app.state.identity_provider = FixtureIdentityProvider()
+        fixture_identities = FixtureIdentityDirectory()
+        app.state.identity_provider = FixtureIdentityProvider(fixture_identities)
+        app.state.identity_admin_service = FixtureIdentityAdminService(fixture_identities)
         app.state.database = InMemoryCanonicalDatabase()
         app.state.artifact_store = LocalArtifactStore(Path(".data"))
         app.state.foundation_persistence = FixtureFoundationPersistence()
     else:
         app.state.identity_provider = FirebaseIdentityProvider(settings)
+        app.state.identity_admin_service = FirebaseAdminIdentityService(
+            app.state.identity_provider.firebase_app
+        )
         app.state.database = MongoCanonicalDatabase(settings.mongodb_uri, settings.mongodb_database)
-        await app.state.database.initialize()
         if not settings.s3_access_key_id or not settings.s3_secret_access_key:
             raise ValueError("S3 credentials are required in live mode")
         app.state.artifact_store = S3ArtifactStore(
@@ -112,6 +131,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.foundation_persistence = MongoFoundationPersistence(
             settings.mongodb_uri, settings.mongodb_database
         )
+    await app.state.database.initialize()
+    app.state.admin_audit_service = AdminAuditService(app.state.database)
+    app.state.organization_service = OrganizationService(
+        app.state.database, app.state.admin_audit_service
+    )
+    app.state.user_admin_service = UserAdminService(
+        app.state.database,
+        app.state.identity_admin_service,
+        app.state.organization_service,
+        app.state.admin_audit_service,
+    )
     app.state.foundation_store = FoundationStore()
     await app.state.foundation_persistence.load(app.state.foundation_store)
     app.state.ingestion_pipeline = IngestionPipeline(
@@ -210,6 +240,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         structlog.get_logger().exception("shutdown_flush_failed")
     await app.state.foundation_persistence.close()
+    await app.state.database.close()
 
 
 settings = get_settings()
@@ -225,6 +256,10 @@ app.add_middleware(
 app.include_router(profile_router, prefix=settings.api_prefix)
 app.include_router(admin_sources_router, prefix=settings.api_prefix)
 app.include_router(admin_policies_router, prefix=settings.api_prefix)
+app.include_router(admin_users_router, prefix=settings.api_prefix)
+app.include_router(admin_audit_router, prefix=settings.api_prefix)
+app.include_router(admin_control_plane_router, prefix=settings.api_prefix)
+app.include_router(admin_organization_router, prefix=settings.api_prefix)
 app.include_router(search_router, prefix=settings.api_prefix)
 app.include_router(assistant_router, prefix=settings.api_prefix)
 app.include_router(operations_router, prefix=settings.api_prefix)

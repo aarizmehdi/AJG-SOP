@@ -1,11 +1,47 @@
 from fastapi import FastAPI
 
+from apps.api.app.auth.identity import FIXTURE_PROFILES
+from apps.api.app.models.organization import CatalogKind
 from apps.api.app.services.policy_service import PolicyService
 from packages.contracts.access import AccessDimension, AccessMode, AccessScope
 from packages.contracts.source import SourceFormat
 
 
 async def seed_fixture_data(app: FastAPI) -> None:
+    database = app.state.database
+    for profile in FIXTURE_PROFILES.values():
+        await database.insert_one(
+            "employee_profiles",
+            profile.organization_id,
+            profile.model_dump(mode="json", exclude={"organization_id"}),
+        )
+    catalog_values = {
+        CatalogKind.DEPARTMENT: {
+            value
+            for profile in FIXTURE_PROFILES.values()
+            for value in profile.departments | profile.management_departments
+        },
+        CatalogKind.LOCATION: {
+            value
+            for profile in FIXTURE_PROFILES.values()
+            for value in profile.locations | profile.management_locations
+        },
+        CatalogKind.ORGANIZATIONAL_ROLE: {
+            value
+            for profile in FIXTURE_PROFILES.values()
+            for value in profile.organizational_roles | profile.management_roles
+        },
+    }
+    for kind, keys in catalog_values.items():
+        for key in sorted(keys):
+            await app.state.organization_service.create_item(
+                "ajt",
+                "fixture-system",
+                kind,
+                key=key,
+                name=key.replace("_", " ").replace("-", " ").title(),
+                description="Fixture organization catalog entry",
+            )
     service: PolicyService = app.state.policy_service
     policy = service.create_policy(
         "ajt",

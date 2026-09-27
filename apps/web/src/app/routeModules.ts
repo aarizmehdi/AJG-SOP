@@ -25,3 +25,37 @@ export const ExtractionReview = lazy(
 export const PolicyWorkflow = lazy(
   () => import('../features/admin/PolicyWorkflowPage'),
 );
+export const AdminLanding = lazy(
+  () => import('../features/system-admin/AdminLanding'),
+);
+export const SystemAdminOverview = lazy(
+  () => import('../features/system-admin/SystemAdminOverviewPage'),
+);
+export const UserList = lazy(
+  () => import('../features/system-admin/users/UserListPage'),
+);
+export const CreateUser = lazy(
+  () => import('../features/system-admin/users/CreateUserPage'),
+);
+export const UserDetail = lazy(
+  () => import('../features/system-admin/users/UserDetailPage'),
+);
+export const Departments = lazy(
+  () => import('../features/system-admin/organization/DepartmentsPage'),
+);
+export const Locations = lazy(
+  () => import('../features/system-admin/organization/LocationsPage'),
+);
+export const OrganizationalRoles = lazy(
+  () => import('../features/system-admin/organization/OrganizationalRolesPage'),
+);
+export const OrganizationSettings = lazy(
+  () =>
+    import('../features/system-admin/organization/OrganizationSettingsPage'),
+);
+export const AccessInspector = lazy(
+  () => import('../features/system-admin/access/AccessInspectorPage'),
+);
+export const AuditLog = lazy(
+  () => import('../features/system-admin/audit/AuditLogPage'),
+);
