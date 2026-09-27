@@ -13,7 +13,13 @@ const profile: Profile = {
   departments: ['store'],
   locations: ['main'],
   organizational_roles: ['store_keeper'],
+  management_departments: [],
+  management_locations: [],
+  management_roles: [],
   preferred_language: 'english',
+  active: true,
+  status: 'active',
+  version: 1,
 };
 
 function Probe() {

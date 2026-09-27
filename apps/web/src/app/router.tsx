@@ -1,23 +1,34 @@
 import { Suspense } from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { RouteSkeleton } from '../components/feedback/RouteSkeleton';
 import { AuthGuard } from '../features/auth/AuthGuard';
 import { ProfileLocaleGate } from '../features/language/ProfileLocaleGate';
 import {
   AddSOP,
+  AdminLanding,
   AvailablePolicies,
+  AccessInspector,
   Admin,
   AdminLibrary,
   AdminPolicyDetail,
   Assistant,
+  AuditLog,
+  CreateUser,
+  Departments,
   ExtractionReview,
   Home,
   Language,
+  Locations,
   Login,
   Policy,
   PolicyWorkflow,
+  OrganizationalRoles,
+  OrganizationSettings,
   Search,
+  SystemAdminOverview,
+  UserDetail,
+  UserList,
 } from './routeModules';
 
 import { RootRedirect } from './RootRedirect';
@@ -51,7 +62,23 @@ export const router = createBrowserRouter([
             children: [
               {
                 index: true,
-                element: <Navigate to="/admin/policies" replace />,
+                element: loading(<AdminLanding />),
+              },
+              { path: 'overview', element: loading(<SystemAdminOverview />) },
+              { path: 'users', element: loading(<UserList />) },
+              { path: 'users/new', element: loading(<CreateUser />) },
+              { path: 'users/:userId', element: loading(<UserDetail />) },
+              { path: 'departments', element: loading(<Departments />) },
+              { path: 'locations', element: loading(<Locations />) },
+              {
+                path: 'organizational-roles',
+                element: loading(<OrganizationalRoles />),
+              },
+              { path: 'access', element: loading(<AccessInspector />) },
+              { path: 'audit', element: loading(<AuditLog />) },
+              {
+                path: 'organization',
+                element: loading(<OrganizationSettings />),
               },
               {
                 path: 'policies',
