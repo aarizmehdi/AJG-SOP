@@ -7,6 +7,7 @@ import { ErrorState } from '../../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../../components/feedback/RouteSkeleton';
 import { userPageSchema } from '../../../types/admin';
 import { useOrganizationCatalogs } from '../catalogs';
+import { systemAdminErrorDetail } from '../errorDetail';
 
 export default function UserListPage() {
   const [params, setParams] = useSearchParams();
@@ -34,7 +35,7 @@ export default function UserListPage() {
     return (
       <ErrorState
         title="Users unavailable"
-        detail="Only a System Administrator can inspect organization users."
+        detail={systemAdminErrorDetail(users.error)}
       />
     );
   return (

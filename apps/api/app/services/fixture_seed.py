@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from apps.api.app.auth.identity import FIXTURE_PROFILES
-from apps.api.app.models.organization import CatalogKind
+from apps.api.app.models.organization import CatalogKind, Organization
 from apps.api.app.services.policy_service import PolicyService
 from packages.contracts.access import AccessDimension, AccessMode, AccessScope
 from packages.contracts.source import SourceFormat
@@ -9,6 +9,16 @@ from packages.contracts.source import SourceFormat
 
 async def seed_fixture_data(app: FastAPI) -> None:
     database = app.state.database
+    organization = Organization(
+        organization_id="ajt",
+        name="Aziz Jan Group",
+        slug="ajt",
+    )
+    await database.insert_one(
+        "organizations",
+        organization.organization_id,
+        organization.model_dump(mode="json", exclude={"organization_id"}),
+    )
     for profile in FIXTURE_PROFILES.values():
         await database.insert_one(
             "employee_profiles",

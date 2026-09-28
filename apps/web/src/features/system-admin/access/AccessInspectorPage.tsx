@@ -6,6 +6,7 @@ import { ErrorState } from '../../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../../components/feedback/RouteSkeleton';
 import { accessInspectionSchema, userPageSchema } from '../../../types/admin';
 import { policyListSchema } from '../../../types/policy';
+import { systemAdminErrorDetail } from '../errorDetail';
 
 export default function AccessInspectorPage() {
   const [userId, setUserId] = useState('');
@@ -33,7 +34,7 @@ export default function AccessInspectorPage() {
     return (
       <ErrorState
         title="Access inspector unavailable"
-        detail="User and policy records could not be loaded."
+        detail={systemAdminErrorDetail(users.error ?? policies.error)}
       />
     );
   return (
@@ -95,7 +96,7 @@ export default function AccessInspectorPage() {
       ) : inspection.isError ? (
         <ErrorState
           title="Access could not be evaluated"
-          detail={inspection.error.message}
+          detail={systemAdminErrorDetail(inspection.error)}
         />
       ) : (
         <section

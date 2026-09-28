@@ -13,6 +13,7 @@ import { apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
 import { overviewSchema } from '../../types/admin';
+import { systemAdminErrorDetail } from './errorDetail';
 
 export default function SystemAdminOverviewPage() {
   const overview = useQuery({
@@ -25,7 +26,7 @@ export default function SystemAdminOverviewPage() {
     return (
       <ErrorState
         title="Overview unavailable"
-        detail="Current organization metrics could not be loaded."
+        detail={systemAdminErrorDetail(overview.error)}
       />
     );
   const cards = [

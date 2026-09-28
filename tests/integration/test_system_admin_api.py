@@ -21,8 +21,67 @@ def test_system_admin_api_role_and_tenant_boundaries() -> None:
             ).status_code
             == 403
         )
-        assert client.get("/api/v1/admin/users", headers=system_headers).status_code == 200
-        assert client.get("/api/v1/admin/audit-events", headers=system_headers).status_code == 200
+        endpoint_responses = {
+            endpoint: client.get(f"/api/v1/admin/{endpoint}", headers=system_headers)
+            for endpoint in (
+                "overview",
+                "users",
+                "departments",
+                "locations",
+                "organizational_roles",
+                "audit-events",
+                "organization",
+                "policies",
+            )
+        }
+        assert all(response.status_code == 200 for response in endpoint_responses.values())
+
+        user_id = endpoint_responses["users"].json()["items"][0]["id"]
+        policy_id = endpoint_responses["policies"].json()[0]["id"]
+        access = client.get(
+            f"/api/v1/admin/access/users/{user_id}/policies/{policy_id}",
+            headers=system_headers,
+        )
+        assert access.status_code == 200
+        assert isinstance(access.json()["authorized"], bool)
+
+        organization = client.get("/api/v1/admin/organization", headers=system_headers)
+        assert organization.status_code == 200
+        assert organization.json()["name"] == "Aziz Jan Group"
+
+
+def test_empty_organization_catalogs_are_valid_empty_states() -> None:
+    with TestClient(app) as client:
+        for collection in ("departments", "locations", "organizational_roles"):
+            client.app.state.database.collections[collection] = []
+
+        headers = {"Authorization": "Fixture system-admin"}
+        for endpoint in ("departments", "locations", "organizational_roles"):
+            response = client.get(f"/api/v1/admin/{endpoint}", headers=headers)
+            assert response.status_code == 200
+            assert response.json() == []
+
+        organization = client.get("/api/v1/admin/organization", headers=headers)
+        assert organization.status_code == 200
+        assert organization.json()["catalog_counts"] == {
+            "departments": 0,
+            "locations": 0,
+            "organizational_roles": 0,
+        }
+
+
+def test_organization_summary_tolerates_legacy_provider_metadata() -> None:
+    with TestClient(app) as client:
+        record = client.app.state.database.collections["organizations"][0]
+        record["auth0_organization_id"] = None
+
+        response = client.get(
+            "/api/v1/admin/organization",
+            headers={"Authorization": "Fixture system-admin"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == "Aziz Jan Group"
 
 
 def test_non_system_roles_cannot_mutate_users_catalogs_or_read_audit() -> None:

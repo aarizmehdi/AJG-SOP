@@ -29,4 +29,27 @@ describe('live API client', () => {
     );
     expect(headers.get('Authorization')).toBe('Bearer firebase-id-token');
   });
+
+  it('converts an incompatible success payload into a safe API error', async () => {
+    vi.stubEnv('VITE_APP_MODE', 'live');
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test/api/v1');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ unexpected: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const { apiRequest } = await import('./client');
+
+    await expect(
+      apiRequest('/admin/overview', z.object({ users: z.number() })),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        name: 'ApiError',
+        status: 502,
+        message:
+          'The server response is incompatible with this application version',
+      }),
+    );
+  });
 });
