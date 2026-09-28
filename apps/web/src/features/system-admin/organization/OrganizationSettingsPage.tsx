@@ -42,7 +42,7 @@ export default function OrganizationSettingsPage() {
         </div>
       </div>
       <section className="surface organization-identity-card">
-        <span className="organization-monogram">AJT</span>
+        <span className="organization-monogram">AJG</span>
         <div>
           <span className="eyebrow">Current organization</span>
           <h3>{organization.data.name}</h3>

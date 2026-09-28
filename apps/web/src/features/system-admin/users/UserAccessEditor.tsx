@@ -111,7 +111,7 @@ export function UserAccessEditor({
               [
                 'system_admin',
                 'System Administrator',
-                'Organization-wide administration for AJT.',
+                'Organization-wide administration for AJG.',
               ],
             ] as const
           ).map(([id, label, description]) => (

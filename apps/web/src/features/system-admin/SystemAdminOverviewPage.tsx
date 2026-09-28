@@ -85,7 +85,7 @@ export default function SystemAdminOverviewPage() {
         <div>
           <span className="eyebrow">Organization status</span>
           <h2>Overview</h2>
-          <p>Live counts from AJT identity, access, and policy records.</p>
+          <p>Live counts from AJG identity, access, and policy records.</p>
         </div>
         <Link className="button button--primary" to="/admin/users/new">
           Create user
