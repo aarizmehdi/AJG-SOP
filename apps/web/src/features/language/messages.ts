@@ -7,6 +7,7 @@ const english = {
   searchNav: 'Search SOPs',
   assistantNav: 'SOP Assistant',
   libraryNav: 'Policy Library',
+  systemAdminNav: 'System Admin',
   profile: 'Profile',
   language: 'Language',
   logout: 'Logout',
@@ -35,7 +36,7 @@ const english = {
   accountAccessError:
     'This Firebase account is not linked to an active Aziz Jan Group employee profile.',
   backendUnavailable:
-    'The AJT service could not be reached. Your login is still active; retry the connection.',
+    'The AJG service could not be reached. Your login is still active; retry the connection.',
   retry: 'Retry',
   switchAccount: 'Sign out and switch account',
   loginDevAccess: 'Development access',
@@ -143,6 +144,7 @@ const urdu: Record<MessageKey, string> = {
   searchNav: 'ایس او پیز تلاش کریں',
   assistantNav: 'ایس او پی معاون',
   libraryNav: 'پالیسی لائبریری',
+  systemAdminNav: 'سسٹم ایڈمن',
   profile: 'پروفائل',
   language: 'زبان',
   logout: 'لاگ آؤٹ',
@@ -171,7 +173,7 @@ const urdu: Record<MessageKey, string> = {
   accountAccessError:
     'یہ فائر بیس اکاؤنٹ عزیز جان گروپ کے فعال ملازم پروفائل سے منسلک نہیں ہے۔',
   backendUnavailable:
-    'اے جے ٹی سروس سے رابطہ نہیں ہو سکا۔ آپ کا لاگ اِن فعال ہے؛ دوبارہ کوشش کریں۔',
+    'اے جے جی سروس سے رابطہ نہیں ہو سکا۔ آپ کا لاگ اِن فعال ہے؛ دوبارہ کوشش کریں۔',
   retry: 'دوبارہ کوشش کریں',
   switchAccount: 'سائن آؤٹ کریں اور اکاؤنٹ بدلیں',
   loginDevAccess: 'ترقیاتی رسائی',
@@ -275,6 +277,7 @@ const romanUrdu: Record<MessageKey, string> = {
   searchNav: 'SOPs talash karein',
   assistantNav: 'SOP Assistant',
   libraryNav: 'Policy Library',
+  systemAdminNav: 'System Admin',
   profile: 'Profile',
   language: 'Zaban',
   logout: 'Logout',
@@ -304,7 +307,7 @@ const romanUrdu: Record<MessageKey, string> = {
   accountAccessError:
     'Yeh Firebase account Aziz Jan Group ke active employee profile se linked nahin hai.',
   backendUnavailable:
-    'AJT service se rabta nahin ho saka. Aap ka login active hai; dobara koshish karein.',
+    'AJG service se rabta nahin ho saka. Aap ka login active hai; dobara koshish karein.',
   retry: 'Dobara koshish karein',
   switchAccount: 'Sign out karke account badlein',
   loginDevAccess: 'Development access',

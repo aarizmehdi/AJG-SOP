@@ -4,6 +4,7 @@ import { apiRequest } from '../../../api/client';
 import { ErrorState } from '../../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../../components/feedback/RouteSkeleton';
 import { organizationSummarySchema } from '../../../types/admin';
+import { systemAdminErrorDetail } from '../errorDetail';
 
 export default function OrganizationSettingsPage() {
   const organization = useQuery({
@@ -16,7 +17,10 @@ export default function OrganizationSettingsPage() {
     return (
       <ErrorState
         title="Organization unavailable"
-        detail="AJT settings could not be loaded."
+        detail={systemAdminErrorDetail(
+          organization.error,
+          'The organization record could not be loaded.',
+        )}
       />
     );
   const catalogCards = [
@@ -38,7 +42,7 @@ export default function OrganizationSettingsPage() {
         </div>
       </div>
       <section className="surface organization-identity-card">
-        <span className="organization-monogram">AJT</span>
+        <span className="organization-monogram">AJG</span>
         <div>
           <span className="eyebrow">Current organization</span>
           <h3>{organization.data.name}</h3>

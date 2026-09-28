@@ -1,4 +1,4 @@
-# Aziz Jan Trust SOP Knowledge System
+# Aziz Jan Group SOP Knowledge System
 
 Phase 1 foundation for secure SOP discovery and evidence-grounded explanations. The original
 document and human-reviewed canonical SOP are authoritative; retrieval indexes and language-model

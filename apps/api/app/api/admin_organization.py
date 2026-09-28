@@ -1,11 +1,11 @@
 from typing import Annotated, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from apps.api.app.auth.dependencies import CurrentProfile
 from apps.api.app.auth.permissions import require_system_admin
-from apps.api.app.models.organization import CatalogKind, OrganizationCatalogItem
+from apps.api.app.models.organization import CatalogKind, Organization, OrganizationCatalogItem
 from apps.api.app.services.organization_service import (
     CatalogConflictError,
     CatalogReferenceError,
@@ -43,9 +43,22 @@ def _kind(value: str) -> CatalogKind:
 async def organization_summary(request: Request, profile: CurrentProfile) -> dict[str, object]:
     require_system_admin(profile)
     database = request.app.state.database
+    record = await database.get_one("organizations", profile.organization_id, {})
+    if record is None:
+        raise HTTPException(status_code=404, detail="Organization record not found")
+    try:
+        organization = Organization.model_validate(
+            {
+                field: record[field]
+                for field in ("organization_id", "name", "slug", "created_at")
+                if field in record
+            }
+        )
+    except ValidationError as error:
+        raise HTTPException(status_code=500, detail="Organization record is invalid") from error
     return {
-        "organization_id": profile.organization_id,
-        "name": "Aziz Jan Trust" if profile.organization_id == "ajt" else profile.organization_id,
+        "organization_id": organization.organization_id,
+        "name": organization.name,
         "catalog_counts": {
             kind.value: await database.count_documents(
                 kind.value, profile.organization_id, {"active": True}

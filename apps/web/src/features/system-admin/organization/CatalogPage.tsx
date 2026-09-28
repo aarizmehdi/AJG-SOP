@@ -10,6 +10,7 @@ import {
   type CatalogItem,
   type CatalogKind,
 } from '../../../types/admin';
+import { systemAdminErrorDetail } from '../errorDetail';
 
 const copy: Record<
   CatalogKind,
@@ -104,7 +105,7 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
     return (
       <ErrorState
         title={`${copy[kind].title} unavailable`}
-        detail="You may not have System Administrator access, or the service could not be reached."
+        detail={systemAdminErrorDetail(list.error)}
       />
     );
   return (

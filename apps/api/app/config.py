@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     app_mode: Literal["fixture", "live"] = "fixture"
     app_env: str = "development"
-    app_name: str = "Aziz Jan Trust SOP Knowledge System"
+    app_name: str = "Aziz Jan Group SOP Knowledge System"
     api_prefix: str = "/api/v1"
     web_origin: str = "http://localhost:5173"
     cors_origins: str = ""

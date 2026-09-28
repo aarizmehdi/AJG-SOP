@@ -45,6 +45,7 @@ export class ApiError extends Error {
     readonly status: number,
   ) {
     super(message);
+    this.name = 'ApiError';
   }
 }
 
@@ -76,7 +77,20 @@ export async function apiRequest<T>(
       response.status,
     );
   }
-  return schema.parse(await response.json());
+  const body: unknown = await response.json().catch(() => {
+    throw new ApiError(
+      'The API returned a response that could not be read',
+      502,
+    );
+  });
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    throw new ApiError(
+      'The server response is incompatible with this application version',
+      502,
+    );
+  }
+  return parsed.data;
 }
 
 export async function apiBlob(path: string): Promise<Blob> {

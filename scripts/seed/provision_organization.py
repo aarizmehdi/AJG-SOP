@@ -110,7 +110,7 @@ def main() -> None:
     parser.add_argument("--mongo-uri", required=True, help="MongoDB connection string")
     parser.add_argument("--db-name", default="ajt_sop", help="Database name (default: ajt_sop)")
     parser.add_argument("--org-id", default="ajt", help="Organization ID (default: ajt)")
-    parser.add_argument("--org-name", default="Aziz Jan Trust", help="Organization name")
+    parser.add_argument("--org-name", default="Aziz Jan Group", help="Organization name")
     parser.add_argument("--org-slug", default="ajt", help="Organization slug")
     parser.add_argument(
         "--firebase-uid", required=True, help="Existing Firebase Authentication UID"

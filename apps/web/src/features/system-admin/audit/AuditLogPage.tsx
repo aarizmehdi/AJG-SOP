@@ -5,6 +5,7 @@ import { apiRequest } from '../../../api/client';
 import { ErrorState } from '../../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../../components/feedback/RouteSkeleton';
 import { auditPageSchema, userPageSchema } from '../../../types/admin';
+import { systemAdminErrorDetail } from '../errorDetail';
 
 export default function AuditLogPage() {
   const [action, setAction] = useState('');
@@ -53,7 +54,7 @@ export default function AuditLogPage() {
     return (
       <ErrorState
         title="Audit log unavailable"
-        detail="Organization-wide audit history requires System Administrator access."
+        detail={systemAdminErrorDetail(events.error)}
       />
     );
   return (

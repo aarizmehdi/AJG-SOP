@@ -19,6 +19,7 @@ import {
 import { profileSchema } from '../../../types/profile';
 import { UserAccessEditor } from './UserAccessEditor';
 import { formIsComplete, userToForm, type UserFormState } from './userForm';
+import { systemAdminErrorDetail } from '../errorDetail';
 
 export default function UserDetailPage() {
   const { userId = '' } = useParams();
@@ -102,7 +103,10 @@ export default function UserDetailPage() {
     return (
       <ErrorState
         title="User unavailable"
-        detail="This user does not exist in your organization."
+        detail={systemAdminErrorDetail(
+          user.error,
+          'This user does not exist in your organization.',
+        )}
       />
     );
   if (!form) return <RouteSkeleton label="Preparing user access" />;
