@@ -1276,6 +1276,8 @@ export interface components {
       sections: components['schemas']['PolicyReaderSection'][];
       /** Original Download Allowed */
       original_download_allowed: boolean;
+      /** Original Sources */
+      original_sources?: components['schemas']['PolicyReaderSource'][];
     };
     /** PolicyReaderSection */
     PolicyReaderSection: {
@@ -1291,11 +1293,32 @@ export interface components {
       heading: string;
       /** Heading Path */
       heading_path: string[];
+      /**
+       * Heading Level
+       * @default 1
+       */
+      heading_level: number;
+      /** Parent Section Id */
+      parent_section_id?: string | null;
+      /** Chapter */
+      chapter?: string | null;
       /** Policy Number */
       policy_number?: string | null;
       /** Content */
       content: string;
+      /** Blocks */
+      blocks?: components['schemas']['CanonicalBlock-Output'][];
       source: components['schemas']['SourceLocator'];
+    };
+    /** PolicyReaderSource */
+    PolicyReaderSource: {
+      /** Source Id */
+      source_id: string;
+      /** File Name */
+      file_name: string;
+      /** Media Type */
+      media_type: string;
+      source_format: components['schemas']['SourceFormat'];
     };
     /**
      * PolicyStatus
@@ -1468,6 +1491,13 @@ export interface components {
       sha256: string;
       /** Original Artifact Uri */
       original_artifact_uri: string;
+      /** Structured Artifact Uri */
+      structured_artifact_uri?: string | null;
+      /** Structured File Name */
+      structured_file_name?: string | null;
+      /** Structured Media Type */
+      structured_media_type?: string | null;
+      structured_source_format?: components['schemas']['SourceFormat'] | null;
       /** @default uploaded */
       status: components['schemas']['SourceStatus'];
       /** Parser Provider */

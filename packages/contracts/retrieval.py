@@ -3,8 +3,9 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.contracts.canonical import SourceLocator
+from packages.contracts.canonical import CanonicalBlock, SourceLocator
 from packages.contracts.common import Language, OrganizationOwned
+from packages.contracts.source import SourceFormat
 
 
 class CandidateChannel(StrEnum):
@@ -52,9 +53,21 @@ class PolicyReaderSection(OrganizationOwned):
     section_id: str
     heading: str
     heading_path: tuple[str, ...]
+    heading_level: int = Field(default=1, ge=1, le=6)
+    parent_section_id: str | None = None
+    chapter: str | None = None
     policy_number: str | None = None
     content: str
+    blocks: list[CanonicalBlock] = Field(default_factory=list)
     source: SourceLocator
+
+
+class PolicyReaderSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_id: str
+    file_name: str
+    media_type: str
+    source_format: SourceFormat
 
 
 class PolicyReaderDocument(BaseModel):
@@ -65,6 +78,7 @@ class PolicyReaderDocument(BaseModel):
     version_label: str
     sections: list[PolicyReaderSection]
     original_download_allowed: bool
+    original_sources: list[PolicyReaderSource] = Field(default_factory=list)
 
 
 class AvailablePolicySummary(BaseModel):

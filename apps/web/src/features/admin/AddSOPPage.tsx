@@ -62,9 +62,14 @@ const formats: {
 ];
 
 export default function AddSOPPage() {
+  const [workflow, setWorkflow] = useState<'verified_pair' | 'single'>(
+    'verified_pair',
+  );
   const [format, setFormat] = useState<SourceFormat>('pdf');
   const [markdownMode, setMarkdownMode] = useState<'file' | 'paste'>('file');
   const [file, setFile] = useState<File | null>(null);
+  const [originalFile, setOriginalFile] = useState<File | null>(null);
+  const [structuredFile, setStructuredFile] = useState<File | null>(null);
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Operations');
@@ -98,6 +103,19 @@ export default function AddSOPPage() {
           access,
         }),
       });
+      if (workflow === 'verified_pair') {
+        if (!originalFile || !structuredFile)
+          throw new Error('Choose both the original PDF and cleaned Markdown');
+        const body = new FormData();
+        body.set('policy_id', draft.policy.id);
+        body.set('version_id', draft.version.id);
+        body.set('original_file', originalFile);
+        body.set('structured_file', structuredFile);
+        return apiRequest('/admin/sources/import', sourceDocumentSchema, {
+          method: 'POST',
+          body,
+        });
+      }
       const pasteMarkdown = format === 'markdown' && markdownMode === 'paste';
       if (format === 'structured_text' || pasteMarkdown) {
         return apiRequest('/admin/sources/paste', sourceDocumentSchema, {
@@ -224,96 +242,174 @@ export default function AddSOPPage() {
           ingestion.
         </strong>
       </section>
-      <div className="format-grid">
-        {formats.map(({ id, label, note, icon: Icon }) => {
-          const capability = capabilities.data?.find(
-            (item) => item.source_format === id,
-          );
-          return (
-            <button
-              key={id}
-              className={`format-card${format === id ? ' selected' : ''}`}
-              onClick={() => {
-                setFormat(id);
-                setFile(null);
-              }}
-            >
-              <Icon />
-              <strong>{label}</strong>
-              <span>
-                {capability
-                  ? `${capability.available ? capability.provider : 'Provider required'} · ${capability.detail}`
-                  : note}
-              </span>
-              {format === id && <CheckCircle2 className="selected-check" />}
-            </button>
-          );
-        })}
-      </div>
+      <section
+        className="source-workflow surface"
+        aria-labelledby="source-workflow-title"
+      >
+        <div>
+          <span className="eyebrow">Source workflow</span>
+          <h3 id="source-workflow-title">Choose how AJG supplied this SOP</h3>
+          <p>
+            Keep the authoritative original separate from structured ingestion
+            content.
+          </p>
+        </div>
+        <div className="source-workflow-options">
+          <button
+            type="button"
+            className={workflow === 'verified_pair' ? 'selected' : ''}
+            aria-pressed={workflow === 'verified_pair'}
+            onClick={() => {
+              setWorkflow('verified_pair');
+            }}
+          >
+            <strong>Original PDF + cleaned Markdown</strong>
+            <span>Preferred verified-document workflow</span>
+          </button>
+          <button
+            type="button"
+            className={workflow === 'single' ? 'selected' : ''}
+            aria-pressed={workflow === 'single'}
+            onClick={() => {
+              setWorkflow('single');
+            }}
+          >
+            <strong>Single source or pasted text</strong>
+            <span>PDF, scan, DOCX, XLSX, Markdown, image or text</span>
+          </button>
+        </div>
+      </section>
+      {workflow === 'single' && (
+        <div className="format-grid">
+          {formats.map(({ id, label, note, icon: Icon }) => {
+            const capability = capabilities.data?.find(
+              (item) => item.source_format === id,
+            );
+            return (
+              <button
+                key={id}
+                className={`format-card${format === id ? ' selected' : ''}`}
+                onClick={() => {
+                  setFormat(id);
+                  setFile(null);
+                }}
+              >
+                <Icon />
+                <strong>{label}</strong>
+                <span>
+                  {capability
+                    ? `${capability.available ? capability.provider : 'Provider required'} · ${capability.detail}`
+                    : note}
+                </span>
+                {format === id && <CheckCircle2 className="selected-check" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="upload-panel surface">
-        {format === 'markdown' && (
-          <>
-            <div className="form-actions" aria-label="Markdown input method">
-              <Button
-                variant={markdownMode === 'file' ? 'primary' : 'secondary'}
-                onClick={() => {
-                  setMarkdownMode('file');
+        {workflow === 'verified_pair' ? (
+          <div className="paired-source-grid">
+            <label className="drop-zone paired-source-card">
+              <Upload />
+              <span className="eyebrow">Original source</span>
+              <strong>{originalFile?.name ?? 'Upload original PDF'}</strong>
+              <span>
+                The authoritative AJG document used for verification and audit.
+              </span>
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={(event) => {
+                  setOriginalFile(event.target.files?.[0] ?? null);
                 }}
-              >
-                Upload .md file
-              </Button>
-              <Button
-                variant={markdownMode === 'paste' ? 'primary' : 'secondary'}
-                onClick={() => {
-                  setMarkdownMode('paste');
+              />
+            </label>
+            <label className="drop-zone paired-source-card">
+              <FileText />
+              <span className="eyebrow">Structured content</span>
+              <strong>
+                {structuredFile?.name ?? 'Upload cleaned Markdown'}
+              </strong>
+              <span>
+                Human-reviewed structured content used to create the canonical
+                SOP.
+              </span>
+              <input
+                type="file"
+                accept=".md,.markdown,text/markdown"
+                onChange={(event) => {
+                  setStructuredFile(event.target.files?.[0] ?? null);
                 }}
-              >
-                Paste Markdown
-              </Button>
-            </div>
-            <p className="field-help">
-              Optional metadata: title, policy_number and effective_date in a
-              leading --- block. Dates use YYYY-MM-DD.
-            </p>
-          </>
-        )}
-        {isPaste ? (
-          <>
-            <label htmlFor="source-text">Policy content</label>
-            <textarea
-              id="source-text"
-              rows={12}
-              value={text}
-              onChange={(event) => {
-                setText(event.target.value);
-              }}
-              placeholder={
-                format === 'markdown'
-                  ? '---\ntitle: Policy title\npolicy_number: SOP-76\neffective_date: 2026-09-25\n---\n# Policy title\n\n## 1. Section'
-                  : 'Paste the structured policy text here…'
-              }
-            />
-          </>
+              />
+            </label>
+          </div>
         ) : (
-          <label className="drop-zone">
-            <Upload />
-            <strong>{file?.name ?? 'Choose the original source file'}</strong>
-            <span>
-              The source is hashed and stored privately before processing.
-            </span>
-            <input
-              type="file"
-              accept={
-                format === 'markdown'
-                  ? '.md,.markdown,text/markdown'
-                  : undefined
-              }
-              onChange={(event) => {
-                setFile(event.target.files?.[0] ?? null);
-              }}
-            />
-          </label>
+          format === 'markdown' && (
+            <>
+              <div className="form-actions" aria-label="Markdown input method">
+                <Button
+                  variant={markdownMode === 'file' ? 'primary' : 'secondary'}
+                  onClick={() => {
+                    setMarkdownMode('file');
+                  }}
+                >
+                  Upload .md file
+                </Button>
+                <Button
+                  variant={markdownMode === 'paste' ? 'primary' : 'secondary'}
+                  onClick={() => {
+                    setMarkdownMode('paste');
+                  }}
+                >
+                  Paste Markdown
+                </Button>
+              </div>
+              <p className="field-help">
+                Optional metadata: title, policy_number and effective_date in a
+                leading --- block. Dates use YYYY-MM-DD.
+              </p>
+            </>
+          )
         )}
+        {workflow === 'single' &&
+          (isPaste ? (
+            <>
+              <label htmlFor="source-text">Policy content</label>
+              <textarea
+                id="source-text"
+                rows={12}
+                value={text}
+                onChange={(event) => {
+                  setText(event.target.value);
+                }}
+                placeholder={
+                  format === 'markdown'
+                    ? '---\ntitle: Policy title\npolicy_number: SOP-76\neffective_date: 2026-09-25\n---\n# Policy title\n\n## 1. Section'
+                    : 'Paste the structured policy text here…'
+                }
+              />
+            </>
+          ) : (
+            <label className="drop-zone">
+              <Upload />
+              <strong>{file?.name ?? 'Choose the original source file'}</strong>
+              <span>
+                The source is hashed and stored privately before processing.
+              </span>
+              <input
+                type="file"
+                accept={
+                  format === 'markdown'
+                    ? '.md,.markdown,text/markdown'
+                    : undefined
+                }
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null);
+                }}
+              />
+            </label>
+          ))}
         {upload.isError && (
           <ErrorState title="Upload failed" detail={upload.error.message} />
         )}
@@ -331,13 +427,21 @@ export default function AddSOPPage() {
               upload.isPending ||
               !title.trim() ||
               !accessComplete ||
-              (isPaste ? !text.trim() : !file)
+              (workflow === 'verified_pair'
+                ? !originalFile || !structuredFile
+                : isPaste
+                  ? !text.trim()
+                  : !file)
             }
             onClick={() => {
               upload.mutate();
             }}
           >
-            {upload.isPending ? 'Preserving source…' : 'Upload and extract'}
+            {upload.isPending
+              ? 'Preserving source…'
+              : workflow === 'verified_pair'
+                ? 'Import and build canonical SOP'
+                : 'Upload and extract'}
           </Button>
         </div>
       </div>

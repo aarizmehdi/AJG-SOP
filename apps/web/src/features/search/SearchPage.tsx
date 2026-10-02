@@ -75,7 +75,11 @@ export default function SearchPage() {
             <span>{t('searchAuthorized')}</span>
           </div>
           {search.data.results.map((evidence) => (
-            <SourceCitation evidence={evidence} key={evidence.chunk_id} />
+            <SourceCitation
+              evidence={evidence}
+              query={search.data.query}
+              key={evidence.chunk_id}
+            />
           ))}
         </section>
       ) : null}

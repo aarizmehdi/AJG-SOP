@@ -1,10 +1,18 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, LocateFixed, Plus, UserCheck } from 'lucide-react';
+import {
+  ChevronLeft,
+  LocateFixed,
+  PencilLine,
+  Plus,
+  UserCheck,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
+import { CanonicalDocumentRenderer } from '../../components/documents/CanonicalDocumentRenderer';
 import { Button } from '../../components/ui/Button';
 import { versionSchema } from '../../types/policy';
 import { profileSchema, type Profile } from '../../types/profile';
@@ -30,6 +38,8 @@ function ReviewEditor({
 }) {
   const { copy } = useAdminCopy();
   const [draft, setDraft] = useState(initial);
+  const [savedCanonical, setSavedCanonical] = useState(initial);
+  const [editing, setEditing] = useState(false);
   const [versionId, setVersionId] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const isSystemAdmin = profile.application_roles.includes('system_admin');
@@ -39,6 +49,11 @@ function ReviewEditor({
         method: 'PUT',
         body: JSON.stringify({ canonical: draft }),
       }),
+    onSuccess: (canonical) => {
+      setDraft(canonical);
+      setSavedCanonical(canonical);
+      setEditing(false);
+    },
   });
   const approve = useMutation({
     mutationFn: () =>
@@ -234,7 +249,31 @@ function ReviewEditor({
               <span className="pane-label">{copy.canonicalSop}</span>
               <strong>{draft.title}</strong>
             </div>
-            <span>Schema 1.0</span>
+            <div className="review-pane-actions">
+              <span>{editing ? 'Schema 1.0' : copy.readOnlyPreview}</span>
+              {editing ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setDraft(savedCanonical);
+                    setEditing(false);
+                  }}
+                >
+                  <X size={15} aria-hidden="true" />
+                  {copy.cancelEditing}
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setEditing(true);
+                  }}
+                >
+                  <PencilLine size={15} aria-hidden="true" />
+                  {copy.editCanonical}
+                </Button>
+              )}
+            </div>
           </header>
           <nav className="review-toc" aria-label={copy.structuredSopContents}>
             <strong>{copy.contents}</strong>
@@ -255,131 +294,148 @@ function ReviewEditor({
               ))}
             </div>
           </nav>
-          <div className="canonical-editor">
-            {draft.sections.map((section) => (
-              <article
-                key={section.id}
-                id={`review-${section.id}`}
-                className="section-editor"
-              >
-                <div className="section-path">
-                  <LocateFixed />
-                  {section.heading_path.join(' → ')}
-                </div>
-                <div className="structure-fields">
-                  <label>
-                    {copy.heading}
-                    <input
-                      value={section.heading}
-                      onChange={(event) => {
-                        updateHeading(section.id, event.target.value);
-                      }}
-                    />
-                  </label>
-                  <label>
-                    {copy.level}
-                    <input
-                      type="number"
-                      min="1"
-                      max="6"
-                      value={section.heading_level}
-                      onChange={(event) => {
-                        updateLevel(section.id, Number(event.target.value));
-                      }}
-                    />
-                  </label>
-                  {pages.length > 0 && (
+          {editing ? (
+            <div className="canonical-editor">
+              {draft.sections.map((section) => (
+                <article
+                  key={section.id}
+                  id={`review-${section.id}`}
+                  className="section-editor"
+                >
+                  <div className="section-path">
+                    <LocateFixed />
+                    {section.heading_path.join(' → ')}
+                  </div>
+                  <div className="structure-fields">
                     <label>
-                      {copy.sourcePage}
-                      <select
-                        value={section.source.page_start ?? pages[0]}
+                      {copy.heading}
+                      <input
+                        value={section.heading}
                         onChange={(event) => {
-                          updatePage(section.id, Number(event.target.value));
-                        }}
-                      >
-                        {pages.map((page) => (
-                          <option key={page} value={page}>
-                            {page}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </div>
-                {section.blocks.map((block) =>
-                  block.text !== null ? (
-                    <label key={block.id}>
-                      {copy.content}
-                      <textarea
-                        value={block.text}
-                        rows={4}
-                        onChange={(event) => {
-                          updateText(section.id, block.id, event.target.value);
+                          updateHeading(section.id, event.target.value);
                         }}
                       />
                     </label>
-                  ) : block.list_items.length > 0 ? (
-                    <fieldset className="structured-editor" key={block.id}>
-                      <legend>
-                        {block.kind === 'ordered_list'
-                          ? copy.orderedList
-                          : copy.unorderedList}
-                      </legend>
-                      {block.list_items.map((item, index) => (
-                        <label key={`${block.id}-${String(index)}`}>
-                          {copy.item} {index + 1}
-                          <input
-                            value={item.text}
-                            onChange={(event) => {
-                              updateListItem(
-                                section.id,
-                                block.id,
-                                index,
-                                event.target.value,
-                              );
-                            }}
-                          />
-                        </label>
-                      ))}
-                    </fieldset>
-                  ) : block.table ? (
-                    <fieldset className="structured-editor" key={block.id}>
-                      <legend>{copy.tableCells}</legend>
-                      {block.table.cells.map((cell) => (
-                        <label
-                          key={`${String(cell.row)}-${String(cell.column)}`}
+                    <label>
+                      {copy.level}
+                      <input
+                        type="number"
+                        min="1"
+                        max="6"
+                        value={section.heading_level}
+                        onChange={(event) => {
+                          updateLevel(section.id, Number(event.target.value));
+                        }}
+                      />
+                    </label>
+                    {pages.length > 0 && (
+                      <label>
+                        {copy.sourcePage}
+                        <select
+                          value={section.source.page_start ?? pages[0]}
+                          onChange={(event) => {
+                            updatePage(section.id, Number(event.target.value));
+                          }}
                         >
-                          R{cell.row + 1} C{cell.column + 1}
-                          <input
-                            value={cell.text}
-                            onChange={(event) => {
-                              updateTableCell(
-                                section.id,
-                                block.id,
-                                cell.row,
-                                cell.column,
-                                event.target.value,
-                              );
-                            }}
-                          />
-                        </label>
-                      ))}
-                    </fieldset>
-                  ) : null,
-                )}
-                <button
-                  className="add-section"
-                  type="button"
-                  onClick={() => {
-                    addSection(section.id);
-                  }}
-                >
-                  <Plus />
-                  {copy.addSectionAfter}
-                </button>
-              </article>
-            ))}
-          </div>
+                          {pages.map((page) => (
+                            <option key={page} value={page}>
+                              {page}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                  {section.blocks.map((block) =>
+                    block.text !== null ? (
+                      <label key={block.id}>
+                        {copy.content}
+                        <textarea
+                          value={block.text}
+                          rows={4}
+                          onChange={(event) => {
+                            updateText(
+                              section.id,
+                              block.id,
+                              event.target.value,
+                            );
+                          }}
+                        />
+                      </label>
+                    ) : block.list_items.length > 0 ? (
+                      <fieldset className="structured-editor" key={block.id}>
+                        <legend>
+                          {block.kind === 'ordered_list'
+                            ? copy.orderedList
+                            : copy.unorderedList}
+                        </legend>
+                        {block.list_items.map((item, index) => (
+                          <label key={`${block.id}-${String(index)}`}>
+                            {copy.item} {index + 1}
+                            <input
+                              value={item.text}
+                              onChange={(event) => {
+                                updateListItem(
+                                  section.id,
+                                  block.id,
+                                  index,
+                                  event.target.value,
+                                );
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </fieldset>
+                    ) : block.table ? (
+                      <fieldset className="structured-editor" key={block.id}>
+                        <legend>{copy.tableCells}</legend>
+                        {block.table.cells.map((cell) => (
+                          <label
+                            key={`${String(cell.row)}-${String(cell.column)}`}
+                          >
+                            R{cell.row + 1} C{cell.column + 1}
+                            <input
+                              value={cell.text}
+                              onChange={(event) => {
+                                updateTableCell(
+                                  section.id,
+                                  block.id,
+                                  cell.row,
+                                  cell.column,
+                                  event.target.value,
+                                );
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </fieldset>
+                    ) : null,
+                  )}
+                  <button
+                    className="add-section"
+                    type="button"
+                    onClick={() => {
+                      addSection(section.id);
+                    }}
+                  >
+                    <Plus />
+                    {copy.addSectionAfter}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <CanonicalDocumentRenderer
+              sections={draft.sections}
+              idPrefix="review"
+              className="review-canonical-preview"
+              sourceLabel={(section) =>
+                section.source.page_start
+                  ? `${copy.sourcePage} ${String(section.source.page_start)}`
+                  : null
+              }
+            />
+          )}
           <div className="review-identity">
             <UserCheck size={20} aria-hidden="true" />
             <div>
@@ -415,15 +471,17 @@ function ReviewEditor({
                       ? copy.correctionsSaved
                       : ''}
             </span>
-            <Button
-              variant="secondary"
-              disabled={save.isPending}
-              onClick={() => {
-                save.mutate();
-              }}
-            >
-              {copy.saveCorrection}
-            </Button>
+            {editing && (
+              <Button
+                variant="secondary"
+                disabled={save.isPending}
+                onClick={() => {
+                  save.mutate();
+                }}
+              >
+                {copy.saveCorrection}
+              </Button>
+            )}
             {!approve.isSuccess && (
               <Button
                 disabled={approve.isPending || !confirmed}

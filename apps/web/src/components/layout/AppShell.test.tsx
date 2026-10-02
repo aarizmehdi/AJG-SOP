@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../../api/client';
@@ -64,7 +64,7 @@ describe('AppShell role-aware admin navigation', () => {
     vi.mocked(apiRequest).mockReset();
   });
 
-  it('represents the control plane as System Admin for system administrators', async () => {
+  it('shows the full context-aware workspace for system administrators', async () => {
     renderShell(
       {
         ...baseProfile,
@@ -73,12 +73,25 @@ describe('AppShell role-aware admin navigation', () => {
       '/admin/users',
     );
 
-    const link = await screen.findByRole('link', { name: 'System Admin' });
-    expect(link).toHaveAttribute('href', '/admin/overview');
-    expect(link).toHaveClass('active');
+    const users = await screen.findByRole('link', { name: 'Users' });
+    expect(users).toHaveAttribute('href', '/admin/users');
+    expect(users).toHaveClass('active');
     expect(
-      screen.queryByRole('link', { name: 'Policy Library' }),
+      screen.queryByRole('link', { name: 'Home' }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Search SOPs' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'People & Access' }),
+    ).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Knowledge' }));
+    expect(screen.getByRole('link', { name: 'SOP Library' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Add SOP' })).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Governance' }));
+    expect(screen.getByRole('link', { name: 'Audit Log' })).toBeVisible();
   });
 
   it('keeps the Policy Library entry for scoped SOP administrators', async () => {
@@ -87,11 +100,18 @@ describe('AppShell role-aware admin navigation', () => {
       '/admin/policies',
     );
 
-    const link = await screen.findByRole('link', { name: 'Policy Library' });
+    const link = await screen.findByRole('link', { name: 'SOP Library' });
     expect(link).toHaveAttribute('href', '/admin/policies');
     expect(link).toHaveClass('active');
     expect(
       screen.queryByRole('link', { name: 'System Admin' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Review Queue' })).toBeVisible();
+    expect(
+      screen.queryByRole('link', { name: 'Add SOP' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'People & Access' }),
     ).not.toBeInTheDocument();
   });
 
@@ -103,7 +123,35 @@ describe('AppShell role-aware admin navigation', () => {
       screen.queryByRole('link', { name: 'System Admin' }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('link', { name: 'Policy Library' }),
+      screen.queryByRole('link', { name: 'SOP Library' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('opens and closes the administration drawer from the mobile-header control', async () => {
+    renderShell(
+      {
+        ...baseProfile,
+        application_roles: ['employee', 'sop_admin', 'system_admin'],
+      },
+      '/admin/overview',
+    );
+
+    const open = await screen.findByRole('button', {
+      name: 'Open administration navigation',
+    });
+    fireEvent.click(open);
+    const closeControls = screen.getAllByRole('button', {
+      name: 'Close administration navigation',
+    });
+    const close = closeControls.find(
+      (control) => control.getAttribute('aria-expanded') === 'true',
+    );
+    expect(close).toHaveAttribute('aria-expanded', 'true');
+    expect(close).toBeDefined();
+    if (!close) throw new Error('Close navigation control was not rendered');
+    fireEvent.click(close);
+    expect(
+      screen.getByRole('button', { name: 'Open administration navigation' }),
+    ).toHaveAttribute('aria-expanded', 'false');
   });
 });

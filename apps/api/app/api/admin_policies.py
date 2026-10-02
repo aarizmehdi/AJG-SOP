@@ -121,6 +121,13 @@ def _source_summary(source: SourceDocument) -> dict[str, object]:
         "file_name": source.file_name,
         "media_type": source.media_type,
         "source_format": source.source_format.value,
+        "structured_file_name": source.structured_file_name,
+        "structured_media_type": source.structured_media_type,
+        "structured_source_format": (
+            source.structured_source_format.value
+            if source.structured_source_format is not None
+            else None
+        ),
         "status": source.status.value,
         "created_at": source.created_at.isoformat(),
     }

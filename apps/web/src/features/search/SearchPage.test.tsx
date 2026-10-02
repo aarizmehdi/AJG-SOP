@@ -65,4 +65,76 @@ describe('search language contract', () => {
       language: 'roman_urdu',
     });
   });
+
+  it('highlights matching query terms without injecting HTML', async () => {
+    window.localStorage.setItem('ajt-fixture-identity', 'employee');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              results: [
+                {
+                  organization_id: 'ajt',
+                  chunk_id: 'chunk-one',
+                  policy_id: 'policy-one',
+                  version_id: 'version-one',
+                  section_id: 'leave',
+                  policy_title: 'Leave policy',
+                  heading_path: ['Leave', 'Annual leave'],
+                  policy_number: 'HR-1',
+                  excerpt: 'Annual leave requires approval <img src=x>.',
+                  source: {
+                    source_document_id: 'source-one',
+                    page_start: 2,
+                    page_end: 2,
+                    sheet_name: null,
+                    cell_range: null,
+                    block_anchor: null,
+                  },
+                  fused_score: 0.9,
+                },
+              ],
+              query: 'annual approval',
+              language: 'english',
+            }),
+            { status: 200 },
+          ),
+        ),
+      ),
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <LanguageContext
+          value={{
+            language: 'english',
+            hasPreference: true,
+            profileId: 'employee-one',
+            bindProfile: () => {},
+            setLanguage: async () => {},
+            t: (key) => messages.english[key],
+          }}
+        >
+          <MemoryRouter>
+            <SearchPage />
+          </MemoryRouter>
+        </LanguageContext>
+      </QueryClientProvider>,
+    );
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'annual approval' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    const marks = await screen.findAllByText(/annual|approval/i, {
+      selector: 'mark',
+    });
+    expect(marks).toHaveLength(2);
+    expect(document.querySelector('img')).toBeNull();
+    expect(screen.getByText(/<img src=x>/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /View policy/ })).toHaveAttribute(
+      'href',
+      '/policies/policy-one?section=leave',
+    );
+  });
 });

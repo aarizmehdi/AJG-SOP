@@ -119,4 +119,55 @@ describe('assistant response language', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.getByRole('textbox')).toHaveValue('');
   });
+
+  it('links a verified citation to its canonical policy section', async () => {
+    window.localStorage.setItem('ajt-fixture-identity', 'employee');
+    vi.stubGlobal('crypto', { randomUUID: () => 'turn-citation' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              organization_id: 'ajt',
+              answerable: true,
+              answer: 'Gate register mein entry karein.',
+              language: 'roman_urdu',
+              verified: true,
+              session_id: 'session-citation',
+              citations: [
+                {
+                  chunk_id: 'chunk-one',
+                  policy_id: 'policy-one',
+                  policy_title: 'Gate SOP',
+                  section_id: 'entry-register',
+                  heading_path: ['Gate', 'Entry register'],
+                  document_id: 'document-one',
+                  source: {
+                    source_document_id: 'source-one',
+                    page_start: 3,
+                    page_end: 3,
+                    sheet_name: null,
+                    cell_range: null,
+                    block_anchor: null,
+                  },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    );
+    renderAssistant();
+    const field = screen.getByRole('textbox');
+    fireEvent.change(field, { target: { value: 'Gate entry kaise karein?' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+
+    expect(await screen.findByText('Gate SOP')).toBeVisible();
+    expect(screen.getByRole('link', { name: /Gate SOP/ })).toHaveAttribute(
+      'href',
+      '/policies/policy-one?section=entry-register',
+    );
+  });
 });

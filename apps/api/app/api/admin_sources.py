@@ -323,8 +323,22 @@ async def import_source(
         pdf_uri = await artifacts.put(
             profile.organization_id, f"sources/{source.id}/{pdf_name}", pdf_content
         )
-        # Update source document with original PDF artifact URI
-        updated_source = source.model_copy(update={"original_artifact_uri": pdf_uri})
+        # Preserve both independently: the PDF is authoritative while the
+        # human-reviewed structured artifact remains the parser input.
+        updated_source = source.model_copy(
+            update={
+                "file_name": pdf_name,
+                "media_type": "application/pdf",
+                "source_format": SourceFormat.PDF,
+                "original_artifact_uri": pdf_uri,
+                "structured_artifact_uri": source.original_artifact_uri,
+                "structured_file_name": struct_name,
+                "structured_media_type": (
+                    "text/markdown" if is_markdown else "application/json"
+                ),
+                "structured_source_format": source_format,
+            }
+        )
         store.sources[source.id] = updated_source
         store.mark_modified("source_documents", source.id, updated_source)
 
