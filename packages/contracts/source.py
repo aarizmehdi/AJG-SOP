@@ -33,6 +33,10 @@ class SourceDocument(OrganizationOwned):
     source_format: SourceFormat
     sha256: str
     original_artifact_uri: str
+    structured_artifact_uri: str | None = None
+    structured_file_name: str | None = None
+    structured_media_type: str | None = None
+    structured_source_format: SourceFormat | None = None
     status: SourceStatus = SourceStatus.UPLOADED
     parser_provider: str | None = None
     parser_version: str | None = None

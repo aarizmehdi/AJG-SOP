@@ -127,6 +127,13 @@ const viewer = viewerSchema.parse({
                 ],
               },
             },
+            {
+              id: 'checks',
+              kind: 'unordered_list',
+              text: null,
+              list_items: [{ text: 'Wear an identity badge', children: [] }],
+              table: null,
+            },
           ],
         },
         {
@@ -178,6 +185,9 @@ describe('admin canonical SOP reader', () => {
       screen.getByRole('columnheader', { name: 'Hours' }),
     ).toBeInTheDocument();
     expect(screen.getByText('Notify your supervisor')).toBeInTheDocument();
+    expect(
+      screen.getByText('Wear an identity badge').closest('ul'),
+    ).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '1.1 Working Hours' }));
     expect(
       screen.getByRole('heading', { name: '1.1 Working Hours' }),

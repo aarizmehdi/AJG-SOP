@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { canonicalBlockSchema, sourceFormatSchema } from './source';
 
 export const sourceLocatorSchema = z
   .object({
@@ -37,9 +38,19 @@ export const readerSectionSchema = z.object({
   section_id: z.string(),
   heading: z.string(),
   heading_path: z.array(z.string()),
+  heading_level: z.number().default(1),
+  parent_section_id: z.string().nullable().optional().default(null),
+  chapter: z.string().nullable().optional().default(null),
   policy_number: z.string().nullable(),
   content: z.string(),
+  blocks: z.array(canonicalBlockSchema).optional().default([]),
   source: sourceLocatorSchema,
+});
+export const readerSourceSchema = z.object({
+  source_id: z.string(),
+  file_name: z.string(),
+  media_type: z.string(),
+  source_format: sourceFormatSchema,
 });
 export const policyReaderSchema = z.object({
   policy_id: z.string(),
@@ -48,7 +59,10 @@ export const policyReaderSchema = z.object({
   version_label: z.string(),
   sections: z.array(readerSectionSchema),
   original_download_allowed: z.boolean(),
+  original_sources: z.array(readerSourceSchema).optional().default([]),
 });
+export type PolicyReader = z.infer<typeof policyReaderSchema>;
+export type ReaderSource = z.infer<typeof readerSourceSchema>;
 
 export const availablePolicySchema = z.object({
   policy_id: z.string(),

@@ -1,10 +1,13 @@
 import {
   BookOpen,
   Library,
+  Menu,
   MessageCircle,
   Search,
   ShieldCheck,
+  X,
 } from 'lucide-react';
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
@@ -13,6 +16,7 @@ import { ProfileMenu } from './ProfileMenu';
 import { AnimatedOutlet } from './AnimatedOutlet';
 import { BrandMark } from '../ui/BrandMark';
 import { useLanguage } from '../../features/language/useLanguage';
+import { AdminSidebarNavigation } from './AdminSidebarNavigation';
 
 const links = [
   { to: '/home', key: 'home', icon: BookOpen },
@@ -23,6 +27,7 @@ const links = [
 export function AppShell() {
   const { t } = useLanguage();
   const location = useLocation();
+  const [adminDrawerPath, setAdminDrawerPath] = useState<string | null>(null);
   const profile = useQuery({
     queryKey: ['profile'],
     queryFn: () => apiRequest('/profile/me', profileSchema),
@@ -33,6 +38,9 @@ export function AppShell() {
     ) ?? false;
   const isSystemAdmin =
     profile.data?.application_roles.includes('system_admin') ?? false;
+  const adminWorkspace = location.pathname.startsWith('/admin');
+  const adminDrawerOpen = adminDrawerPath === location.pathname;
+  const adminHome = isSystemAdmin ? '/admin/overview' : '/admin/policies';
   const visibleLinks = [
     ...links,
     ...(isAdmin
@@ -51,49 +59,107 @@ export function AppShell() {
         ]
       : []),
   ];
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <NavLink to="/home" className="brand" aria-label={t('brandName')}>
+    <div className={`app-shell${adminWorkspace ? ' app-shell--admin' : ''}`}>
+      <aside
+        className={`sidebar${adminWorkspace ? ' sidebar--admin' : ''}${
+          adminDrawerOpen ? ' open' : ''
+        }`}
+      >
+        <NavLink
+          to={adminWorkspace && isAdmin ? adminHome : '/home'}
+          className="brand"
+          aria-label={t('brandName')}
+        >
           <BrandMark compact />
           <span>
             <strong>{t('brandTitle')}</strong>
             <small>{t('brandName')}</small>
           </span>
         </NavLink>
-        <nav
-          className={isAdmin ? 'nav--admin' : undefined}
-          aria-label={t('brandTitle')}
-        >
-          {visibleLinks.map(({ to, key, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `nav-link${
-                  isActive ||
-                  (to.startsWith('/admin') &&
-                    location.pathname.startsWith('/admin'))
-                    ? ' active'
-                    : ''
-                }`
-              }
-            >
-              <Icon size={19} aria-hidden="true" />
-              <span>{t(key)}</span>
-            </NavLink>
-          ))}
-        </nav>
+        {adminWorkspace ? (
+          <AdminSidebarNavigation
+            profile={profile.data}
+            onNavigate={() => {
+              setAdminDrawerPath(null);
+            }}
+          />
+        ) : (
+          <nav
+            className={isAdmin ? 'nav--admin' : undefined}
+            aria-label={t('brandTitle')}
+          >
+            {visibleLinks.map(({ to, key, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `nav-link${
+                    isActive ||
+                    (to.startsWith('/admin') &&
+                      location.pathname.startsWith('/admin'))
+                      ? ' active'
+                      : ''
+                  }`
+                }
+              >
+                <Icon size={19} aria-hidden="true" />
+                <span>{t(key)}</span>
+              </NavLink>
+            ))}
+          </nav>
+        )}
         <div className="sidebar-profile">
           <ProfileMenu profile={profile.data} />
         </div>
       </aside>
+      {adminWorkspace && adminDrawerOpen && (
+        <button
+          className="admin-drawer-backdrop"
+          type="button"
+          aria-label="Close administration navigation"
+          onClick={() => {
+            setAdminDrawerPath(null);
+          }}
+        />
+      )}
       <div className="workspace">
         <div className="mobile-shell-bar">
-          <NavLink to="/home" className="mobile-brand">
-            <BrandMark compact />
-            <strong>{t('brandTitle')}</strong>
-          </NavLink>
+          {adminWorkspace ? (
+            <button
+              className="admin-mobile-menu"
+              type="button"
+              aria-label={
+                adminDrawerOpen
+                  ? 'Close administration navigation'
+                  : 'Open administration navigation'
+              }
+              aria-expanded={adminDrawerOpen}
+              onClick={() => {
+                setAdminDrawerPath((current) =>
+                  current === location.pathname ? null : location.pathname,
+                );
+              }}
+            >
+              {adminDrawerOpen ? (
+                <X aria-hidden="true" />
+              ) : (
+                <Menu aria-hidden="true" />
+              )}
+            </button>
+          ) : (
+            <NavLink to="/home" className="mobile-brand">
+              <BrandMark compact />
+              <strong>{t('brandTitle')}</strong>
+            </NavLink>
+          )}
+          {adminWorkspace && (
+            <NavLink to={adminHome} className="mobile-brand">
+              <BrandMark compact />
+              <strong>AJG Admin</strong>
+            </NavLink>
+          )}
           <ProfileMenu profile={profile.data} />
         </div>
         <AnimatedOutlet />

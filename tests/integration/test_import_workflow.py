@@ -78,7 +78,21 @@ Imported introduction.
     source_doc = import_res.json()
     assert source_doc["policy_id"] == policy_id
     assert source_doc["version_id"] == version_id
+    assert source_doc["file_name"] == "original_sop.pdf"
+    assert source_doc["media_type"] == "application/pdf"
+    assert source_doc["source_format"] == "pdf"
     assert "sources/" in source_doc["original_artifact_uri"]
+    assert source_doc["structured_file_name"] == "content.md"
+    assert source_doc["structured_media_type"] == "text/markdown"
+    assert source_doc["structured_source_format"] == "markdown"
+    assert "sources/" in source_doc["structured_artifact_uri"]
+
+    original_res = test_client.get(
+        f"/api/v1/admin/sources/{source_doc['id']}/original", headers=admin_headers
+    )
+    assert original_res.status_code == 200
+    assert original_res.headers["content-type"] == "application/pdf"
+    assert original_res.content == b"%PDF-1.4 Test PDF content"
 
     review_res = test_client.get(
         f"/api/v1/admin/sources/{source_doc['id']}/review", headers=admin_headers
@@ -107,3 +121,45 @@ Imported introduction.
     assert viewer_res.status_code == 200
     assert viewer_res.json()["policy"]["policy_number"] == "SOP-IMPORT-01"
     assert viewer_res.json()["version"]["effective_date"] == "2026-09-25"
+
+
+def test_legacy_markdown_only_source_remains_readable(test_client):
+    admin_headers = {"Authorization": "Fixture system-admin"}
+    created = test_client.post(
+        "/api/v1/admin/policies",
+        headers=admin_headers,
+        json={
+            "title": "Legacy Markdown SOP",
+            "category": "Operations",
+            "version_label": "1.0",
+            "access": {
+                "departments": {"mode": "all"},
+                "locations": {"mode": "all"},
+                "roles": {"mode": "all"},
+            },
+        },
+    ).json()
+    markdown = b"# Legacy Markdown SOP\n\n## 1. Procedure\nKeep this wording."
+    uploaded = test_client.post(
+        "/api/v1/admin/sources/upload",
+        headers=admin_headers,
+        data={
+            "policy_id": created["policy"]["id"],
+            "version_id": created["version"]["id"],
+            "source_format": "markdown",
+        },
+        files={"file": ("legacy.md", markdown, "text/markdown")},
+    )
+    assert uploaded.status_code == 201
+    source = uploaded.json()
+    assert source["file_name"] == "legacy.md"
+    assert source["media_type"] == "text/markdown"
+    assert source["source_format"] == "markdown"
+    assert source["structured_artifact_uri"] is None
+
+    original = test_client.get(
+        f"/api/v1/admin/sources/{source['id']}/original", headers=admin_headers
+    )
+    assert original.status_code == 200
+    assert original.headers["content-type"].startswith("text/markdown")
+    assert original.content == markdown

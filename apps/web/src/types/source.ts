@@ -29,6 +29,13 @@ export const sourceDocumentSchema = z.object({
   source_format: sourceFormatSchema,
   sha256: z.string(),
   original_artifact_uri: z.string(),
+  structured_artifact_uri: z.string().nullable().optional().default(null),
+  structured_file_name: z.string().nullable().optional().default(null),
+  structured_media_type: z.string().nullable().optional().default(null),
+  structured_source_format: sourceFormatSchema
+    .nullable()
+    .optional()
+    .default(null),
   status: z.enum([
     'uploaded',
     'processing',

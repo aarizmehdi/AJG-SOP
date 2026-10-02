@@ -96,7 +96,10 @@ class IngestionPipeline:
             raise KeyError(source_id)
         if job.state is not IngestionState.FAILED:
             raise ValueError("Only failed ingestion jobs can be retried")
-        content = await self.artifacts.get(organization_id, source.original_artifact_uri)
+        content = await self.artifacts.get(
+            organization_id,
+            source.structured_artifact_uri or source.original_artifact_uri,
+        )
         job.retry_count += 1
         job.error_code = None
         source = source.model_copy(update={"status": SourceStatus.PROCESSING, "error_code": None})
@@ -111,7 +114,16 @@ class IngestionPipeline:
         started = perf_counter()
         try:
             self._transition(job, IngestionState.EXTRACTING, "Reading document")
-            raw = await self.parser.parse(source, content)
+            parser_source = source
+            if source.structured_source_format is not None:
+                parser_source = source.model_copy(
+                    update={
+                        "file_name": source.structured_file_name or source.file_name,
+                        "media_type": source.structured_media_type or source.media_type,
+                        "source_format": source.structured_source_format,
+                    }
+                )
+            raw = await self.parser.parse(parser_source, content)
             if raw.provider_payload is not None:
                 provider_uri = await self.artifacts.put(
                     organization_id,

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LanguageContext } from '../language/language-context';
 import { messages } from '../language/messages';
@@ -51,7 +51,11 @@ function renderAdmin(role: 'employee' | 'sop_admin' | 'system_admin') {
         }}
       >
         <MemoryRouter initialEntries={['/admin']}>
-          <AdminPage />
+          <Routes>
+            <Route path="/admin" element={<AdminPage />}>
+              <Route index element={<p>Authorized admin workspace</p>} />
+            </Route>
+          </Routes>
         </MemoryRouter>
       </LanguageContext>
     </QueryClientProvider>,
@@ -64,23 +68,14 @@ afterEach(() => {
 });
 
 describe('administration navigation boundaries', () => {
-  it('shows organization controls only to a System Administrator', async () => {
+  it('admits a System Administrator to the admin workspace', async () => {
     renderAdmin('system_admin');
-    expect(await screen.findByText('People & access')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Users' })).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Audit Log' })).toBeVisible();
+    expect(await screen.findByText('Authorized admin workspace')).toBeVisible();
   });
 
-  it('keeps an SOP Administrator inside scoped knowledge workflows', async () => {
+  it('admits an SOP Administrator to the admin workspace', async () => {
     renderAdmin('sop_admin');
-    expect(await screen.findByText('Knowledge workspace')).toBeVisible();
-    expect(
-      screen.queryByRole('link', { name: 'Users' }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: 'Audit Log' }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'SOP Library' })).toBeVisible();
+    expect(await screen.findByText('Authorized admin workspace')).toBeVisible();
   });
 
   it('shows no administration controls to an employee', async () => {
@@ -89,10 +84,7 @@ describe('administration navigation boundaries', () => {
       await screen.findByText('Administrative access required'),
     ).toBeVisible();
     expect(
-      screen.queryByRole('link', { name: 'Users' }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: 'SOP Library' }),
+      screen.queryByText('Authorized admin workspace'),
     ).not.toBeInTheDocument();
   });
 });

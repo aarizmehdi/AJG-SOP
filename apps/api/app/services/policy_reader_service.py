@@ -9,6 +9,7 @@ from packages.contracts.retrieval import (
     AvailablePolicySummary,
     PolicyReaderDocument,
     PolicyReaderSection,
+    PolicyReaderSource,
 )
 from packages.contracts.source import SourceDocument
 from services.retrieval.authorization_filter import AuthorizationFilter
@@ -42,6 +43,22 @@ class PolicyReaderService:
         ]
         if not sections:
             return None
+        original_download_allowed = all(
+            self._source_fully_authorized(profile, source_id)
+            for source_id in version.source_document_ids
+        )
+        original_sources = [
+            PolicyReaderSource(
+                source_id=source.id,
+                file_name=source.file_name,
+                media_type=source.media_type,
+                source_format=source.source_format,
+            )
+            for source_id in version.source_document_ids
+            if original_download_allowed
+            and (source := self.store.sources.get(source_id))
+            and source.organization_id == profile.organization_id
+        ]
         return PolicyReaderDocument(
             policy_id=policy.id,
             title=policy.title,
@@ -51,10 +68,8 @@ class PolicyReaderService:
                 self._reader_section(profile.organization_id, policy.id, version.id, item)
                 for item in sections
             ],
-            original_download_allowed=all(
-                self._source_fully_authorized(profile, source_id)
-                for source_id in version.source_document_ids
-            ),
+            original_download_allowed=original_download_allowed,
+            original_sources=original_sources,
         )
 
     def list_available(self, profile: EmployeeProfile) -> list[AvailablePolicySummary]:
@@ -148,8 +163,12 @@ class PolicyReaderService:
             section_id=section.id,
             heading=section.heading,
             heading_path=section.heading_path,
+            heading_level=section.heading_level,
+            parent_section_id=section.parent_section_id,
+            chapter=section.chapter,
             policy_number=section.policy_number,
             content=cls._section_text(section),
+            blocks=section.blocks,
             source=section.source,
         )
 

@@ -154,6 +154,7 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
     assert [item.section_id for item in document.sections] == ["store-section"]
     assert [item.policy_id for item in available] == ["policy"]
     assert not document.original_download_allowed
+    assert document.original_sources == []
     assert original is None
 
     system_admin = profile.model_copy(
@@ -174,5 +175,7 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
         "hr-section",
     }
     assert system_document.original_download_allowed
+    assert [item.file_name for item in system_document.original_sources] == ["policy.pdf"]
+    assert system_document.sections[0].blocks[0].kind is BlockKind.PARAGRAPH
     assert system_original is not None
     assert system_original[1] == b"private"
