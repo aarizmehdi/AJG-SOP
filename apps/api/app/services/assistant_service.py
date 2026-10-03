@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from time import perf_counter
 from typing import Protocol
 from uuid import uuid4
@@ -23,6 +24,10 @@ class EvidenceRetriever(Protocol):
     async def retrieve(
         self, profile: EmployeeProfile, query: str, limit: int
     ) -> list[SearchEvidence]: ...
+
+    async def revalidate_evidence(
+        self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
+    ) -> bool: ...
 
 
 class VerificationError(RuntimeError):
@@ -83,6 +88,8 @@ class AssistantService:
             raise VerificationError("Generated answer failed citation or grounding verification")
         if self.metrics:
             self.metrics.observe("grounding_verification", 0)
+        if not await self.retrieval.revalidate_evidence(profile, evidence):
+            raise VerificationError("Policy evidence is no longer available")
         result = VerifiedAnswer(
             organization_id=profile.organization_id,
             answerable=True,

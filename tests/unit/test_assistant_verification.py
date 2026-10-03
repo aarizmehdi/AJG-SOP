@@ -31,6 +31,9 @@ def evidence() -> SearchEvidence:
 
 
 class StubRetrieval:
+    async def revalidate_evidence(self, profile, evidence):
+        return True
+
     async def retrieve(
         self, profile: EmployeeProfile, query: str, limit: int
     ) -> list[SearchEvidence]:

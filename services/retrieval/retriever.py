@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from collections.abc import Awaitable, Callable, Sequence
 from time import perf_counter
 
 from apps.api.app.models.organization import EmployeeProfile
@@ -24,6 +25,7 @@ class RetrievalService:
         fusion: CandidateFusion,
         reranker: Reranker,
         metrics: MetricsRegistry | None = None,
+        cache_refresh: Callable[[], Awaitable[set[str]]] | None = None,
     ) -> None:
         self.store = store
         self.authorization = authorization
@@ -32,12 +34,38 @@ class RetrievalService:
         self.fusion = fusion
         self.reranker = reranker
         self.metrics = metrics
+        self.cache_refresh = cache_refresh
         self._traces: defaultdict[str, list[dict[str, object]]] = defaultdict(list)
+
+    def evict_chunks(self, chunk_ids: set[str]) -> None:
+        """Drop only runtime traces with exact structured chunk references."""
+
+        def linked(value: object, key: str = "") -> bool:
+            if isinstance(value, dict):
+                return any(linked(v, k) for k, v in value.items())
+            if isinstance(value, list):
+                return any(linked(v, key) for v in value)
+            return (
+                key
+                in {
+                    "chunk_id",
+                    "eligible_chunk_ids",
+                    "selected_context",
+                    "fused_order",
+                    "reranked_order",
+                }
+                and isinstance(value, str)
+                and value in chunk_ids
+            )
+
+        for org, traces in self._traces.items():
+            self._traces[org] = [trace for trace in traces if not linked(trace)]
 
     async def retrieve(
         self, profile: EmployeeProfile, query: str, limit: int
     ) -> list[SearchEvidence]:
         started = perf_counter()
+        await self._refresh()
         eligible = self.authorization.eligible_chunks(profile)
         try:
             lexical, semantic = await asyncio.gather(
@@ -51,6 +79,7 @@ class RetrievalService:
         fused = self.fusion.fuse(lexical, semantic)
         chunks = {chunk.id: chunk for chunk in eligible}
         ranked = await self.reranker.rerank(query, fused, chunks)
+        await self._refresh()
         evidence: list[SearchEvidence] = []
         for chunk_id, score in ranked:
             chunk = chunks.get(chunk_id)
@@ -85,6 +114,24 @@ class RetrievalService:
         self._traces[profile.organization_id].append(trace)
         self._traces[profile.organization_id] = self._traces[profile.organization_id][-100:]
         return evidence
+
+    async def _refresh(self) -> None:
+        if self.cache_refresh is not None:
+            self.evict_chunks(await self.cache_refresh())
+
+    async def revalidate_evidence(
+        self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
+    ) -> bool:
+        """Check again before releasing an answer, including answers already generating at purge."""
+        await self._refresh()
+        allowed = {c.id: c for c in self.authorization.eligible_chunks(profile)}
+        return all(
+            item.chunk_id in allowed
+            and allowed[item.chunk_id].policy_id == item.policy_id
+            and allowed[item.chunk_id].version_id == item.version_id
+            and self.authorization.revalidate(profile, allowed[item.chunk_id])
+            for item in evidence
+        )
 
     def telemetry(self, organization_id: str) -> list[dict[str, object]]:
         return list(self._traces.get(organization_id, []))
