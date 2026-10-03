@@ -89,18 +89,20 @@ class UserAdminService:
             departments,
             allowed_inactive=existing.departments if existing else frozenset(),
         )
-        await self._organization.validate_keys(
-            organization_id,
-            CatalogKind.LOCATION,
-            locations,
-            allowed_inactive=existing.locations if existing else frozenset(),
-        )
-        await self._organization.validate_keys(
-            organization_id,
-            CatalogKind.ORGANIZATIONAL_ROLE,
-            organizational_roles,
-            allowed_inactive=existing.organizational_roles if existing else frozenset(),
-        )
+        if locations:
+            await self._organization.validate_keys(
+                organization_id,
+                CatalogKind.LOCATION,
+                locations,
+                allowed_inactive=existing.locations if existing else frozenset(),
+            )
+        if organizational_roles:
+            await self._organization.validate_keys(
+                organization_id,
+                CatalogKind.ORGANIZATIONAL_ROLE,
+                organizational_roles,
+                allowed_inactive=existing.organizational_roles if existing else frozenset(),
+            )
         management_values = (
             management_departments,
             management_locations,
@@ -392,7 +394,11 @@ class UserAdminService:
         changed = await self._database.update_one(
             "employee_profiles",
             organization_id,
-            {"id": user_id, "version": expected_version},
+            {
+                "id": user_id,
+                # Legacy profiles default to version 1 without a stored version field.
+                "version": {"$in": [1, None]} if expected_version == 1 else expected_version,
+            },
             updated.model_dump(mode="json", exclude={"id", "organization_id", "created_at"}),
         )
         if not changed:

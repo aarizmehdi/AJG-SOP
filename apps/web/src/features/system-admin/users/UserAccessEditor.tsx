@@ -159,16 +159,18 @@ export function UserAccessEditor({
               }}
             />
             <CatalogMultiSelect
-              label="Locations"
+              label="Locations (optional)"
               items={catalogs.data.locations}
+              emptyMessage="No locations are configured yet. You can save this user without one and assign it later."
               value={value.locations}
               onChange={(next) => {
                 update('locations', next);
               }}
             />
             <CatalogMultiSelect
-              label="Organizational roles"
+              label="Organizational roles (optional)"
               items={catalogs.data.organizational_roles}
+              emptyMessage="No organizational roles are configured yet. You can save this user without one and assign it later."
               value={value.organizational_roles}
               onChange={(next) => {
                 update('organizational_roles', next);

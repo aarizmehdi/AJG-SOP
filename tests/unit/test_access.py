@@ -46,6 +46,26 @@ def test_all_scope_must_be_explicit_and_cannot_carry_values() -> None:
         AccessDimension(mode=AccessMode.ALL, values=frozenset({"store"}))
 
 
+@pytest.mark.parametrize("restricted_dimension", ["locations", "roles"])
+def test_empty_employee_assignments_match_all_but_never_selected(restricted_dimension: str) -> None:
+    employee = EmployeeScope(organization_id="ajt", departments=frozenset({"store"}))
+    rule = AccessScope(
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"store"})),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    assert rule.allows(employee)
+    assert not rule.allows(employee.model_copy(update={"departments": frozenset({"hr"})}))
+    restricted = rule.model_copy(
+        update={
+            restricted_dimension: AccessDimension(
+                mode=AccessMode.SELECTED, values=frozenset({"required"})
+            )
+        }
+    )
+    assert not restricted.allows(employee)
+
+
 def test_sop_admin_management_scope_must_contain_every_dimension() -> None:
     profile = EmployeeProfile(
         id="admin",

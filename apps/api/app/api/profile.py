@@ -18,7 +18,11 @@ async def update_language(
     changed = await request.app.state.database.update_one(
         "employee_profiles",
         profile.organization_id,
-        {"id": profile.id, "version": profile.version},
+        {
+            "id": profile.id,
+            # The first save initializes legacy profiles without weakening later CAS checks.
+            "version": {"$in": [1, None]} if profile.version == 1 else profile.version,
+        },
         {
             "preferred_language": language.value,
             "version": profile.version + 1,

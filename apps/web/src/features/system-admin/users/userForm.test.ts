@@ -8,7 +8,7 @@ const employeeScope = {
 };
 
 describe('system administrator user form', () => {
-  it('requires identity and a complete employee scope', () => {
+  it('requires identity and a department', () => {
     expect(formIsComplete(emptyUserForm)).toBe(false);
     expect(
       formIsComplete({
@@ -16,6 +16,23 @@ describe('system administrator user form', () => {
         ...employeeScope,
         display_name: 'Test Employee',
         email: 'employee@example.test',
+      }),
+    ).toBe(true);
+  });
+
+  it('allows creation and editing with empty optional employee assignments', () => {
+    const employee = {
+      ...emptyUserForm,
+      display_name: 'Department-only employee',
+      email: 'employee@example.test',
+      departments: ['store'],
+    };
+    expect(formIsComplete(employee)).toBe(true);
+    expect(formIsComplete({ ...employee, departments: [] })).toBe(false);
+    expect(
+      formIsComplete({
+        ...employee,
+        application_roles: ['employee', 'sop_admin', 'system_admin'],
       }),
     ).toBe(true);
   });
