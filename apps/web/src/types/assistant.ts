@@ -12,11 +12,33 @@ export const citationSchema = z.object({
 });
 export const verifiedAnswerSchema = z.object({
   organization_id: z.string(),
+  kind: z
+    .enum([
+      'smalltalk',
+      'policy_answer',
+      'clarification',
+      'no_answer',
+      'out_of_scope',
+    ])
+    .default('policy_answer'),
   answerable: z.boolean(),
   answer: z.string(),
   language: z.enum(['english', 'urdu', 'roman_urdu']),
   citations: z.array(citationSchema),
   verified: z.boolean(),
-  session_id: z.string(),
 });
 export type VerifiedAnswer = z.infer<typeof verifiedAnswerSchema>;
+
+export const streamStartSchema = verifiedAnswerSchema.pick({
+  kind: true,
+  answerable: true,
+  language: true,
+  verified: true,
+});
+export const streamSourcesSchema = z.object({
+  citations: z.array(citationSchema),
+});
+export type StreamAnswer = z.infer<typeof streamStartSchema> & {
+  answer: string;
+  citations: z.infer<typeof citationSchema>[];
+};

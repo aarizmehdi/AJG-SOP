@@ -1,22 +1,24 @@
-from collections.abc import Sequence
+"""Ephemeral assistant orchestration with authorized, verified answer release."""
+
+from collections.abc import Callable, Sequence
 from time import perf_counter
 from typing import Protocol
-from uuid import uuid4
 
-from apps.api.app.models.organization import EmployeeProfile
-from apps.api.app.services.foundation_store import FoundationStore
+from apps.api.app.models.organization import EmployeeProfile, MembershipStatus
+from apps.api.app.repositories.database import CanonicalDatabase
 from apps.api.app.services.metrics import MetricsRegistry
 from packages.contracts.assistant import (
-    ChatMessage,
-    ChatSession,
-    MessageRole,
+    ConversationTurn,
+    GeneratedAnswer,
+    ResponseKind,
     VerifiedAnswer,
 )
 from packages.contracts.common import Language
-from packages.contracts.retrieval import SearchEvidence
-from services.assistant.answer_generator import LLMProvider
+from packages.contracts.retrieval import AssistantEvidence, SearchEvidence
+from services.assistant.answer_generator import LLMProvider, LLMResponseError
 from services.assistant.answerability import AnswerabilityGate
 from services.assistant.citations import CitationValidator
+from services.assistant.conversation import canned, classify, retrieval_query
 from services.assistant.grounding import GroundingVerifier
 
 
@@ -24,6 +26,10 @@ class EvidenceRetriever(Protocol):
     async def retrieve(
         self, profile: EmployeeProfile, query: str, limit: int
     ) -> list[SearchEvidence]: ...
+
+    async def assistant_context(
+        self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
+    ) -> list[AssistantEvidence]: ...
 
     async def revalidate_evidence(
         self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
@@ -37,129 +43,167 @@ class VerificationError(RuntimeError):
 class AssistantService:
     def __init__(
         self,
-        store: FoundationStore,
         retrieval: EvidenceRetriever,
         answerability: AnswerabilityGate,
         provider: LLMProvider,
         citations: CitationValidator,
         grounding: GroundingVerifier,
         metrics: MetricsRegistry | None = None,
+        database: CanonicalDatabase | None = None,
     ) -> None:
-        self.store = store
         self.retrieval = retrieval
         self.answerability = answerability
         self.provider = provider
         self.citations = citations
         self.grounding = grounding
         self.metrics = metrics
+        self.database = database
 
     async def answer(
         self,
         profile: EmployeeProfile,
         question: str,
         language: Language,
-        session_id: str | None = None,
+        history: Sequence[ConversationTurn] = (),
+        progress: Callable[[str], None] | None = None,
     ) -> VerifiedAnswer:
-        session = self._session(profile, language, session_id)
-        evidence = await self.retrieval.retrieve(profile, question, 8)
-        self._message(profile, session.id, MessageRole.USER, question, verified=True)
-        if not self.answerability.is_answerable(question, evidence):
-            if self.metrics:
-                self.metrics.observe("answerability", 0, failed=True)
-            answer = self._no_answer(language, session.id, profile.organization_id)
-            self._message(profile, session.id, MessageRole.ASSISTANT, answer.answer, verified=True)
-            return answer
-        llm_started = perf_counter()
-        try:
-            generated = await self.provider.generate(question, evidence, language)
-        except Exception:
-            if self.metrics:
-                self.metrics.observe("llm", (perf_counter() - llm_started) * 1000, failed=True)
-            raise
-        if self.metrics:
-            self.metrics.observe("llm", (perf_counter() - llm_started) * 1000)
-        if (
-            not generated.answerable
-            or not self.citations.validate(generated.citations, evidence)
-            or not self.grounding.verify(generated, evidence)
-        ):
-            if self.metrics:
-                self.metrics.observe("grounding_verification", 0, failed=True)
-            raise VerificationError("Generated answer failed citation or grounding verification")
-        if self.metrics:
-            self.metrics.observe("grounding_verification", 0)
-        if not await self.retrieval.revalidate_evidence(profile, evidence):
-            raise VerificationError("Policy evidence is no longer available")
-        result = VerifiedAnswer(
-            organization_id=profile.organization_id,
-            answerable=True,
-            answer=generated.answer,
-            language=language,
-            citations=generated.citations,
-            verified=True,
-            session_id=session.id,
-        )
-        self._message(profile, session.id, MessageRole.ASSISTANT, result.answer, verified=True)
+        result, _ = await self.answer_with_context(profile, question, language, history, progress)
         return result
 
-    def _session(
-        self, profile: EmployeeProfile, language: Language, session_id: str | None
-    ) -> ChatSession:
-        if session_id:
-            existing = self.store.chat_sessions.get(session_id)
-            if (
-                not existing
-                or existing.organization_id != profile.organization_id
-                or existing.employee_id != profile.id
-            ):
-                raise PermissionError("Chat session is unavailable")
-            if existing.language is not language:
-                raise ValueError("Session language cannot change implicitly")
-            return existing
-        session = ChatSession(
-            id=f"chat-{uuid4().hex[:12]}",
-            organization_id=profile.organization_id,
-            employee_id=profile.id,
-            language=language,
-        )
-        self.store.chat_sessions[session.id] = session
-        self.store.mark_modified("chat_sessions", session.id, session)
-        return session
-
-    def _message(
+    async def answer_with_context(
         self,
         profile: EmployeeProfile,
-        session_id: str,
-        role: MessageRole,
-        content: str,
-        verified: bool,
-    ) -> None:
-        message = ChatMessage(
-            id=f"message-{uuid4().hex[:12]}",
-            organization_id=profile.organization_id,
-            session_id=session_id,
-            role=role,
-            content=content,
-            verified=verified,
+        question: str,
+        language: Language,
+        history: Sequence[ConversationTurn] = (),
+        progress: Callable[[str], None] | None = None,
+    ) -> tuple[VerifiedAnswer, list[AssistantEvidence]]:
+        started = perf_counter()
+        mode = classify(question, history)
+        if mode is not None:
+            result = self._canned(profile, language, mode, question)
+            self._observe(mode, started)
+            return result, []
+
+        if progress:
+            progress("retrieving")
+        evidence = await self.retrieval.retrieve(profile, retrieval_query(question, history), 8)
+        if not self.answerability.is_answerable(question, evidence):
+            result = self._canned(profile, language, ResponseKind.NO_ANSWER)
+            self._observe(result.kind, started)
+            return result, []
+        if progress:
+            progress("reading")
+        context = await self.retrieval.assistant_context(profile, evidence)
+        if not context or not await self.retrieval.revalidate_evidence(profile, context):
+            result = self._canned(profile, language, ResponseKind.NO_ANSWER)
+            self._observe(result.kind, started)
+            return result, []
+
+        feedback: str | None = None
+        for attempt in range(2):
+            if attempt and self.metrics:
+                self.metrics.observe("assistant_repair", 0)
+            if progress:
+                progress("generating" if attempt == 0 else "repairing")
+            llm_started = perf_counter()
+            try:
+                generated = await self.provider.generate(
+                    question, context, language, repair_feedback=feedback
+                )
+            except LLMResponseError:
+                self._metric("llm", llm_started, failed=True)
+                feedback = (
+                    "The previous response was malformed. Return valid JSON matching the schema."
+                )
+                if attempt == 0:
+                    continue
+                raise VerificationError("Provider response remained malformed") from None
+            except Exception:
+                self._metric("llm", llm_started, failed=True)
+                raise
+            self._metric("llm", llm_started)
+            if progress:
+                progress("verifying")
+            verification_started = perf_counter()
+            if not generated.answerable:
+                self._metric("grounding_verification", verification_started)
+                result = self._canned(profile, language, ResponseKind.NO_ANSWER)
+                self._observe(result.kind, started)
+                return result, []
+            if self._valid(generated, context):
+                await self.assert_release_authorized(profile, context)
+                self._metric("grounding_verification", verification_started)
+                citations = list({item.chunk_id: item for item in generated.citations}.values())
+                result = VerifiedAnswer(
+                    organization_id=profile.organization_id,
+                    kind=ResponseKind.POLICY_ANSWER,
+                    answerable=True,
+                    answer=generated.answer,
+                    language=language,
+                    citations=citations,
+                    verified=True,
+                )
+                self._observe(result.kind, started)
+                return result, context
+            self._metric("grounding_verification", verification_started, failed=True)
+            feedback = (
+                "The previous answer failed citation or grounding validation. "
+                "Use only supported facts and exact supplied citation metadata."
+            )
+            if attempt == 0:
+                continue
+        raise VerificationError("Generated answer failed citation or grounding verification")
+
+    def _valid(self, generated: GeneratedAnswer, context: Sequence[AssistantEvidence]) -> bool:
+        return (
+            bool(generated.answer.strip())
+            and bool(generated.citations)
+            and self.citations.validate(generated.citations, context)
+            and self.grounding.verify(generated, context)
         )
-        self.store.chat_messages.append(message)
-        self.store.mark_appended("chat_messages", message)
+
+    async def assert_release_authorized(
+        self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
+    ) -> None:
+        current = profile
+        if self.database is not None:
+            stored = await self.database.get_one(
+                "employee_profiles", profile.organization_id, {"id": profile.id}
+            )
+            if not stored:
+                raise VerificationError("Membership is no longer available")
+            current = EmployeeProfile.model_validate(stored)
+            if (
+                current.identity_subject != profile.identity_subject
+                or not current.active
+                or current.status is not MembershipStatus.ACTIVE
+            ):
+                raise VerificationError("Membership is no longer active")
+        if evidence and not await self.retrieval.revalidate_evidence(current, evidence):
+            raise VerificationError("Policy evidence is no longer available")
 
     @staticmethod
-    def _no_answer(language: Language, session_id: str, organization_id: str) -> VerifiedAnswer:
-        text = {
-            Language.ENGLISH: "I couldn't find guidance for that in the SOPs available to you.",
-            Language.URDU: "مجھے آپ کے لیے دستیاب ایس او پیز میں اس بارے میں رہنمائی نہیں ملی۔",
-            Language.ROMAN_URDU: (
-                "Mujhe aap ke liye dastiyab SOPs mein is bare mein rehnumai nahi mili."
-            ),
-        }[language]
+    def _canned(
+        profile: EmployeeProfile,
+        language: Language,
+        kind: ResponseKind,
+        question: str = "",
+    ) -> VerifiedAnswer:
         return VerifiedAnswer(
-            organization_id=organization_id,
+            organization_id=profile.organization_id,
+            kind=kind,
             answerable=False,
-            answer=text,
+            answer=canned(kind, language, question),
             language=language,
             citations=[],
             verified=True,
-            session_id=session_id,
         )
+
+    def _metric(self, name: str, started: float, failed: bool = False) -> None:
+        if self.metrics:
+            self.metrics.observe(name, (perf_counter() - started) * 1000, failed=failed)
+
+    def _observe(self, kind: ResponseKind, started: float) -> None:
+        self._metric(f"assistant_{kind.value}", started)
+        self._metric("assistant_total", started)

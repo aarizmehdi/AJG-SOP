@@ -4,11 +4,10 @@ import pytest
 
 from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
 from apps.api.app.services.assistant_service import AssistantService, VerificationError
-from apps.api.app.services.foundation_store import FoundationStore
 from packages.contracts.assistant import AssistantCitation, GeneratedAnswer
 from packages.contracts.canonical import SourceLocator
 from packages.contracts.common import Language
-from packages.contracts.retrieval import SearchEvidence
+from packages.contracts.retrieval import AssistantEvidence, SearchEvidence
 from services.assistant.answer_generator import LLMProvider
 from services.assistant.answerability import FixtureAnswerabilityGate
 from services.assistant.citations import CitationValidator
@@ -31,6 +30,9 @@ def evidence() -> SearchEvidence:
 
 
 class StubRetrieval:
+    async def assistant_context(self, profile, evidence):
+        return [AssistantEvidence(**item.model_dump(), full_text=item.excerpt) for item in evidence]
+
     async def revalidate_evidence(self, profile, evidence):
         return True
 
@@ -45,7 +47,11 @@ class InventedCitationProvider(LLMProvider):
     model_id = "test"
 
     async def generate(
-        self, question: str, items: Sequence[SearchEvidence], language: Language
+        self,
+        question: str,
+        items: Sequence[SearchEvidence],
+        language: Language,
+        repair_feedback: str | None = None,
     ) -> GeneratedAnswer:
         item = items[0]
         return GeneratedAnswer(
@@ -75,9 +81,7 @@ async def test_invented_citation_prevents_answer_release() -> None:
         email="employee@example.test",
         application_roles=frozenset({ApplicationRole.EMPLOYEE}),
     )
-    store = FoundationStore()
     service = AssistantService(
-        store,
         StubRetrieval(),
         FixtureAnswerabilityGate(),
         InventedCitationProvider(),
@@ -86,6 +90,4 @@ async def test_invented_citation_prevents_answer_release() -> None:
     )
 
     with pytest.raises(VerificationError):
-        await service.answer(profile, "When?", Language.ENGLISH)
-
-    assert all(message.role.value != "assistant" for message in store.chat_messages)
+        await service.answer(profile, "When must damaged stock be reported?", Language.ENGLISH)

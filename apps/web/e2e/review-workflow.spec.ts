@@ -101,17 +101,30 @@ test('large paired SOP review stays bounded and follows publication lifecycle', 
   });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/admin/review/${source.id}`);
+  await page
+    .getByRole('heading', { name: 'Choose your language' })
+    .or(page.locator('.review-canonical-preview .canonical-section').first())
+    .first()
+    .waitFor({ state: 'visible', timeout: 30_000 });
   if (
     await page
       .getByRole('heading', { name: 'Choose your language' })
       .isVisible()
   ) {
     await page.getByRole('button', { name: 'Save and continue' }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const key = localStorage.getItem('ajt-active-language-profile');
+          return key ? localStorage.getItem(key) : null;
+        }),
+      )
+      .toBe('english');
     await page.goto(`/admin/review/${source.id}`);
   }
   await expect(
     page.locator('.review-canonical-preview .canonical-section'),
-  ).toHaveCount(36);
+  ).toHaveCount(36, { timeout: 30_000 });
   await expect(page.locator('iframe.source-object')).toBeVisible();
   await expect(page.locator('.source-object')).toHaveAttribute(
     'src',

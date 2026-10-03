@@ -1751,6 +1751,68 @@ a {
   margin: 7px 0;
   color: #2d4057;
 }
+.answer-markdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #2d4057;
+  font-size: 0.9rem;
+  line-height: 1.75;
+}
+.answer-markdown > :first-child {
+  margin-top: 8px;
+}
+.answer-markdown > :last-child {
+  margin-bottom: 0;
+}
+.answer-markdown h2,
+.answer-markdown h3,
+.answer-markdown h4 {
+  color: var(--navy);
+  line-height: 1.4;
+  margin: 1.3em 0 0.45em;
+  font-size: 1.04em;
+}
+.answer-markdown ul,
+.answer-markdown ol {
+  padding-inline-start: 1.4em;
+  margin: 0.6em 0;
+}
+.answer-markdown li {
+  margin: 0.3em 0;
+}
+.answer-markdown li > p {
+  margin: 0.25em 0;
+}
+.answer-markdown blockquote {
+  border-inline-start: 2px solid var(--border);
+  padding-inline-start: 0.9em;
+  margin-inline: 0;
+}
+.answer-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  margin: 1em 0;
+}
+.answer-markdown th,
+.answer-markdown td {
+  border: 1px solid var(--border);
+  padding: 0.5em;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.answer-markdown th {
+  background: #f6f9fb;
+  color: var(--navy);
+}
+.answer-markdown code {
+  overflow-wrap: anywhere;
+  font-size: 0.9em;
+}
+[data-locale='urdu'] .answer-markdown {
+  font-family: 'Noto Nastaliq Urdu', serif;
+  line-height: 2.2;
+}
 .answer-sources {
   margin-top: 18px;
   padding-top: 15px;

@@ -233,19 +233,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.deepseek_api_key.get_secret_value(),
             settings.deepseek_base_url,
             settings.deepseek_model,
+            settings.deepseek_temperature,
         )
     elif settings.llm_provider == "fixture":
         llm_provider = FixtureLLMProvider()
     else:
         llm_provider = UnavailableLLMProvider()
     app.state.assistant_service = AssistantService(
-        app.state.foundation_store,
         app.state.retrieval_service,
         FixtureAnswerabilityGate(),
         llm_provider,
         CitationValidator(),
         GroundingVerifier(),
         app.state.metrics,
+        app.state.database if settings.app_mode == "live" else None,
     )
     app.state.speech_provider = UnavailableSpeechToTextProvider()
     structlog.get_logger().info("application_started", mode=settings.app_mode)

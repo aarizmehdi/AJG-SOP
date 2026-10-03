@@ -7,7 +7,7 @@ from apps.api.app.models.organization import EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.metrics import MetricsRegistry
 from packages.contracts.canonical import RetrievalChunk
-from packages.contracts.retrieval import SearchEvidence
+from packages.contracts.retrieval import AssistantEvidence, SearchEvidence
 from services.retrieval.authorization_filter import AuthorizationFilter
 from services.retrieval.fusion import CandidateFusion
 from services.retrieval.lexical_search import LexicalCandidateRetriever
@@ -94,7 +94,7 @@ class RetrievalService:
         if self.metrics:
             self.metrics.observe("retrieval", (perf_counter() - started) * 1000)
         trace = {
-            "query": query,
+            "query_chars": len(query),
             "employee_id": profile.id,
             "employee_scope": {
                 "departments": sorted(profile.departments),
@@ -132,6 +132,32 @@ class RetrievalService:
             and self.authorization.revalidate(profile, allowed[item.chunk_id])
             for item in evidence
         )
+
+    async def assistant_context(
+        self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
+    ) -> list[AssistantEvidence]:
+        """Expand only currently authorized candidates, within a bounded model budget."""
+        await self._refresh()
+        allowed = {chunk.id: chunk for chunk in self.authorization.eligible_chunks(profile)}
+        remaining = 16000
+        context: list[AssistantEvidence] = []
+        for item in evidence:
+            chunk = allowed.get(item.chunk_id)
+            if (
+                not chunk
+                or chunk.policy_id != item.policy_id
+                or chunk.version_id != item.version_id
+                or not self.authorization.revalidate(profile, chunk)
+            ):
+                continue
+            text = chunk.text[: min(5000, remaining)]
+            if not text:
+                break
+            context.append(AssistantEvidence(**item.model_dump(), full_text=text))
+            remaining -= len(text)
+            if remaining <= 0:
+                break
+        return context
 
     def telemetry(self, organization_id: str) -> list[dict[str, object]]:
         return list(self._traces.get(organization_id, []))

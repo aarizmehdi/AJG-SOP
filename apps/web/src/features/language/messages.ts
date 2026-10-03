@@ -123,6 +123,11 @@ const english = {
   assistantSources: 'Sources',
   assistantPending:
     'Finding available policy sections and checking the answer…',
+  assistantStageRetrieving: 'Searching SOPs available to you…',
+  assistantStageReading: 'Reading relevant policy sections…',
+  assistantStageGenerating: 'Preparing a grounded answer…',
+  assistantStageRepairing: 'Checking the answer again…',
+  assistantStageVerifying: 'Verifying sources and facts…',
   assistantNoAnswer: 'No answer was released',
   assistantErrorDetail:
     'Please try again. You can still search and read policies.',
@@ -262,6 +267,11 @@ const urdu: Record<MessageKey, string> = {
   assistantAnswer: 'جواب',
   assistantSources: 'ماخذ',
   assistantPending: 'دستیاب پالیسی حصے تلاش کر کے جواب کی جانچ جاری ہے…',
+  assistantStageRetrieving: 'آپ کے لیے دستیاب ایس او پیز تلاش ہو رہے ہیں…',
+  assistantStageReading: 'متعلقہ پالیسی حصے پڑھے جا رہے ہیں…',
+  assistantStageGenerating: 'ماخذ کی بنیاد پر جواب تیار ہو رہا ہے…',
+  assistantStageRepairing: 'جواب دوبارہ جانچا جا رہا ہے…',
+  assistantStageVerifying: 'ماخذ اور حقائق کی تصدیق ہو رہی ہے…',
   assistantNoAnswer: 'کوئی جواب جاری نہیں کیا گیا',
   assistantErrorDetail:
     'دوبارہ کوشش کریں۔ آپ پالیسیوں میں تلاش اور مطالعہ کر سکتے ہیں۔',
@@ -404,6 +414,11 @@ const romanUrdu: Record<MessageKey, string> = {
   assistantSources: 'Sources',
   assistantPending:
     'Dastiyab policy sections talash karke jawab check ho raha hai…',
+  assistantStageRetrieving: 'Aap ke liye dastiyab SOPs talash ho rahi hain…',
+  assistantStageReading: 'Mutaliqa policy sections parhe ja rahe hain…',
+  assistantStageGenerating: 'Source ki bunyaad par jawab tayyar ho raha hai…',
+  assistantStageRepairing: 'Jawab dobara check ho raha hai…',
+  assistantStageVerifying: 'Sources aur facts ki tasdeeq ho rahi hai…',
   assistantNoAnswer: 'Koi jawab jari nahin hua',
   assistantErrorDetail:
     'Dobara koshish karein. Aap policies talash aur parh sakte hain.',

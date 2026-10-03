@@ -20,7 +20,11 @@ export default defineConfig({
         'uv run uvicorn apps.api.app.main:app --host 127.0.0.1 --port 8000',
       cwd: repositoryRoot,
       url: 'http://127.0.0.1:8000/health',
-      env: { APP_MODE: 'fixture', WEB_ORIGIN: 'http://127.0.0.1:5173' },
+      env: {
+        APP_MODE: 'fixture',
+        LLM_PROVIDER: 'fixture',
+        WEB_ORIGIN: 'http://127.0.0.1:5173',
+      },
       reuseExistingServer: false,
       timeout: 120_000,
     },
