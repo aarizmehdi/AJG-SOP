@@ -83,8 +83,7 @@ async def setup(root: Path):
         ReciprocalRankFusion(),
         FixtureReranker(),
     )
-    repo_listener = repository
-    repo_listener.cache_listener = retrieval.evict_chunks
+    repository.cache_listener = retrieval.evict_chunks
     return store, storage, index, repository, purge, retrieval, target, other
 
 
@@ -159,6 +158,26 @@ async def test_failure_blocks_exposure_and_retry_finishes(tmp_path, monkeypatch)
     assert result.status == "complete"
     assert result.counts.r2_objects == preview.counts.r2_objects
     assert result.counts.pinecone_vectors == 3
+
+
+async def test_pinecone_failure_still_blocks_policy_and_preserves_retry_graph(
+    tmp_path, monkeypatch
+):
+    store, storage, index, repo, purge, retrieval, target, other = await setup(tmp_path)
+    _, confirmation = await confirmed(purge, target.id)
+    original = index.purge_policy
+
+    async def fail(*args):
+        raise RuntimeError("Injected Pinecone outage")
+
+    monkeypatch.setattr(index, "purge_policy", fail)
+    result = await purge.purge(SYSTEM, target.id, confirmation)
+    assert result.status == "failed" and result.stages["pinecone"] == "failed"
+    assert target.id not in store.policies
+    assert {e.policy_id for e in await retrieval.retrieve(SYSTEM, "stock", 10)} == {other.id}
+    assert (await repo.operation("ajt", target.id))["graph"]["source_ids"]
+    monkeypatch.setattr(index, "purge_policy", original)
+    assert (await purge.purge(SYSTEM, target.id, confirmation)).status == "complete"
 
 
 async def test_wrong_confirmations_and_changed_inventory_do_not_delete(tmp_path):

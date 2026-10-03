@@ -181,6 +181,13 @@ class PolicyPurgeService:
             stage = "verification"
             remaining = await self.verify(graph)
             if any(remaining.values()):
+                for resource, stage_name in {
+                    "mongo_references": "mongo",
+                    "r2_objects": "r2",
+                    "pinecone_vectors": "pinecone",
+                }.items():
+                    if remaining[resource]:
+                        stages[stage_name] = "pending"
                 raise RuntimeError("Some policy resources remain; retry the purge")
             stages[stage] = "complete"
             result = PurgeResult(
