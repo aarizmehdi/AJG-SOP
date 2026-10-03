@@ -44,8 +44,54 @@ class PurgeRepository:
 
     async def operation(self, org: str, policy: str) -> dict[str, Any] | None:
         if self.database is None:
-            return self._operations.get((org, policy))
-        return await self.database.policy_purges.find_one({"_id": f"{org}:{policy}"})  # type: ignore[no-any-return]
+            pending = self._operations.get((org, policy))
+            event = next(
+                (
+                    e.model_dump(mode="json")
+                    for e in self.store.audit_events
+                    if e.organization_id == org
+                    and e.action == "policy.purged"
+                    and e.entity_id == policy
+                ),
+                None,
+            )
+        else:
+            pending = await self.database.policy_purges.find_one({"_id": f"{org}:{policy}"})
+            event = await self.database.audit_events.find_one(
+                {"organization_id": org, "action": "policy.purged", "entity_id": policy}
+            )
+        if pending:
+            return dict(pending)
+        if not event:
+            return None
+        return {
+            "status": "complete",
+            "actor_id": event["actor_id"],
+            "result": {
+                "policy_id": policy,
+                "status": "complete",
+                "counts": event["metadata"]["counts"],
+                "stages": {
+                    stage: "complete" for stage in ("pinecone", "r2", "mongo", "verification")
+                },
+                "remaining": {"mongo_references": 0, "r2_objects": 0, "pinecone_vectors": 0},
+                "error": None,
+            },
+        }
+
+    async def finish(self, org: str, policy: str) -> None:
+        """The single minimal audit tombstone becomes the durable invalidation marker."""
+        if self.database is None:
+            self._operations.pop((org, policy), None)
+        else:
+            event = await self.database.audit_events.find_one(
+                {"organization_id": org, "action": "policy.purged", "entity_id": policy}
+            )
+            if event is None:
+                raise RuntimeError("Cannot remove retry manifest before the audit tombstone exists")
+            await self.database.policy_purges.delete_one(
+                {"_id": f"{org}:{policy}", "organization_id": org}
+            )
 
     async def save(self, org: str, policy: str, operation: dict[str, Any]) -> None:
         data = {**operation, "organization_id": org, "policy_id": policy}
@@ -63,6 +109,19 @@ class PurgeRepository:
             else await self.database.policy_purges.find({}).to_list(None)
         )
         removed_chunks: set[str] = set()
+        completed = (
+            [
+                e.model_dump(mode="json")
+                for e in self.store.audit_events
+                if e.action == "policy.purged"
+            ]
+            if self.database is None
+            else await self.database.audit_events.find({"action": "policy.purged"}).to_list(None)
+        )
+        rows.extend(
+            {"organization_id": e["organization_id"], "policy_id": e["entity_id"]}
+            for e in completed
+        )
         for row in rows:
             removed_chunks.update(evict(self.store, row["organization_id"], row["policy_id"]))
         if self.cache_listener is not None:

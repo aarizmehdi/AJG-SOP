@@ -87,7 +87,7 @@ test('System Admin previews and permanently purges an SOP on desktop and mobile'
   ).toBe(404);
   expect(
     (
-      await request.get(`${api}/admin/sources/${sourceId}/canonical`, {
+      await request.get(`${api}/admin/sources/${sourceId}/review`, {
         headers: admin,
       })
     ).status(),

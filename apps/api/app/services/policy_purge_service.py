@@ -123,8 +123,14 @@ class PolicyPurgeService:
         if confirmation.phrase != "DELETE PERMANENTLY":
             raise HTTPException(422, "Exact permanent deletion confirmation is required")
         if previous and previous["status"] == "complete":
-            if digest(confirmation.model_dump()) != previous["confirmation_digest"]:
+            if (
+                previous.get("confirmation_digest")
+                and digest(confirmation.model_dump()) != previous["confirmation_digest"]
+            ):
                 raise HTTPException(409, "Original purge confirmation is required for this retry")
+            # Already deleted: no destructive action remains. Do not retain a title
+            # or its hash solely to validate a no-op retry.
+            await self.repository.finish(org, policy_id)
             return PurgeResult.model_validate(previous["result"]).model_copy(
                 update={"status": "already_complete"}
             )
@@ -200,18 +206,8 @@ class PolicyPurgeService:
             await self.repository.tombstone(
                 org, policy_id, operation["actor_id"], counts.model_dump()
             )
-            # Scrub graph, filenames, title and all preview data on completion.
-            await self.repository.save(
-                org,
-                policy_id,
-                {
-                    "status": "complete",
-                    "actor_id": operation["actor_id"],
-                    "completed_at": utc_now().isoformat(),
-                    "result": result.model_dump(),
-                    "confirmation_digest": digest(confirmation.model_dump()),
-                },
-            )
+            # Scrub the entire temporary manifest; retain only the minimal audit event.
+            await self.repository.finish(org, policy_id)
             return result
         except Exception:
             stages[stage] = "failed"

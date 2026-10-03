@@ -515,3 +515,27 @@ async def test_mongo_write_lease_serializes_workers_and_releases_after_failure()
         async with first.write_guard():
             raise ValueError("Injected writer failure")
     assert database.purge_locks.row is None
+
+
+async def test_completed_purge_keeps_one_audit_only_and_evicts_stale_worker(tmp_path):
+    from copy import deepcopy
+
+    store, storage, index, repo, purge, retrieval, target, other = await setup(tmp_path)
+    stale = deepcopy(store)
+    _, confirmation = await confirmed(purge, target.id)
+    result = await purge.purge(SYSTEM, target.id, confirmation)
+    assert result.status == "complete" and repo._operations == {}
+    event = next(e for e in store.audit_events if e.action == "policy.purged")
+    assert set(event.metadata) == {"counts"}
+    stale.audit_events.append(event)
+    restarted_repository = PurgeRepository(stale)
+    await restarted_repository.synchronize_cache()
+    assert target.id not in stale.policies and other.id in stale.policies
+    assert all(source.policy_id != target.id for source in stale.sources.values())
+    assert all(version.policy_id != target.id for version in stale.versions.values())
+    assert (await restarted_repository.operation("ajt", target.id))["status"] == "complete"
+    # Completed retries validate role/phrase but retain no title/hash or retry manifest.
+    repeated = await PolicyPurgeService(restarted_repository, storage, index).purge(
+        SYSTEM, target.id, confirmation
+    )
+    assert repeated.status == "already_complete" and restarted_repository._operations == {}
