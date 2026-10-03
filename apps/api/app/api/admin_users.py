@@ -30,8 +30,8 @@ class UserMutationRequest(BaseModel):
     preferred_language: Language = Language.ENGLISH
     application_roles: frozenset[ApplicationRole]
     departments: frozenset[str] = Field(min_length=1)
-    locations: frozenset[str] = Field(min_length=1)
-    organizational_roles: frozenset[str] = Field(min_length=1)
+    locations: frozenset[str] = Field(default_factory=frozenset)
+    organizational_roles: frozenset[str] = Field(default_factory=frozenset)
     management_departments: frozenset[str] = Field(default_factory=frozenset)
     management_locations: frozenset[str] = Field(default_factory=frozenset)
     management_roles: frozenset[str] = Field(default_factory=frozenset)

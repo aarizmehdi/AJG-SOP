@@ -46,10 +46,7 @@ export function userToForm(user: AdminUser): UserFormState {
 }
 
 export function formIsComplete(value: UserFormState) {
-  const employeeScope =
-    value.departments.length > 0 &&
-    value.locations.length > 0 &&
-    value.organizational_roles.length > 0;
+  const employeeScope = value.departments.length > 0;
   const managementScope =
     !value.application_roles.includes('sop_admin') ||
     value.application_roles.includes('system_admin') ||

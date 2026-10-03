@@ -41,10 +41,10 @@ export function LanguageProvider({ children }: PropsWithChildren) {
         (import.meta.env.VITE_APP_MODE ?? 'fixture') === 'fixture'
           ? null
           : profile.preferred_language;
-      const selected = isLanguage(local)
-        ? local
-        : isLanguage(remote)
-          ? remote
+      const selected = isLanguage(remote)
+        ? remote
+        : isLanguage(local)
+          ? local
           : null;
       setLanguageState(selected ?? 'english');
       setHasPreference(selected !== null);

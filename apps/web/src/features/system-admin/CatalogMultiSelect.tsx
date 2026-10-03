@@ -8,12 +8,14 @@ export function CatalogMultiSelect({
   value,
   onChange,
   disabled = false,
+  emptyMessage = 'No matching options.',
 }: {
   label: string;
   items: CatalogItem[];
   value: string[];
   onChange: (values: string[]) => void;
   disabled?: boolean;
+  emptyMessage?: string;
 }) {
   const [search, setSearch] = useState('');
   const visible = useMemo(() => {
@@ -76,7 +78,11 @@ export function CatalogMultiSelect({
           );
         })}
       </div>
-      {!visible.length && <p className="field-help">No matching options.</p>}
+      {!visible.length && (
+        <p className="field-help">
+          {items.length === 0 ? emptyMessage : 'No matching options.'}
+        </p>
+      )}
     </fieldset>
   );
 }
