@@ -52,4 +52,30 @@ describe('live API client', () => {
       }),
     );
   });
+
+  it('shows a safe field message for FastAPI validation arrays', async () => {
+    vi.stubEnv('VITE_APP_MODE', 'live');
+    vi.stubEnv('VITE_API_URL', 'https://api.example.test/api/v1');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              type: 'too_short',
+              loc: ['body', 'locations'],
+              msg: 'secret should never appear',
+            },
+          ],
+        }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const { apiRequest } = await import('./client');
+    await expect(apiRequest('/admin/users', z.object({}))).rejects.toEqual(
+      expect.objectContaining({
+        status: 422,
+        message: 'Locations: at least one selection is required',
+      }),
+    );
+  });
 });

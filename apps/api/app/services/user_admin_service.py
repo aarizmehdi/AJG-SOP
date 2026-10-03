@@ -83,12 +83,13 @@ class UserAdminService:
         management_roles: frozenset[str],
         existing: EmployeeProfile | None = None,
     ) -> None:
-        await self._organization.validate_keys(
-            organization_id,
-            CatalogKind.DEPARTMENT,
-            departments,
-            allowed_inactive=existing.departments if existing else frozenset(),
-        )
+        if departments or ApplicationRole.SYSTEM_ADMIN not in roles:
+            await self._organization.validate_keys(
+                organization_id,
+                CatalogKind.DEPARTMENT,
+                departments,
+                allowed_inactive=existing.departments if existing else frozenset(),
+            )
         if locations:
             await self._organization.validate_keys(
                 organization_id,
@@ -117,18 +118,20 @@ class UserAdminService:
                 management_departments,
                 allowed_inactive=(existing.management_departments if existing else frozenset()),
             )
-            await self._organization.validate_keys(
-                organization_id,
-                CatalogKind.LOCATION,
-                management_locations,
-                allowed_inactive=existing.management_locations if existing else frozenset(),
-            )
-            await self._organization.validate_keys(
-                organization_id,
-                CatalogKind.ORGANIZATIONAL_ROLE,
-                management_roles,
-                allowed_inactive=existing.management_roles if existing else frozenset(),
-            )
+            if management_locations:
+                await self._organization.validate_keys(
+                    organization_id,
+                    CatalogKind.LOCATION,
+                    management_locations,
+                    allowed_inactive=existing.management_locations if existing else frozenset(),
+                )
+            if management_roles:
+                await self._organization.validate_keys(
+                    organization_id,
+                    CatalogKind.ORGANIZATIONAL_ROLE,
+                    management_roles,
+                    allowed_inactive=existing.management_roles if existing else frozenset(),
+                )
         elif ApplicationRole.SYSTEM_ADMIN in roles:
             for kind, values, historical in (
                 (

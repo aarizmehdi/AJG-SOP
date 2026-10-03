@@ -18,8 +18,14 @@ import {
 } from '../../../types/admin';
 import { profileSchema } from '../../../types/profile';
 import { UserAccessEditor } from './UserAccessEditor';
-import { formIsComplete, userToForm, type UserFormState } from './userForm';
+import {
+  formIsComplete,
+  hasLegacyAssignments,
+  userToForm,
+  type UserFormState,
+} from './userForm';
 import { systemAdminErrorDetail } from '../errorDetail';
+import { useOrganizationCatalogs } from '../catalogs';
 
 export default function UserDetailPage() {
   const { userId = '' } = useParams();
@@ -37,6 +43,7 @@ export default function UserDetailPage() {
     queryKey: ['admin-user', userId],
     queryFn: () => apiRequest(`/admin/users/${userId}`, adminUserSchema),
   });
+  const catalogs = useOrganizationCatalogs(true);
   const activity = useQuery({
     queryKey: ['admin-user-activity', userId],
     queryFn: () =>
@@ -45,7 +52,9 @@ export default function UserDetailPage() {
         auditPageSchema,
       ),
   });
-  const form = formOverride ?? (user.data ? userToForm(user.data) : null);
+  const form =
+    formOverride ??
+    (user.data && catalogs.data ? userToForm(user.data, catalogs.data) : null);
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin-user', userId] });
     await queryClient.invalidateQueries({ queryKey: ['admin-users'] });
@@ -66,7 +75,7 @@ export default function UserDetailPage() {
       });
     },
     onSuccess: async (updated) => {
-      setForm(userToForm(updated));
+      if (catalogs.data) setForm(userToForm(updated, catalogs.data));
       await refresh();
     },
   });
@@ -97,7 +106,7 @@ export default function UserDetailPage() {
       setResetLink(result.reset_link);
     },
   });
-  if (user.isPending || currentProfile.isPending)
+  if (user.isPending || currentProfile.isPending || catalogs.isPending)
     return <RouteSkeleton label="Loading user" />;
   if (user.isError)
     return (
@@ -107,6 +116,13 @@ export default function UserDetailPage() {
           user.error,
           'This user does not exist in your organization.',
         )}
+      />
+    );
+  if (catalogs.isError)
+    return (
+      <ErrorState
+        title="Organization options unavailable"
+        detail="Current access catalogs could not be loaded. Reload before editing this user."
       />
     );
   if (!form) return <RouteSkeleton label="Preparing user access" />;
@@ -142,6 +158,13 @@ export default function UserDetailPage() {
         </span>
       </div>
       <UserAccessEditor value={form} onChange={setForm} />
+      {hasLegacyAssignments(user.data, catalogs.data) && (
+        <p className="field-help" role="status">
+          This account contained legacy access assignments that are no longer
+          part of the organization catalog. Saving will replace them with the
+          assignments shown above.
+        </p>
+      )}
       {save.isError && (
         <p className="form-error form-error-panel">{save.error.message}</p>
       )}
