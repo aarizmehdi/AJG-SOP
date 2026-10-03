@@ -1,6 +1,9 @@
+"""Assistant JSON and verified-only event-stream endpoints."""
+
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from time import perf_counter
 from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -9,6 +12,7 @@ from fastapi.responses import StreamingResponse
 from apps.api.app.auth.dependencies import CurrentProfile
 from apps.api.app.services.assistant_service import AssistantService, VerificationError
 from packages.contracts.assistant import AssistantRequest, VerifiedAnswer
+from packages.contracts.retrieval import AssistantEvidence
 from services.assistant.answer_generator import LLMUnavailableError
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
@@ -24,12 +28,8 @@ async def answer(
 ) -> VerifiedAnswer:
     try:
         return await _service(request).answer(
-            profile, payload.question, payload.language, payload.session_id
+            profile, payload.question, payload.language, payload.history
         )
-    except PermissionError as error:
-        raise HTTPException(status_code=404, detail="Conversation not found") from error
-    except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
     except LLMUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -46,25 +46,77 @@ async def answer(
 async def answer_events(
     request: Request, payload: AssistantRequest, profile: CurrentProfile
 ) -> StreamingResponse:
-    """Streams truthful status events; answer content appears only in the final verified event."""
+    """Progress is immediate; answer deltas begin only after full verification."""
 
     async def events() -> AsyncIterator[str]:
-        yield _event("status", {"stage": "retrieving", "message": "Searching authorized SOPs"})
-        await asyncio.sleep(0)
+        queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+        service = _service(request)
+        started = perf_counter()
+
+        async def work() -> None:
+            try:
+                result, context = await service.answer_with_context(
+                    profile,
+                    payload.question,
+                    payload.language,
+                    payload.history,
+                    lambda stage: queue.put_nowait(("status", {"stage": stage})),
+                )
+                await queue.put(("result", (result, context)))
+            except (LLMUnavailableError, VerificationError):
+                await queue.put(("error", {"code": "answer_unavailable"}))
+            except Exception:
+                await queue.put(("error", {"code": "answer_unavailable"}))
+
+        task = asyncio.create_task(work())
         try:
-            result = await _service(request).answer(
-                profile, payload.question, payload.language, payload.session_id
-            )
-            yield _event("status", {"stage": "verified", "message": "Answer verified"})
-            yield _event("answer", result.model_dump(mode="json"))
-        except (LLMUnavailableError, VerificationError):
-            yield _event(
-                "error",
-                {
-                    "code": "answer_unavailable",
-                    "message": "No answer was released because verification did not complete.",
-                },
-            )
+            while True:
+                if await request.is_disconnected():
+                    task.cancel()
+                    break
+                try:
+                    name, data = await asyncio.wait_for(queue.get(), timeout=0.5)
+                except TimeoutError:
+                    continue
+                if name == "status":
+                    if data == {"stage": "retrieving"}:
+                        service._metric("assistant_first_status", started)
+                    yield _event(name, data)
+                    continue
+                if name == "error":
+                    yield _event(name, data)
+                    break
+                result, context = cast(tuple[VerifiedAnswer, list[AssistantEvidence]], data)
+                try:
+                    await service.assert_release_authorized(profile, context)
+                    yield _event(
+                        "answer_start",
+                        {
+                            "kind": result.kind,
+                            "answerable": result.answerable,
+                            "language": result.language,
+                            "verified": result.verified,
+                        },
+                    )
+                    for offset in range(0, len(result.answer), 160):
+                        await service.assert_release_authorized(profile, context)
+                        if offset == 0:
+                            service._metric("assistant_first_verified_delta", started)
+                        yield _event("answer_delta", {"text": result.answer[offset : offset + 160]})
+                        await asyncio.sleep(0)
+                    yield _event(
+                        "sources",
+                        {"citations": [item.model_dump(mode="json") for item in result.citations]},
+                    )
+                    yield _event("done", {"verified": True})
+                    service._metric("assistant_response", started)
+                except VerificationError:
+                    yield _event("error", {"code": "answer_unavailable"})
+                break
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     return StreamingResponse(
         events(),

@@ -24,6 +24,7 @@ class FoundationStore:
     jobs: dict[str, IngestionJob] = field(default_factory=dict)
     chunks: dict[str, list[RetrievalChunk]] = field(default_factory=dict)
     audit_events: list[AuditEvent] = field(default_factory=list)
+    # Historical records are retained only for exact legacy purge; Assistant v2 never writes them.
     chat_sessions: dict[str, ChatSession] = field(default_factory=dict)
     chat_messages: list[ChatMessage] = field(default_factory=list)
     _mutations: dict[str, MutationSet] = field(default_factory=dict)

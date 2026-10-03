@@ -390,13 +390,12 @@ async def test_answer_generating_during_purge_is_never_released(tmp_path):
     _, confirmation = await confirmed(purge, target.id)
 
     class PurgingProvider(FixtureLLMProvider):
-        async def generate(self, question, evidence, language):
-            response = await super().generate(question, evidence, language)
+        async def generate(self, question, evidence, language, repair_feedback=None):
+            response = await super().generate(question, evidence, language, repair_feedback)
             assert (await purge.purge(SYSTEM, target.id, confirmation)).status == "complete"
             return response
 
     assistant = AssistantService(
-        store,
         retrieval,
         FixtureAnswerabilityGate(),
         PurgingProvider(),

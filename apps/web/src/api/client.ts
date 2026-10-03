@@ -49,6 +49,33 @@ export class ApiError extends Error {
   }
 }
 
+export async function apiStream(
+  path: string,
+  init: RequestInit,
+): Promise<Response> {
+  const headers = await authorizedHeaders(init.headers);
+  headers.set('Content-Type', 'application/json');
+  headers.set('Accept', 'text/event-stream');
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, { ...init, headers });
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
+    throw new ApiError('Cannot connect to the API backend', 0);
+  }
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const detail = z.object({ detail: z.string() }).safeParse(body);
+    throw new ApiError(
+      detail.success ? detail.data.detail : 'Request failed',
+      response.status,
+    );
+  }
+  if (!response.body)
+    throw new ApiError('The response stream is unavailable', 502);
+  return response;
+}
+
 export async function apiRequest<T>(
   path: string,
   schema: z.ZodType<T>,

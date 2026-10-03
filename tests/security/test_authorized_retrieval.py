@@ -105,7 +105,14 @@ async def test_unauthorized_chunks_never_enter_candidate_retrievers() -> None:
                 access=selected("store"),
             )
         },
-        chunks={"version": [chunk("allowed", "store"), chunk("restricted", "hr")]},
+        chunks={
+            "version": [
+                chunk("allowed", "store").model_copy(
+                    update={"text": "A" * 430 + " Capacity is 12 tonnes."}
+                ),
+                chunk("restricted", "hr"),
+            ]
+        },
     )
     profile = EmployeeProfile(
         id="employee",
@@ -132,6 +139,11 @@ async def test_unauthorized_chunks_never_enter_candidate_retrievers() -> None:
     assert lexical.seen == ["allowed"]
     assert semantic.seen == ["allowed"]
     assert [item.chunk_id for item in results] == ["allowed"]
+    assert "Capacity" not in results[0].excerpt
+    spoofed = results[0].model_copy(update={"chunk_id": "restricted"})
+    context = await service.assistant_context(profile, [results[0], spoofed])
+    assert [item.chunk_id for item in context] == ["allowed"]
+    assert context[0].full_text.endswith("Capacity is 12 tonnes.")
 
 
 def test_system_admin_reads_tenant_wide_but_sop_admin_keeps_employee_scope() -> None:

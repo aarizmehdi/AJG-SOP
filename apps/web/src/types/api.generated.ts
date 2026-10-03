@@ -852,9 +852,24 @@ export interface components {
       /** Question */
       question: string;
       language: components['schemas']['Language'];
-      /** Session Id */
-      session_id?: string | null;
+      /** History */
+      history?: components['schemas']['ConversationTurn'][];
     };
+    /** ConversationTurn */
+    ConversationTurn: {
+      role: components['schemas']['MessageRole'];
+      /** Content */
+      content: string;
+    };
+    /** MessageRole */
+    MessageRole: 'user' | 'assistant';
+    /** ResponseKind */
+    ResponseKind:
+      | 'smalltalk'
+      | 'policy_answer'
+      | 'clarification'
+      | 'no_answer'
+      | 'out_of_scope';
     /** AvailablePolicySummary */
     AvailablePolicySummary: {
       /** Policy Id */
@@ -1678,6 +1693,7 @@ export interface components {
     VerifiedAnswer: {
       /** Organization Id */
       organization_id: string;
+      kind?: components['schemas']['ResponseKind'];
       /** Answerable */
       answerable: boolean;
       /** Answer */
@@ -1687,8 +1703,6 @@ export interface components {
       citations: components['schemas']['AssistantCitation'][];
       /** Verified */
       verified: boolean;
-      /** Session Id */
-      session_id: string;
     };
     /**
      * VersionStatus

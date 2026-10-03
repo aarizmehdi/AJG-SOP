@@ -1,5 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
 import { ArrowUp, BookOpenText, Mic, Square, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   useEffect,
   useCallback,
@@ -9,36 +10,44 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest } from '../../api/client';
 import { BrandMark } from '../../components/ui/BrandMark';
-import {
-  verifiedAnswerSchema,
-  type VerifiedAnswer,
-} from '../../types/assistant';
+import { type StreamAnswer } from '../../types/assistant';
 import { useLanguage } from '../language/useLanguage';
+import { streamAssistant } from './streamAssistant';
 import { useVoiceInput } from './useVoiceInput';
 
 type Turn = {
   id: string;
   question: string;
-  result?: VerifiedAnswer;
+  result?: StreamAnswer;
+  streaming?: string | undefined;
+  stage?:
+    | 'retrieving'
+    | 'reading'
+    | 'generating'
+    | 'repairing'
+    | 'verifying'
+    | undefined;
   failed?: boolean;
 };
-type Request = {
-  id: string;
-  question: string;
-  responseLanguage: 'english' | 'urdu' | 'roman_urdu';
-};
+const stageKeys = {
+  retrieving: 'assistantStageRetrieving',
+  reading: 'assistantStageReading',
+  generating: 'assistantStageGenerating',
+  repairing: 'assistantStageRepairing',
+  verifying: 'assistantStageVerifying',
+} as const;
 
 export default function AssistantPage() {
   const [question, setQuestion] = useState('');
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [pending, setPending] = useState(false);
   const { language, t } = useLanguage();
   const textarea = useRef<HTMLTextAreaElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const composing = useRef(false);
   const inFlight = useRef(false);
+  const abort = useRef<AbortController | null>(null);
   const followBottom = useRef(true);
   const voiceEnabled = import.meta.env.VITE_VOICE_INPUT_ENABLED === 'true';
   const acceptTranscript = useCallback((transcript: string) => {
@@ -57,44 +66,7 @@ export default function AssistantPage() {
     language,
     onTranscript: acceptTranscript,
   });
-  const answer = useMutation({
-    mutationFn: async (request: Request) => {
-      const result = await apiRequest(
-        '/assistant/answer',
-        verifiedAnswerSchema,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            question: request.question,
-            language: request.responseLanguage,
-            session_id: sessionId,
-          }),
-        },
-      );
-      if (result.language !== request.responseLanguage)
-        throw new Error('Assistant response language did not match preference');
-      return result;
-    },
-    onSuccess: (result, request) => {
-      setSessionId(result.session_id);
-      setTurns((current) =>
-        current.map((turn) =>
-          turn.id === request.id ? { ...turn, result } : turn,
-        ),
-      );
-      textarea.current?.focus();
-    },
-    onError: (_error, request) => {
-      setTurns((current) =>
-        current.map((turn) =>
-          turn.id === request.id ? { ...turn, failed: true } : turn,
-        ),
-      );
-    },
-    onSettled: () => {
-      inFlight.current = false;
-    },
-  });
+  useEffect(() => () => abort.current?.abort(), []);
 
   useEffect(() => {
     textarea.current?.focus();
@@ -123,7 +95,7 @@ export default function AssistantPage() {
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [turns, answer.isPending]);
+  }, [turns, pending]);
 
   const resizeComposer = () => {
     const field = textarea.current;
@@ -134,18 +106,74 @@ export default function AssistantPage() {
   };
   const send = () => {
     const trimmed = question.trim();
-    if (!trimmed || inFlight.current || answer.isPending || composing.current)
-      return;
+    if (!trimmed || inFlight.current || composing.current) return;
     inFlight.current = true;
     followBottom.current = true;
     const id = crypto.randomUUID();
+    const history = turns
+      .filter((turn) => turn.result)
+      .slice(-8)
+      .map((turn) => ({
+        role: 'user' as const,
+        content: turn.question.slice(0, 1000),
+      }));
     setTurns((current) => [...current, { id, question: trimmed }]);
+    setPending(true);
     setQuestion('');
     if (textarea.current) {
       textarea.current.style.height = 'auto';
       textarea.current.style.overflowY = 'hidden';
     }
-    answer.mutate({ id, question: trimmed, responseLanguage: language });
+    const controller = new AbortController();
+    abort.current = controller;
+    void streamAssistant(trimmed, language, history, controller.signal, {
+      onStatus: (stage) => {
+        setTurns((current) =>
+          current.map((turn) => (turn.id === id ? { ...turn, stage } : turn)),
+        );
+      },
+      onDelta: (text) => {
+        setTurns((current) =>
+          current.map((turn) =>
+            turn.id === id
+              ? { ...turn, streaming: (turn.streaming ?? '') + text }
+              : turn,
+          ),
+        );
+      },
+    })
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setTurns((current) =>
+          current.map((turn) =>
+            turn.id === id
+              ? { ...turn, result, streaming: undefined, stage: undefined }
+              : turn,
+          ),
+        );
+        textarea.current?.focus();
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setTurns((current) =>
+          current.map((turn) =>
+            turn.id === id
+              ? {
+                  ...turn,
+                  failed: true,
+                  streaming: undefined,
+                  stage: undefined,
+                }
+              : turn,
+          ),
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          inFlight.current = false;
+          setPending(false);
+        }
+      });
   };
   const submit = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -162,6 +190,7 @@ export default function AssistantPage() {
     event.preventDefault();
     send();
   };
+  const latestStage = turns.at(-1)?.stage;
   return (
     <main className="page assistant-page">
       <header className="assistant-heading">
@@ -189,9 +218,21 @@ export default function AssistantPage() {
                 <BrandMark compact />
                 <div>
                   <span className="answer-label">{t('assistantAnswer')}</span>
-                  <p dir={language === 'urdu' ? 'rtl' : 'ltr'}>
-                    {turn.result.answer}
-                  </p>
+                  <div
+                    className="answer-markdown"
+                    dir={language === 'urdu' ? 'rtl' : 'ltr'}
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      skipHtml
+                      components={{
+                        a: ({ children }) => <span>{children}</span>,
+                        img: () => null,
+                      }}
+                    >
+                      {turn.result.answer}
+                    </ReactMarkdown>
+                  </div>
                   {turn.result.citations.length > 0 && (
                     <div className="answer-sources">
                       <strong>{t('assistantSources')}</strong>
@@ -217,6 +258,26 @@ export default function AssistantPage() {
                 </div>
               </div>
             )}
+            {turn.streaming !== undefined && (
+              <div className="assistant-message" aria-live="polite">
+                <BrandMark compact />
+                <div
+                  className="answer-markdown"
+                  dir={language === 'urdu' ? 'rtl' : 'ltr'}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    skipHtml
+                    components={{
+                      a: ({ children }) => <span>{children}</span>,
+                      img: () => null,
+                    }}
+                  >
+                    {turn.streaming}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            )}
             {turn.failed && (
               <div className="assistant-failure" role="alert">
                 <strong>{t('assistantNoAnswer')}</strong>
@@ -225,12 +286,16 @@ export default function AssistantPage() {
             )}
           </div>
         ))}
-        {answer.isPending && (
+        {pending && !turns.at(-1)?.streaming && (
           <div className="assistant-message pending" role="status">
             <BrandMark compact />
             <div>
               <span className="pending-bar" aria-hidden="true" />
-              <small>{t('assistantPending')}</small>
+              <small>
+                {latestStage
+                  ? t(stageKeys[latestStage])
+                  : t('assistantPending')}
+              </small>
             </div>
           </div>
         )}
@@ -242,6 +307,7 @@ export default function AssistantPage() {
           aria-label={t('assistantInput')}
           dir="auto"
           rows={1}
+          maxLength={1000}
           value={question}
           onChange={(event) => {
             setQuestion(event.target.value);
@@ -294,7 +360,7 @@ export default function AssistantPage() {
             className="send-button"
             type="submit"
             aria-label={t('assistantSend')}
-            disabled={answer.isPending || !question.trim()}
+            disabled={pending || !question.trim()}
           >
             <ArrowUp aria-hidden="true" />
           </button>

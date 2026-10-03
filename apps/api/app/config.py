@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
+    deepseek_temperature: float = Field(default=0.2, ge=0, le=1)
 
     embedding_provider: Literal["fixture", "pinecone_e5"] = "fixture"
     embedding_model: str = "multilingual-e5-large"

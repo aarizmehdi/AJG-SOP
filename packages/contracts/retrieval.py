@@ -32,6 +32,12 @@ class SearchEvidence(OrganizationOwned):
     fused_score: float
 
 
+class AssistantEvidence(SearchEvidence):
+    """Authorized generation context; search responses retain short excerpts."""
+
+    full_text: str
+
+
 class SearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     query: str = Field(min_length=2, max_length=500)

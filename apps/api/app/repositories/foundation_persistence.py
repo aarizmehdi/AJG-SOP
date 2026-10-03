@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from pymongo import AsyncMongoClient
 
 from apps.api.app.services.foundation_store import FoundationStore
-from packages.contracts.assistant import ChatMessage, ChatSession
 from packages.contracts.canonical import CanonicalSOP, RetrievalChunk
 from packages.contracts.policy import AuditEvent, IngestionJob, SOPPolicy, SOPVersion
 from packages.contracts.source import SourceDocument
@@ -51,12 +50,10 @@ class MongoFoundationPersistence:
         "ingestion_jobs": IngestionJob,
         "retrieval_chunks": RetrievalChunk,
         "audit_events": AuditEvent,
-        "chat_sessions": ChatSession,
-        "chat_messages": ChatMessage,
     }
 
     # Collections where items are only inserted, never updated or deleted.
-    _append_only: frozenset[str] = frozenset({"audit_events", "chat_messages"})
+    _append_only: frozenset[str] = frozenset({"audit_events"})
 
     def __init__(self, uri: str, database: str) -> None:
         self._client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(uri)
@@ -95,10 +92,6 @@ class MongoFoundationPersistence:
             chunks[item.version_id].append(item)
         store.chunks = dict(chunks)
         store.audit_events = self._typed(records["audit_events"], AuditEvent)
-        store.chat_sessions = {
-            item.id: item for item in self._typed(records["chat_sessions"], ChatSession)
-        }
-        store.chat_messages = self._typed(records["chat_messages"], ChatMessage)
 
     async def flush(self, store: FoundationStore) -> None:
         """Persist only the mutations recorded since the last flush."""
