@@ -1,11 +1,40 @@
+import re
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import anyio
 import boto3
 
 
+@dataclass(frozen=True)
+class SourceObject:
+    key: str
+    size: int
+
+
+def source_prefix(organization_id: str, source_id: str) -> str:
+    if not all(re.fullmatch(r"[A-Za-z0-9_-]+", value) for value in (organization_id, source_id)):
+        raise ValueError("Invalid organization/source identifier")
+    return f"{organization_id}/sources/{source_id}/"
+
+
 class ArtifactStore(ABC):
+    @abstractmethod
+    def owns_source_uri(self, organization_id: str, source_id: str, uri: str) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def list_source(self, organization_id: str, source_id: str) -> list[SourceObject]:
+        """List the entire exact source prefix, including unreferenced legacy objects."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete_source(self, organization_id: str, source_id: str) -> list[SourceObject]:
+        """Return deleted objects; never delete outside this organization/source prefix."""
+        raise NotImplementedError
+
     @abstractmethod
     async def put(
         self, organization_id: str, key: str, content: bytes, media_type: str | None = None
@@ -32,8 +61,42 @@ class StorageError(RuntimeError):
 
 
 class LocalArtifactStore(ArtifactStore):
+    def owns_source_uri(self, organization_id: str, source_id: str, uri: str) -> bool:
+        return uri.startswith(f"local://{source_prefix(organization_id, source_id)}")
+
     def __init__(self, root: Path) -> None:
         self._root = root.resolve()
+
+    async def list_source(self, organization_id: str, source_id: str) -> list[SourceObject]:
+        prefix = source_prefix(organization_id, source_id)
+        path = self._root / prefix
+
+        def scan() -> list[SourceObject]:
+            if not path.exists():
+                return []
+            if path.resolve() != path.absolute() or path.is_symlink():
+                raise ValueError("Source prefix must not traverse symbolic links")
+            result = []
+            for child in path.rglob("*"):
+                if child.is_symlink() or not child.resolve().is_relative_to(path.resolve()):
+                    raise ValueError("Source artifact escapes exact source prefix")
+                if child.is_file():
+                    result.append(
+                        SourceObject(child.relative_to(self._root).as_posix(), child.stat().st_size)
+                    )
+            return sorted(result, key=lambda item: item.key)
+
+        return await anyio.to_thread.run_sync(scan)
+
+    async def delete_source(self, organization_id: str, source_id: str) -> list[SourceObject]:
+        objects = await self.list_source(organization_id, source_id)
+        prefix = (self._root / source_prefix(organization_id, source_id)).resolve()
+        for item in objects:
+            path = (self._root / item.key).resolve()
+            if not path.is_relative_to(prefix):
+                raise ValueError("Deletion target escapes exact source prefix")
+            await anyio.to_thread.run_sync(partial(path.unlink, missing_ok=True))
+        return objects
 
     def _path(self, organization_id: str, key: str) -> Path:
         candidate = (self._root / organization_id / key).resolve()
@@ -81,6 +144,43 @@ class LocalArtifactStore(ArtifactStore):
 
 
 class S3ArtifactStore(ArtifactStore):
+    def owns_source_uri(self, organization_id: str, source_id: str, uri: str) -> bool:
+        return uri.startswith(f"s3://{self._bucket}/{source_prefix(organization_id, source_id)}")
+
+    async def list_source(self, organization_id: str, source_id: str) -> list[SourceObject]:
+        prefix = source_prefix(organization_id, source_id)
+
+        def scan() -> list[SourceObject]:
+            result = []
+            for page in self._client.get_paginator("list_objects_v2").paginate(
+                Bucket=self._bucket, Prefix=prefix
+            ):
+                for item in page.get("Contents", []):
+                    key = item["Key"]
+                    if not key.startswith(prefix):
+                        raise StorageError("Object listing escaped exact source prefix")
+                    result.append(SourceObject(key, item["Size"]))
+            return sorted(result, key=lambda item: item.key)
+
+        return await anyio.to_thread.run_sync(scan)
+
+    async def delete_source(self, organization_id: str, source_id: str) -> list[SourceObject]:
+        objects = await self.list_source(organization_id, source_id)
+        for start in range(0, len(objects), 1000):
+            batch = objects[start : start + 1000]
+            response = await anyio.to_thread.run_sync(
+                partial(
+                    self._client.delete_objects,
+                    Bucket=self._bucket,
+                    Delete={"Objects": [{"Key": item.key} for item in batch]},
+                )
+            )
+            if response.get("Errors"):
+                raise StorageError("Some exact source objects could not be deleted; retry purge")
+        if await self.list_source(organization_id, source_id):
+            raise StorageError("Source prefix deletion could not be verified")
+        return objects
+
     def __init__(
         self,
         bucket: str,

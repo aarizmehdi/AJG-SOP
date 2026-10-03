@@ -15,6 +15,8 @@ import { apiRequest, ApiError } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { AdminCanonicalReader } from './AdminCanonicalReader';
 import { AdminOriginalDocument } from './AdminOriginalDocument';
+import { PolicyPurgeDangerZone } from './PolicyPurgeDangerZone';
+import './purge.css';
 import { localizedSource, localizedStatus, useAdminCopy } from './adminCopy';
 import {
   viewerSchema,
@@ -264,6 +266,9 @@ export default function AdminPolicyDetailPage() {
           }
           detail={copy.sopUnavailableDetail}
         />
+        {canRunTechnicalWorkflow && (
+          <PolicyPurgeDangerZone policyId={policyId} />
+        )}
       </div>
     );
   const data = viewer.data;
@@ -473,6 +478,9 @@ export default function AdminPolicyDetailPage() {
         </summary>
         <Versions viewer={data} onVersion={selectVersion} />
       </details>
+      {canRunTechnicalWorkflow && (
+        <PolicyPurgeDangerZone policyId={data.policy.id} />
+      )}
     </section>
   );
 }

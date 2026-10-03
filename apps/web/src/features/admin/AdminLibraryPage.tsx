@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, FileText, Search } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
@@ -6,6 +7,7 @@ import { apiRequest, ApiError } from '../../api/client';
 import { EmptyState, ErrorState } from '../../components/feedback/StatePanel';
 import { policyListSchema, type Policy } from '../../types/policy';
 import { profileSchema } from '../../types/profile';
+import { purgeCopy } from './purgeCopy';
 import {
   localizedSort,
   localizedSource,
@@ -135,6 +137,8 @@ export default function AdminLibraryPage() {
       className="admin-content library-page"
       aria-labelledby="library-title"
     >
+      {z.object({ purged: z.literal(true) }).safeParse(location.state)
+        .success && <p role="status">{purgeCopy[language].success}</p>}
       <div className="library-toolbar">
         <div>
           <span className="eyebrow">{copy.management}</span>

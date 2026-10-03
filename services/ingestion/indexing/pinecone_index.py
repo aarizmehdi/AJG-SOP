@@ -11,6 +11,19 @@ from packages.contracts.canonical import RetrievalChunk
 
 class DerivedRetrievalIndex(ABC):
     @abstractmethod
+    async def policy_vectors(
+        self, organization_id: str, policy_id: str, version_ids: set[str], chunk_ids: set[str]
+    ) -> set[str]:
+        """Complete namespace inventory, not a top-k similarity query."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def purge_policy(
+        self, organization_id: str, policy_id: str, version_ids: set[str], chunk_ids: set[str]
+    ) -> int:
+        raise NotImplementedError
+
+    @abstractmethod
     async def stage(
         self,
         organization_id: str,
@@ -39,6 +52,27 @@ class FixtureRetrievalIndex(DerivedRetrievalIndex):
         self.records: dict[tuple[str, str], dict[str, tuple[RetrievalChunk, list[float]]]] = {}
         self.fail_next_stage = False
         self.fail_next_activate = False
+
+    async def policy_vectors(
+        self, organization_id: str, policy_id: str, version_ids: set[str], chunk_ids: set[str]
+    ) -> set[str]:
+        return {
+            key
+            for (org, version), rows in self.records.items()
+            if org == organization_id
+            for key, (chunk, _) in rows.items()
+            if chunk.policy_id == policy_id or version in version_ids or key in chunk_ids
+        }
+
+    async def purge_policy(
+        self, organization_id: str, policy_id: str, version_ids: set[str], chunk_ids: set[str]
+    ) -> int:
+        ids = await self.policy_vectors(organization_id, policy_id, version_ids, chunk_ids)
+        for (org, _), rows in self.records.items():
+            if org == organization_id:
+                for key in ids:
+                    rows.pop(key, None)
+        return len(ids)
 
     async def stage(
         self,
@@ -93,6 +127,59 @@ class PineconeRetrievalIndex(DerivedRetrievalIndex):
             char for char in organization_id.lower() if char.isalnum() or char == "-"
         )
         return f"{self._namespace_prefix}--{safe_tenant}"
+
+    async def policy_vectors(
+        self, organization_id: str, policy_id: str, version_ids: set[str], chunk_ids: set[str]
+    ) -> set[str]:
+        namespace = self.namespace(organization_id)
+
+        def scan() -> set[str]:
+            result: set[str] = set()
+            for page in self._index.list(namespace=namespace):
+                ids = [item.id for item in page.vectors]
+                for start in range(0, len(ids), 100):
+                    response = self._index.fetch(ids=ids[start : start + 100], namespace=namespace)
+                    vectors = getattr(response, "vectors", {})
+                    for key, vector in vectors.items():
+                        metadata = getattr(vector, "metadata", {}) or {}
+                        matches = (
+                            metadata.get("policy_id") == policy_id
+                            or metadata.get("version_id") in version_ids
+                            or key in chunk_ids
+                        )
+                        if matches:
+                            if metadata.get("organization_id") not in (None, organization_id):
+                                raise PermissionError("Vector ownership conflicts with namespace")
+                            if metadata.get("policy_id") not in (None, policy_id):
+                                raise PermissionError("Vector has conflicting policy ownership")
+                            result.add(key)
+            return result
+
+        return await anyio.to_thread.run_sync(scan)
+
+    async def purge_policy(
+        self, organization_id: str, policy_id: str, version_ids: set[str], chunk_ids: set[str]
+    ) -> int:
+        ids = sorted(await self.policy_vectors(organization_id, policy_id, version_ids, chunk_ids))
+        for start in range(0, len(ids), 1000):
+            await anyio.to_thread.run_sync(
+                partial(
+                    self._index.delete,
+                    ids=ids[start : start + 1000],
+                    namespace=self.namespace(organization_id),
+                )
+            )
+        # Pinecone is eventually consistent. Require two consecutive complete empty inventories.
+        empty = 0
+        for _ in range(12):
+            remaining = await self.policy_vectors(
+                organization_id, policy_id, version_ids, chunk_ids
+            )
+            empty = empty + 1 if not remaining else 0
+            if empty >= 2:
+                return len(ids)
+            await anyio.sleep(1)
+        raise RuntimeError("Pinecone policy deletion not yet verified; retry purge")
 
     async def stage(
         self,

@@ -12,6 +12,7 @@ from apps.api.app.api.admin_audit import router as admin_audit_router
 from apps.api.app.api.admin_control_plane import router as admin_control_plane_router
 from apps.api.app.api.admin_organization import router as admin_organization_router
 from apps.api.app.api.admin_policies import router as admin_policies_router
+from apps.api.app.api.admin_policy_purge import router as admin_policy_purge_router
 from apps.api.app.api.admin_sources import router as admin_sources_router
 from apps.api.app.api.admin_users import router as admin_users_router
 from apps.api.app.api.assistant import router as assistant_router
@@ -31,6 +32,7 @@ from apps.api.app.repositories.foundation_persistence import (
     FoundationPersistence,
     MongoFoundationPersistence,
 )
+from apps.api.app.repositories.purge_repository import PurgeRepository
 from apps.api.app.services.admin_audit_service import AdminAuditService
 from apps.api.app.services.assistant_service import AssistantService
 from apps.api.app.services.audit_service import AuditService
@@ -42,6 +44,7 @@ from apps.api.app.services.identity_admin_service import (
 )
 from apps.api.app.services.metrics import MetricsRegistry
 from apps.api.app.services.organization_service import OrganizationService
+from apps.api.app.services.policy_purge_service import PolicyPurgeService
 from apps.api.app.services.policy_reader_service import PolicyReaderService
 from apps.api.app.services.policy_service import PolicyService
 from apps.api.app.services.storage_service import LocalArtifactStore, S3ArtifactStore
@@ -186,6 +189,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.app_mode == "fixture":
         await seed_fixture_data(app)
 
+    persistence = app.state.foundation_persistence
+    app.state.purge_repository = PurgeRepository(
+        app.state.foundation_store,
+        persistence._database if isinstance(persistence, MongoFoundationPersistence) else None,
+    )
+    app.state.policy_purge_service = PolicyPurgeService(
+        app.state.purge_repository, app.state.artifact_store, app.state.retrieval_index
+    )
+    await app.state.purge_repository.synchronize_cache()
+
     # --- Retrieval service ---
     authorization = AuthorizationFilter(app.state.foundation_store)
     semantic: SemanticCandidateRetriever
@@ -206,10 +219,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ReciprocalRankFusion(),
         FixtureReranker(),
         app.state.metrics,
+        app.state.purge_repository.synchronize_cache,
     )
     app.state.policy_reader_service = PolicyReaderService(
         app.state.foundation_store, authorization, app.state.artifact_store
     )
+    app.state.purge_repository.cache_listener = app.state.retrieval_service.evict_chunks
 
     # --- LLM provider ---
     llm_provider: LLMProvider
@@ -236,7 +251,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     structlog.get_logger().info("application_started", mode=settings.app_mode)
     yield
     try:
-        await app.state.foundation_persistence.flush(app.state.foundation_store)
+        async with app.state.purge_repository.write_guard():
+            await app.state.purge_repository.synchronize_cache()
+            await app.state.foundation_persistence.flush(app.state.foundation_store)
     except Exception:
         structlog.get_logger().exception("shutdown_flush_failed")
     await app.state.foundation_persistence.close()
@@ -256,6 +273,7 @@ app.add_middleware(
 app.include_router(profile_router, prefix=settings.api_prefix)
 app.include_router(admin_sources_router, prefix=settings.api_prefix)
 app.include_router(admin_policies_router, prefix=settings.api_prefix)
+app.include_router(admin_policy_purge_router, prefix=settings.api_prefix)
 app.include_router(admin_users_router, prefix=settings.api_prefix)
 app.include_router(admin_audit_router, prefix=settings.api_prefix)
 app.include_router(admin_control_plane_router, prefix=settings.api_prefix)
@@ -270,20 +288,32 @@ app.include_router(speech_router, prefix=settings.api_prefix)
 async def persist_successful_mutations(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
-    response = await call_next(request)
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and response.status_code < 400:
-        persistence: FoundationPersistence = request.app.state.foundation_persistence
-        store: FoundationStore = request.app.state.foundation_store
-        try:
-            await persistence.flush(store)
-            store.clear_mutations()
-        except Exception as err:
-            structlog.get_logger().exception("mutation_flush_failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database persistence failed",
-            ) from err
-    return response
+    repository: PurgeRepository = request.app.state.purge_repository
+
+    async def execute() -> Response:
+        removed = await repository.synchronize_cache()
+        request.app.state.retrieval_service.evict_chunks(removed)
+        response = await call_next(request)
+        removed = await repository.synchronize_cache()
+        request.app.state.retrieval_service.evict_chunks(removed)
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and response.status_code < 400:
+            persistence: FoundationPersistence = request.app.state.foundation_persistence
+            store: FoundationStore = request.app.state.foundation_store
+            try:
+                await persistence.flush(store)
+                store.clear_mutations()
+            except Exception as err:
+                structlog.get_logger().exception("mutation_flush_failed")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database persistence failed",
+                ) from err
+        return response
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        async with repository.write_guard():
+            return await execute()
+    return await execute()
 
 
 @app.middleware("http")

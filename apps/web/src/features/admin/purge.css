@@ -1,0 +1,84 @@
+.policy-danger-zone {
+  margin-block: 2rem;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid #e8c4c4;
+  border-radius: 14px;
+  background: #fff;
+}
+.policy-danger-zone h3 {
+  color: #963a3a;
+  margin: 0 0 0.5rem;
+}
+.policy-danger-zone p {
+  line-height: 1.65;
+  max-width: 70ch;
+}
+.policy-danger-zone form {
+  margin-top: 1.5rem;
+  max-width: 760px;
+}
+.policy-danger-zone label {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 1rem;
+  font-weight: 600;
+}
+.policy-danger-zone input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #c8d3df;
+  border-radius: 8px;
+  background: #fff;
+}
+.purge-button {
+  color: #943636;
+  border: 1px solid #d4a3a3;
+  background: #fff7f7;
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.purge-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.purge-inventory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  padding-block: 1rem;
+}
+.purge-inventory div {
+  border-bottom: 1px solid #e7edf3;
+  padding-bottom: 0.5rem;
+}
+.purge-inventory dt {
+  font-size: 0.85rem;
+  color: #596b7f;
+}
+.purge-inventory dd {
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+}
+.purge-policy-id {
+  overflow-wrap: anywhere;
+  color: #596b7f;
+  font-size: 0.875rem;
+}
+.purge-limit {
+  color: #596b7f;
+  font-size: 0.875rem;
+}
+.purge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.purge-skeleton {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.purge-skeleton .skeleton {
+  height: 2rem;
+}
