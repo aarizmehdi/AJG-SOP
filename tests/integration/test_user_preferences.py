@@ -150,6 +150,127 @@ def test_admin_can_create_edit_and_assign_optional_user_dimensions(
         assert stale.status_code == 409
 
 
+def test_legacy_assignments_are_replaced_with_exact_current_scope() -> None:
+    with TestClient(app) as client:
+        headers = {"Authorization": "Fixture system-admin", "Idempotency-Key": "legacy-user-001"}
+        payload = {
+            "display_name": "Legacy employee",
+            "email": "legacy.employee@example.test",
+            "application_roles": ["employee"],
+            "departments": ["store"],
+            "locations": [],
+            "organizational_roles": [],
+        }
+        created = client.post("/api/v1/admin/users", headers=headers, json=payload)
+        assert created.status_code == 201, created.text
+        user_id = created.json()["user"]["id"]
+        stored = next(
+            row
+            for row in client.app.state.database.collections["employee_profiles"]
+            if row["id"] == user_id
+        )
+        stored.update(
+            departments=["operations"],
+            locations=["head-office"],
+            organizational_roles=["employee"],
+        )
+
+        updated = client.patch(
+            f"/api/v1/admin/users/{user_id}",
+            headers=headers,
+            json={**payload, "expected_version": 1},
+        )
+        assert updated.status_code == 200, updated.text
+        for record in (updated.json(), stored):
+            assert record["departments"] == ["store"]
+            assert record["locations"] == []
+            assert record["organizational_roles"] == []
+
+
+def test_system_admin_can_clear_legacy_scopes_without_losing_application_role() -> None:
+    with TestClient(app) as client:
+        admin = next(
+            row
+            for row in client.app.state.database.collections["employee_profiles"]
+            if "system_admin" in row["application_roles"]
+        )
+        admin.update(
+            departments=["technology", "operations"],
+            locations=["head-office"],
+            organizational_roles=["admin"],
+            management_departments=["management"],
+            management_locations=["head-office"],
+            management_roles=["admin"],
+        )
+        response = client.patch(
+            f"/api/v1/admin/users/{admin['id']}",
+            headers={"Authorization": "Fixture system-admin"},
+            json={
+                "display_name": admin["display_name"],
+                "email": admin["email"],
+                "application_roles": ["employee", "sop_admin", "system_admin"],
+                "departments": [],
+                "locations": [],
+                "organizational_roles": [],
+                "management_departments": [],
+                "management_locations": [],
+                "management_roles": [],
+                "expected_version": admin.get("version", 1),
+            },
+        )
+        assert response.status_code == 200, response.text
+        for field in (
+            "departments",
+            "locations",
+            "organizational_roles",
+            "management_departments",
+            "management_locations",
+            "management_roles",
+        ):
+            assert response.json()[field] == admin[field] == []
+        assert "system_admin" in response.json()["application_roles"]
+
+
+def test_sop_admin_can_replace_legacy_management_scope_when_optional_catalogs_are_empty() -> None:
+    with TestClient(app) as client:
+        admin = next(
+            row
+            for row in client.app.state.database.collections["employee_profiles"]
+            if "sop_admin" in row["application_roles"]
+            and "system_admin" not in row["application_roles"]
+        )
+        admin.update(
+            departments=["operations"],
+            locations=["head-office"],
+            organizational_roles=["manager"],
+            management_departments=["operations"],
+            management_locations=["head-office"],
+            management_roles=["manager"],
+        )
+        client.app.state.database.collections["locations"] = []
+        client.app.state.database.collections["organizational_roles"] = []
+        response = client.patch(
+            f"/api/v1/admin/users/{admin['id']}",
+            headers={"Authorization": "Fixture system-admin"},
+            json={
+                "display_name": admin["display_name"],
+                "email": admin["email"],
+                "application_roles": ["employee", "sop_admin"],
+                "departments": ["store"],
+                "locations": [],
+                "organizational_roles": [],
+                "management_departments": ["store"],
+                "management_locations": [],
+                "management_roles": [],
+                "expected_version": admin.get("version", 1),
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["management_departments"] == ["store"]
+        assert response.json()["management_locations"] == []
+        assert response.json()["management_roles"] == []
+
+
 @pytest.mark.parametrize(
     "field,value",
     [("departments", []), ("locations", ["unknown"]), ("organizational_roles", ["unknown"])],

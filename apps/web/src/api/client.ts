@@ -49,6 +49,43 @@ export class ApiError extends Error {
   }
 }
 
+function errorDetail(body: unknown): string {
+  const parsed = z.object({ detail: z.unknown() }).safeParse(body);
+  if (!parsed.success) return 'Request failed';
+  if (typeof parsed.data.detail === 'string') return parsed.data.detail;
+  if (!Array.isArray(parsed.data.detail)) return 'Request failed';
+  const issues: unknown[] = parsed.data.detail as unknown[];
+  const issue: unknown = issues.find(
+    (value: unknown) =>
+      z.object({ type: z.string(), loc: z.array(z.unknown()) }).safeParse(value)
+        .success,
+  );
+  const validation = z
+    .object({ type: z.string(), loc: z.array(z.unknown()) })
+    .safeParse(issue);
+  if (!validation.success) return 'Check the submitted fields and try again';
+  const field = validation.data.loc
+    .filter(
+      (part): part is string =>
+        typeof part === 'string' && /^[a-z_]+$/.test(part) && part !== 'body',
+    )
+    .join(' ')
+    .replaceAll('_', ' ');
+  const label = field
+    ? `${field.charAt(0).toUpperCase()}${field.slice(1)}: `
+    : '';
+  const message: Record<string, string> = {
+    missing: 'this field is required',
+    too_short: 'at least one selection is required',
+    string_too_short: 'enter a longer value',
+    string_too_long: 'enter a shorter value',
+    extra_forbidden: 'this field is not accepted',
+    enum: 'select a supported value',
+    literal_error: 'select a supported value',
+  };
+  return `${label}${message[validation.data.type] ?? 'check this value and try again'}`;
+}
+
 export async function apiStream(
   path: string,
   init: RequestInit,
@@ -65,11 +102,7 @@ export async function apiStream(
   }
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
-    const detail = z.object({ detail: z.string() }).safeParse(body);
-    throw new ApiError(
-      detail.success ? detail.data.detail : 'Request failed',
-      response.status,
-    );
+    throw new ApiError(errorDetail(body), response.status);
   }
   if (!response.body)
     throw new ApiError('The response stream is unavailable', 502);
@@ -98,11 +131,7 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
-    const detail = z.object({ detail: z.string() }).safeParse(body);
-    throw new ApiError(
-      detail.success ? detail.data.detail : 'Request failed',
-      response.status,
-    );
+    throw new ApiError(errorDetail(body), response.status);
   }
   const body: unknown = await response.json().catch(() => {
     throw new ApiError(
