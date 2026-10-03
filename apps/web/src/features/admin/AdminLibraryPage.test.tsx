@@ -148,8 +148,8 @@ describe('policy library role actions', () => {
 
     const policyTitle = await screen.findByText('Archived returns policy');
     expect(policyTitle).toBeVisible();
-    const policyLink = policyTitle.closest('a');
-    if (!policyLink) throw new Error('Policy card link is missing');
-    expect(within(policyLink).getByText('Archived')).toBeVisible();
+    const policyCard = policyTitle.closest('article');
+    if (!policyCard) throw new Error('Policy card is missing');
+    expect(within(policyCard).getByText('Archived')).toBeVisible();
   });
 });

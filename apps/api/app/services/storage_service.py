@@ -7,12 +7,21 @@ import boto3
 
 class ArtifactStore(ABC):
     @abstractmethod
-    async def put(self, organization_id: str, key: str, content: bytes) -> str:
+    async def put(
+        self, organization_id: str, key: str, content: bytes, media_type: str | None = None
+    ) -> str:
         raise NotImplementedError
 
     @abstractmethod
     async def get(self, organization_id: str, uri: str) -> bytes:
         raise NotImplementedError
+
+    async def signature(self, organization_id: str, uri: str) -> bytes:
+        """Read only the first bytes to identify a source without buffering it."""
+        return (await self.get(organization_id, uri))[:32]
+
+    def presigned_get(self, organization_id: str, uri: str, *, media_type: str) -> str | None:
+        return None
 
 
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB limit per user requirement
@@ -32,7 +41,9 @@ class LocalArtifactStore(ArtifactStore):
             raise ValueError("Invalid artifact key")
         return candidate
 
-    async def put(self, organization_id: str, key: str, content: bytes) -> str:
+    async def put(
+        self, organization_id: str, key: str, content: bytes, media_type: str | None = None
+    ) -> str:
         if len(content) > MAX_FILE_SIZE_BYTES:
             mb = len(content) / (1024 * 1024)
             limit_mb = MAX_FILE_SIZE_BYTES // (1024 * 1024)
@@ -50,6 +61,23 @@ class LocalArtifactStore(ArtifactStore):
         if not path.exists():
             raise StorageError(f"Artifact not found at {path}")
         return await anyio.to_thread.run_sync(path.read_bytes)
+
+    def local_path(self, organization_id: str, uri: str) -> Path:
+        prefix = f"local://{organization_id}/"
+        if not uri.startswith(prefix):
+            raise PermissionError("Artifact does not belong to the active organization")
+        return self._path(organization_id, uri[len(prefix) :])
+
+    async def signature(self, organization_id: str, uri: str) -> bytes:
+        path = self.local_path(organization_id, uri)
+        if not path.is_file():
+            raise StorageError("Artifact not found")
+
+        def read() -> bytes:
+            with path.open("rb") as stream:
+                return stream.read(32)
+
+        return await anyio.to_thread.run_sync(read)
 
 
 class S3ArtifactStore(ArtifactStore):
@@ -70,16 +98,32 @@ class S3ArtifactStore(ArtifactStore):
             aws_secret_access_key=secret_key,
         )
 
-    async def put(self, organization_id: str, key: str, content: bytes) -> str:
+    async def put(
+        self, organization_id: str, key: str, content: bytes, media_type: str | None = None
+    ) -> str:
         if len(content) > MAX_FILE_SIZE_BYTES:
             mb = len(content) / (1024 * 1024)
             limit_mb = MAX_FILE_SIZE_BYTES // (1024 * 1024)
             raise ValueError(f"File size {mb:.1f}MB exceeds maximum allowed limit of {limit_mb}MB")
         object_key = f"{organization_id}/{key}"
         try:
-            await anyio.to_thread.run_sync(
-                lambda: self._client.put_object(Bucket=self._bucket, Key=object_key, Body=content)
-            )
+            if media_type:
+                await anyio.to_thread.run_sync(
+                    lambda: self._client.put_object(
+                        Bucket=self._bucket,
+                        Key=object_key,
+                        Body=content,
+                        ContentType=media_type,
+                    )
+                )
+            else:
+                await anyio.to_thread.run_sync(
+                    lambda: self._client.put_object(
+                        Bucket=self._bucket,
+                        Key=object_key,
+                        Body=content,
+                    )
+                )
         except Exception as err:
             raise StorageError(f"Failed to store artifact in S3/R2: {err}") from err
         return f"s3://{self._bucket}/{object_key}"
@@ -96,3 +140,41 @@ class S3ArtifactStore(ArtifactStore):
             return await anyio.to_thread.run_sync(response["Body"].read)
         except Exception as err:
             raise StorageError(f"Failed to retrieve artifact from S3/R2: {err}") from err
+
+    def _object_key(self, organization_id: str, uri: str) -> str:
+        prefix = f"s3://{self._bucket}/{organization_id}/"
+        if not uri.startswith(prefix):
+            raise PermissionError("Artifact does not belong to the active organization")
+        return f"{organization_id}/{uri[len(prefix) :]}"
+
+    async def signature(self, organization_id: str, uri: str) -> bytes:
+        key = self._object_key(organization_id, uri)
+        try:
+            response = await anyio.to_thread.run_sync(
+                lambda: self._client.get_object(Bucket=self._bucket, Key=key, Range="bytes=0-31")
+            )
+
+            def read() -> bytes:
+                try:
+                    return response["Body"].read(32)
+                finally:
+                    response["Body"].close()
+
+            return await anyio.to_thread.run_sync(read)
+        except Exception as err:
+            raise StorageError("Failed to inspect private source artifact") from err
+
+    def presigned_get(self, organization_id: str, uri: str, *, media_type: str) -> str:
+        key = self._object_key(organization_id, uri)
+        return str(
+            self._client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": self._bucket,
+                    "Key": key,
+                    "ResponseContentType": media_type,
+                    "ResponseContentDisposition": "inline",
+                },
+                ExpiresIn=120,
+            )
+        )

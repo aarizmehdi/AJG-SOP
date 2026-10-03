@@ -124,6 +124,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/v1/admin/sources/{source_id}/original/preview': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Original Preview */
+    get: operations['original_preview_api_v1_admin_sources__source_id__original_preview_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/sources/{source_id}/original/stream': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Local Original Stream */
+    get: operations['local_original_stream_api_v1_admin_sources__source_id__original_stream_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/v1/admin/sources/{source_id}/job': {
     parameters: {
       query?: never;
@@ -173,6 +207,26 @@ export interface paths {
      *     (Markdown or JSON).
      */
     post: operations['import_source_api_v1_admin_sources_import_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/v1/admin/sources/{source_id}/attach-original': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Attach Original Pdf
+     * @description Complete a draft Markdown source without replacing its reviewed canonical SOP.
+     */
+    post: operations['attach_original_pdf_api_v1_admin_sources__source_id__attach_original_post'];
     delete?: never;
     options?: never;
     head?: never;
@@ -625,23 +679,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/v1/policies/{policy_id}/sources/{source_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Read Original Source */
-    get: operations['read_original_source_api_v1_policies__policy_id__sources__source_id__get'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/v1/assistant/answer': {
     parameters: {
       query?: never;
@@ -845,6 +882,11 @@ export interface components {
      * @enum {string}
      */
     BlockKind: 'paragraph' | 'ordered_list' | 'unordered_list' | 'table';
+    /** Body_attach_original_pdf_api_v1_admin_sources__source_id__attach_original_post */
+    Body_attach_original_pdf_api_v1_admin_sources__source_id__attach_original_post: {
+      /** File */
+      file: string;
+    };
     /** Body_import_source_api_v1_admin_sources_import_post */
     Body_import_source_api_v1_admin_sources_import_post: {
       /** Policy Id */
@@ -1274,10 +1316,6 @@ export interface components {
       version_label: string;
       /** Sections */
       sections: components['schemas']['PolicyReaderSection'][];
-      /** Original Download Allowed */
-      original_download_allowed: boolean;
-      /** Original Sources */
-      original_sources?: components['schemas']['PolicyReaderSource'][];
     };
     /** PolicyReaderSection */
     PolicyReaderSection: {
@@ -1309,16 +1347,6 @@ export interface components {
       /** Blocks */
       blocks?: components['schemas']['CanonicalBlock-Output'][];
       source: components['schemas']['SourceLocator'];
-    };
-    /** PolicyReaderSource */
-    PolicyReaderSource: {
-      /** Source Id */
-      source_id: string;
-      /** File Name */
-      file_name: string;
-      /** Media Type */
-      media_type: string;
-      source_format: components['schemas']['SourceFormat'];
     };
     /**
      * PolicyStatus
@@ -1960,6 +1988,75 @@ export interface operations {
       };
     };
   };
+  original_preview_api_v1_admin_sources__source_id__original_preview_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            [key: string]: unknown;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  local_original_stream_api_v1_admin_sources__source_id__original_stream_get: {
+    parameters: {
+      query: {
+        organization_id: string;
+        ticket: string;
+      };
+      header?: never;
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
   get_job_api_v1_admin_sources__source_id__job_get: {
     parameters: {
       query?: never;
@@ -2043,6 +2140,43 @@ export interface operations {
     responses: {
       /** @description Successful Response */
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SourceDocument'];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HTTPValidationError'];
+        };
+      };
+    };
+  };
+  attach_original_pdf_api_v1_admin_sources__source_id__attach_original_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        source_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_attach_original_pdf_api_v1_admin_sources__source_id__attach_original_post'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -3114,40 +3248,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PolicyReaderDocument'];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['HTTPValidationError'];
-        };
-      };
-    };
-  };
-  read_original_source_api_v1_policies__policy_id__sources__source_id__get: {
-    parameters: {
-      query?: never;
-      header?: {
-        authorization?: string | null;
-      };
-      path: {
-        policy_id: string;
-        source_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': unknown;
         };
       };
       /** @description Validation Error */

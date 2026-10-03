@@ -168,6 +168,7 @@ export const rawDocumentSchema = z
   .loose();
 export const reviewPayloadSchema = z.object({
   source: sourceDocumentSchema,
+  version: z.object({ id: z.string(), status: z.string() }).loose(),
   canonical: canonicalSopSchema.nullable(),
   raw: rawDocumentSchema.nullable(),
 });

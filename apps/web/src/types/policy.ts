@@ -48,6 +48,7 @@ export const policySchema = z.object({
         source_format: z.string(),
         status: z.string(),
         created_at: z.string(),
+        original_allowed: z.boolean().optional(),
       }),
     )
     .optional(),

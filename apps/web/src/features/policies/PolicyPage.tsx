@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { Download, LockKeyhole } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
@@ -10,9 +9,8 @@ import {
 import { canonicalSectionDomId } from '../../components/documents/canonicalDocumentIds';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
-import { policyReaderSchema, type ReaderSource } from '../../types/retrieval';
+import { policyReaderSchema } from '../../types/retrieval';
 import { useLanguage } from '../language/useLanguage';
-import { OriginalSourceDialog } from './OriginalSourceDialog';
 
 export default function PolicyPage() {
   const { t } = useLanguage();
@@ -22,7 +20,6 @@ export default function PolicyPage() {
   const [focusedSection, setFocusedSection] = useState<string | null>(
     selectedSection,
   );
-  const [openSource, setOpenSource] = useState<ReaderSource | null>(null);
   const policy = useQuery({
     queryKey: ['policy', policyId],
     queryFn: () => apiRequest(`/policies/${policyId}`, policyReaderSchema),
@@ -95,35 +92,6 @@ export default function PolicyPage() {
           <p dir="auto">{policy.data.category}</p>
           <p className="source-fidelity-note">{t('originalSourceNote')}</p>
         </div>
-        <div className="reader-source-actions">
-          <span className="source-lock">
-            {policy.data.original_download_allowed ? (
-              <>
-                <Download aria-hidden="true" />
-                {t('fullSource')}
-              </>
-            ) : (
-              <>
-                <LockKeyhole aria-hidden="true" />
-                {t('canonicalOnly')}
-              </>
-            )}
-          </span>
-          {policy.data.original_sources.map((source) => (
-            <button
-              className="button button--secondary"
-              type="button"
-              key={source.source_id}
-              onClick={() => {
-                setOpenSource(source);
-              }}
-            >
-              {source.media_type === 'application/pdf'
-                ? t('viewOriginalPdf')
-                : t('viewSourceFile')}
-            </button>
-          ))}
-        </div>
       </header>
       <div className="reader-layout">
         <aside className="surface reader-toc">
@@ -160,15 +128,6 @@ export default function PolicyPage() {
           />
         </article>
       </div>
-      {openSource && (
-        <OriginalSourceDialog
-          policyId={policyId}
-          source={openSource}
-          onClose={() => {
-            setOpenSource(null);
-          }}
-        />
-      )}
     </main>
   );
 }

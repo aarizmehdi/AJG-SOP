@@ -2,9 +2,20 @@ from datetime import date
 
 import pytest
 
-from packages.contracts.canonical import BlockKind
+from apps.api.app.services.foundation_store import FoundationStore
+from apps.api.app.services.storage_service import LocalArtifactStore
+from packages.contracts.access import UNRESTRICTED_SCOPE
+from packages.contracts.canonical import (
+    BlockKind,
+    CanonicalBlock,
+    CanonicalListItem,
+    CanonicalSection,
+    CanonicalSOP,
+    SourceLocator,
+)
 from packages.contracts.source import SourceDocument, SourceFormat
 from services.ingestion.extractors.fixtures import FixtureDocumentParser
+from services.ingestion.pipeline import IngestionPipeline
 from services.ingestion.structure.canonical_document import Canonicalizer
 from services.ingestion.structure.markdown import canonical_to_markdown
 
@@ -56,9 +67,7 @@ async def test_markdown_preserves_heading_list_and_source_anchor() -> None:
         ("# Policy #93 Leave", "Policy #93"),
     ],
 )
-async def test_markdown_compatibility_policy_number_variants(
-    heading: str, expected: str
-) -> None:
+async def test_markdown_compatibility_policy_number_variants(heading: str, expected: str) -> None:
     raw = await FixtureDocumentParser().parse(
         markdown_source(), f"{heading}\nPolicy content".encode()
     )
@@ -105,8 +114,11 @@ Verified policy introduction.
     unordered = next(
         block for block in eligibility.blocks if block.kind is BlockKind.UNORDERED_LIST
     )
-    assert [item.level for item in ordered.list_items] == [0, 1, 0]
-    assert [item.level for item in unordered.list_items] == [0, 1]
+    assert [item.level for item in ordered.list_items] == [0, 0]
+    assert ordered.list_items[0].children[0].level == 1
+    assert ordered.list_items[0].children[0].text == "Add the required details."
+    assert [item.level for item in unordered.list_items] == [0]
+    assert unordered.list_items[0].children[0].text == "Confirmed status"
 
     matrix = next(section for section in canonical.sections if "Approval Matrix" in section.heading)
     assert matrix.policy_number == "1.1"
@@ -130,6 +142,85 @@ Verified policy introduction.
     rendered = canonical_to_markdown(canonical)
     assert "| Role | Maximum days |" in rendered
     assert "| Manager | 5 |" in rendered
+    assert "  1. Add the required details." in rendered
+
+
+async def test_multi_sop_collection_has_no_misleading_document_number() -> None:
+    raw = await FixtureDocumentParser().parse(
+        markdown_source(),
+        b"# Store, Excise & Gate SOP\n## SOP #25 Dispatch\nFollow dispatch rules.\n"
+        b"## SOP #26 Receipt\nFollow receipt rules.",
+    )
+    canonical = Canonicalizer().canonicalize(markdown_source(), raw)
+    assert canonical.policy_number is None
+    assert {section.policy_number for section in canonical.sections if section.policy_number} == {
+        "SOP #25",
+        "SOP #26",
+    }
+
+
+async def test_single_sop_keeps_document_number() -> None:
+    raw = await FixtureDocumentParser().parse(
+        markdown_source(), b"# SOP #25 Dispatch\n## Scope\nFollow dispatch rules."
+    )
+    assert Canonicalizer().canonicalize(markdown_source(), raw).policy_number == "SOP #25"
+
+
+async def test_decorated_collection_headings_preserve_each_sop_number() -> None:
+    raw = await FixtureDocumentParser().parse(
+        markdown_source(),
+        b"# Store SOP collection\n## **SOP # 25** Dispatch\nDispatch rules.\n"
+        b"## 2. SOP # 26 Receipt\nReceipt rules.",
+    )
+    canonical = Canonicalizer().canonicalize(markdown_source(), raw)
+    assert canonical.policy_number is None
+    assert [section.policy_number for section in canonical.sections] == ["SOP # 25", "SOP # 26"]
+
+
+async def test_review_rejects_nested_list_item_from_another_source(tmp_path) -> None:
+    source = markdown_source()
+    locator = SourceLocator(source_document_id=source.id)
+    foreign = SourceLocator(source_document_id="other-source")
+    canonical = CanonicalSOP(
+        id="canonical",
+        organization_id="ajt",
+        policy_id=source.policy_id,
+        version_id=source.version_id,
+        source_document_ids=(source.id,),
+        title="Policy",
+        sections=[
+            CanonicalSection(
+                id="section",
+                stable_key="section",
+                heading="Policy",
+                heading_level=1,
+                heading_path=("Policy",),
+                source=locator,
+                access=UNRESTRICTED_SCOPE,
+                content_hash="hash",
+                blocks=[
+                    CanonicalBlock(
+                        id="list",
+                        kind=BlockKind.ORDERED_LIST,
+                        source=locator,
+                        list_items=[
+                            CanonicalListItem(
+                                text="Parent",
+                                source=locator,
+                                children=[CanonicalListItem(text="Child", source=foreign)],
+                            )
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+    store = FoundationStore(sources={source.id: source}, canonicals={source.id: canonical})
+    pipeline = IngestionPipeline(
+        FixtureDocumentParser(), Canonicalizer(), LocalArtifactStore(tmp_path), store
+    )
+    with pytest.raises(PermissionError, match="cross source documents"):
+        await pipeline.save_review(source.id, canonical.model_dump_json(), "reviewer")
 
 
 async def test_markdown_missing_metadata_stays_null_and_uses_h1_title() -> None:

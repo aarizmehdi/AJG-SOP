@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
-from packages.contracts.canonical import BlockKind, CanonicalSOP, RetrievalChunk
+from packages.contracts.canonical import BlockKind, CanonicalListItem, CanonicalSOP, RetrievalChunk
+
+
+def list_text(item: CanonicalListItem) -> list[str]:
+    return [item.text, *(text for child in item.children for text in list_text(child))]
 
 
 class Chunker(ABC):
@@ -20,7 +24,7 @@ class SectionAwareFixtureChunker(Chunker):
                 if block.text:
                     text_parts.append(block.text)
                 elif block.list_items:
-                    text_parts.extend(item.text for item in block.list_items)
+                    text_parts.extend(text for item in block.list_items for text in list_text(item))
                 elif block.kind is BlockKind.TABLE and block.table:
                     text_parts.extend(cell.text for cell in block.table.cells)
             chunks.append(

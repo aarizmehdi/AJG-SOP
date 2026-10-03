@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from fastapi.responses import FileResponse
 from starlette.requests import Request
 
 from apps.api.app.api.admin_policies import (
@@ -122,6 +123,7 @@ async def test_admin_viewer_filters_sections_versions_and_private_original(tmp_p
     assert [policy["title"] for policy in listed] == ["Store SOP"]
     assert listed[0]["section_count"] == 1
     assert listed[0]["page_count"] == 3
+    assert listed[0]["sources"][0]["original_allowed"] is False
     viewer = await policy_viewer(request, "policy", admin)
     assert [version["id"] for version in viewer["versions"]] == ["version"]
     assert viewer["versions"][0]["source_names"] == ["store.pdf"]
@@ -151,4 +153,21 @@ async def test_admin_viewer_filters_sections_versions_and_private_original(tmp_p
     store.canonicals.pop("source")
     unreviewed = await policy_viewer(request, "policy", admin)
     assert unreviewed["sources"][0]["original_allowed"] is True
-    assert (await get_original(request, "source", admin)).body == b"private"
+    original = await get_original(request, "source", admin)
+    assert isinstance(original, FileResponse)
+    assert Path(original.path) == artifacts.local_path("ajt", uri)
+    store.policies["policy"].policy_number = "SOP # 25"
+    store.canonicals["source"] = CanonicalSOP(
+        id="collection",
+        organization_id="ajt",
+        policy_id="policy",
+        version_id="version",
+        source_document_ids=("source",),
+        title="Store collection",
+        sections=[
+            section("SOP # 25 Dispatch", "store", 3),
+            section("SOP # 26 Receipt", "store", 8),
+        ],
+    )
+    collection_viewer = await policy_viewer(request, "policy", admin)
+    assert collection_viewer["policy"]["policy_number"] is None

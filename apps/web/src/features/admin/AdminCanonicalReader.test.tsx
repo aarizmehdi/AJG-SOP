@@ -174,7 +174,11 @@ describe('admin canonical SOP reader', () => {
           t: (key) => messages.english[key],
         }}
       >
-        <AdminCanonicalReader viewer={viewer} />
+        <AdminCanonicalReader
+          viewer={viewer}
+          contentsOpen
+          onCloseContents={() => {}}
+        />
       </LanguageContext>,
     );
     expect(

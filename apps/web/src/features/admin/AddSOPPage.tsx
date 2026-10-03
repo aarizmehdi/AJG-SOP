@@ -7,7 +7,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
@@ -20,6 +20,7 @@ import {
   type SourceFormat,
 } from '../../types/source';
 import { AccessScopeEditor } from './AccessScopeEditor';
+import { useAdminCopy } from './adminCopy';
 
 const formats: {
   id: SourceFormat;
@@ -61,9 +62,31 @@ const formats: {
   },
 ];
 
+type PendingDraft = {
+  policyId: string;
+  versionId: string;
+  title: string;
+  category: string;
+  versionLabel: string;
+  access: AccessScope;
+  workflow: 'verified_pair' | 'single';
+};
+const pendingDraftKey = 'ajt-pending-source-import';
+function restorePendingDraft(): PendingDraft | null {
+  try {
+    const stored = sessionStorage.getItem(pendingDraftKey);
+    if (!stored) return null;
+    const value = JSON.parse(stored) as PendingDraft;
+    return value.policyId && value.versionId && value.title ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function AddSOPPage() {
+  const { copy } = useAdminCopy();
   const [workflow, setWorkflow] = useState<'verified_pair' | 'single'>(
-    'verified_pair',
+    restorePendingDraft()?.workflow ?? 'verified_pair',
   );
   const [format, setFormat] = useState<SourceFormat>('pdf');
   const [markdownMode, setMarkdownMode] = useState<'file' | 'paste'>('file');
@@ -71,14 +94,21 @@ export default function AddSOPPage() {
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [structuredFile, setStructuredFile] = useState<File | null>(null);
   const [text, setText] = useState('');
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Operations');
-  const [versionLabel, setVersionLabel] = useState('1.0');
-  const [access, setAccess] = useState<AccessScope>({
-    departments: { mode: 'selected', values: [] },
-    locations: { mode: 'selected', values: [] },
-    roles: { mode: 'selected', values: [] },
-  });
+  const [title, setTitle] = useState(restorePendingDraft()?.title ?? '');
+  const [category, setCategory] = useState(
+    restorePendingDraft()?.category ?? 'Operations',
+  );
+  const [versionLabel, setVersionLabel] = useState(
+    restorePendingDraft()?.versionLabel ?? '1.0',
+  );
+  const [pendingDraft, setPendingDraft] = useState(restorePendingDraft);
+  const [access, setAccess] = useState<AccessScope>(
+    restorePendingDraft()?.access ?? {
+      departments: { mode: 'selected', values: [] },
+      locations: { mode: 'selected', values: [] },
+      roles: { mode: 'selected', values: [] },
+    },
+  );
   const navigate = useNavigate();
   const profile = useQuery({
     queryKey: ['profile'],
@@ -94,21 +124,36 @@ export default function AddSOPPage() {
   });
   const upload = useMutation({
     mutationFn: async () => {
-      const draft = await apiRequest('/admin/policies', policyDraftSchema, {
-        method: 'POST',
-        body: JSON.stringify({
-          title,
-          category,
-          version_label: versionLabel,
-          access,
-        }),
-      });
+      const draft: PendingDraft =
+        pendingDraft ??
+        (await apiRequest('/admin/policies', policyDraftSchema, {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            category,
+            version_label: versionLabel,
+            access,
+          }),
+        }).then((created) => {
+          const next = {
+            policyId: created.policy.id,
+            versionId: created.version.id,
+            title,
+            category,
+            versionLabel,
+            access,
+            workflow,
+          };
+          sessionStorage.setItem(pendingDraftKey, JSON.stringify(next));
+          setPendingDraft(next);
+          return next;
+        }));
       if (workflow === 'verified_pair') {
         if (!originalFile || !structuredFile)
           throw new Error('Choose both the original PDF and cleaned Markdown');
         const body = new FormData();
-        body.set('policy_id', draft.policy.id);
-        body.set('version_id', draft.version.id);
+        body.set('policy_id', draft.policyId);
+        body.set('version_id', draft.versionId);
         body.set('original_file', originalFile);
         body.set('structured_file', structuredFile);
         return apiRequest('/admin/sources/import', sourceDocumentSchema, {
@@ -121,8 +166,8 @@ export default function AddSOPPage() {
         return apiRequest('/admin/sources/paste', sourceDocumentSchema, {
           method: 'POST',
           body: JSON.stringify({
-            policy_id: draft.policy.id,
-            version_id: draft.version.id,
+            policy_id: draft.policyId,
+            version_id: draft.versionId,
             title,
             content: text,
             source_format: format,
@@ -131,8 +176,8 @@ export default function AddSOPPage() {
       }
       if (!file) throw new Error('Choose a source file');
       const body = new FormData();
-      body.set('policy_id', draft.policy.id);
-      body.set('version_id', draft.version.id);
+      body.set('policy_id', draft.policyId);
+      body.set('version_id', draft.versionId);
       body.set('source_format', format);
       body.set('file', file);
       return apiRequest('/admin/sources/upload', sourceDocumentSchema, {
@@ -141,6 +186,8 @@ export default function AddSOPPage() {
       });
     },
     onSuccess: (source) => {
+      sessionStorage.removeItem(pendingDraftKey);
+      setPendingDraft(null);
       void navigate(`/admin/review/${source.id}`);
     },
   });
@@ -179,10 +226,22 @@ export default function AddSOPPage() {
         <span className="step-label">Step 1 of 4</span>
       </div>
       <div className="metadata-grid surface">
+        {pendingDraft && (
+          <div className="pending-draft-notice" role="status">
+            <strong>
+              {copy.unfinishedDraft}: {pendingDraft.title}
+            </strong>
+            <span>{copy.resumeDraft}</span>
+            <Link to={`/admin/policies/${pendingDraft.policyId}`}>
+              {copy.inspectDraft}
+            </Link>
+          </div>
+        )}
         <label>
           Policy title
           <input
             value={title}
+            disabled={!!pendingDraft}
             onChange={(event) => {
               setTitle(event.target.value);
             }}
@@ -192,6 +251,7 @@ export default function AddSOPPage() {
           Category
           <input
             value={category}
+            disabled={!!pendingDraft}
             onChange={(event) => {
               setCategory(event.target.value);
             }}
@@ -201,13 +261,16 @@ export default function AddSOPPage() {
           Version
           <input
             value={versionLabel}
+            disabled={!!pendingDraft}
             onChange={(event) => {
               setVersionLabel(event.target.value);
             }}
           />
         </label>
       </div>
-      <AccessScopeEditor value={access} onChange={setAccess} />
+      <fieldset disabled={!!pendingDraft} className="pending-draft-scope">
+        <AccessScopeEditor value={access} onChange={setAccess} />
+      </fieldset>
       <section
         className="scope-confirmation surface"
         aria-labelledby="scope-confirmation-title"
@@ -257,6 +320,7 @@ export default function AddSOPPage() {
         <div className="source-workflow-options">
           <button
             type="button"
+            disabled={!!pendingDraft}
             className={workflow === 'verified_pair' ? 'selected' : ''}
             aria-pressed={workflow === 'verified_pair'}
             onClick={() => {
@@ -268,6 +332,7 @@ export default function AddSOPPage() {
           </button>
           <button
             type="button"
+            disabled={!!pendingDraft}
             className={workflow === 'single' ? 'selected' : ''}
             aria-pressed={workflow === 'single'}
             onClick={() => {

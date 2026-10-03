@@ -1,4 +1,16 @@
-from packages.contracts.canonical import BlockKind, CanonicalSOP
+from packages.contracts.canonical import BlockKind, CanonicalListItem, CanonicalSOP
+
+
+def _list_lines(item: CanonicalListItem, ordered: bool, index: int, depth: int) -> list[str]:
+    marker = item.marker or (f"{index}." if ordered else "-")
+    lines = [f"{'  ' * depth}{marker} {item.text}"]
+    for child_index, child in enumerate(item.children, start=1):
+        lines.extend(
+            _list_lines(
+                child, bool(child.marker and child.marker[0].isdigit()), child_index, depth + 1
+            )
+        )
+    return lines
 
 
 def canonical_to_markdown(document: CanonicalSOP) -> str:
@@ -11,16 +23,13 @@ def canonical_to_markdown(document: CanonicalSOP) -> str:
                 lines.extend([block.text, ""])
             elif block.kind in {BlockKind.ORDERED_LIST, BlockKind.UNORDERED_LIST}:
                 for index, item in enumerate(block.list_items, start=1):
-                    marker = f"{index}." if block.kind is BlockKind.ORDERED_LIST else "-"
-                    lines.append(f"{'  ' * item.level}{marker} {item.text}")
+                    lines.extend(_list_lines(item, block.kind is BlockKind.ORDERED_LIST, index, 0))
                 lines.append("")
             elif block.kind is BlockKind.TABLE and block.table:
                 rows: dict[int, dict[int, str]] = {}
                 for cell in block.table.cells:
                     rows.setdefault(cell.row, {})[cell.column] = cell.text
-                columns = max(
-                    (cell.column for cell in block.table.cells), default=-1
-                ) + 1
+                columns = max((cell.column for cell in block.table.cells), default=-1) + 1
                 ordered_rows = sorted(rows)
                 if ordered_rows and columns:
                     header_row = ordered_rows[0]

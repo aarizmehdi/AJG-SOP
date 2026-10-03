@@ -57,6 +57,14 @@ function renderPolicy(originalAllowed = true) {
                 source: locator,
                 blocks: [
                   {
+                    id: 'emphasis',
+                    kind: 'paragraph',
+                    text: '**A.J Textile Mills Limited** *Handwritten note* <img src=x onerror=alert(1)>',
+                    source: locator,
+                    list_items: [],
+                    table: null,
+                  },
+                  {
                     id: 'steps',
                     kind: 'ordered_list',
                     text: null,
@@ -147,7 +155,7 @@ afterEach(() => {
 });
 
 describe('employee canonical policy reader', () => {
-  it('renders canonical hierarchy, nested lists, tables, and an authorized original action', async () => {
+  it('renders canonical hierarchy and ignores stray original metadata', async () => {
     renderPolicy();
 
     expect(
@@ -155,10 +163,16 @@ describe('employee canonical policy reader', () => {
     ).toBeVisible();
     expect(screen.getByText('Record the opening time')).toBeVisible();
     expect(screen.getByRole('table')).toHaveTextContent('Cash count');
+    expect(screen.getByText('A.J Textile Mills Limited').tagName).toBe(
+      'STRONG',
+    );
+    expect(screen.getByText('Handwritten note').tagName).toBe('EM');
+    expect(document.querySelector('img')).toBeNull();
     expect(screen.queryByText(/raw markdown fallback/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Store Operations.pdf')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'View Original PDF' }),
-    ).toBeVisible();
+      screen.queryByRole('button', { name: 'View Original PDF' }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText('1. Opening procedure')).toHaveClass(
       'canonical-section--focused',
     );
