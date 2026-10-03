@@ -40,7 +40,7 @@ class Canonicalizer:
             path = tuple(item[1] for item in heading_stack) or (current_heading,)
             parent_id = heading_stack[-2][2] if len(heading_stack) > 1 else None
             canonical_blocks = self._blocks(source.id, blocks)
-            content = "\n".join(self._block_text(block) for block in canonical_blocks)
+            content = "\n".join(self.block_text(block) for block in canonical_blocks)
             policy_number = self._policy_number(current_heading)
             sections.append(
                 CanonicalSection(
@@ -72,6 +72,25 @@ class Canonicalizer:
             else:
                 blocks.append(raw_block)
         flush()
+        explicit_numbers = {
+            section.policy_number.casefold()
+            for section in sections
+            if section.policy_number
+            and re.match(r"^(?:SOP|Policy)\b", section.policy_number, re.IGNORECASE)
+        }
+        document_number = (
+            None
+            if len(explicit_numbers) > 1
+            else next(
+                (
+                    section.policy_number
+                    for section in sections
+                    if section.policy_number
+                    and section.policy_number.casefold() in explicit_numbers
+                ),
+                raw.policy_number,
+            )
+        )
         return CanonicalSOP(
             id=f"canonical-{uuid4().hex[:12]}",
             organization_id=source.organization_id,
@@ -79,7 +98,7 @@ class Canonicalizer:
             version_id=source.version_id,
             source_document_ids=(source.id,),
             title=raw.title,
-            policy_number=raw.policy_number,
+            policy_number=document_number,
             effective_date=raw.effective_date,
             sections=sections,
         )
@@ -102,6 +121,7 @@ class Canonicalizer:
         result: list[CanonicalBlock] = []
         pending_list: list[CanonicalListItem] = []
         pending_kind: BlockKind | None = None
+        level_stack: list[CanonicalListItem] = []
         for index, raw in enumerate(raw_blocks):
             if raw.kind is RawBlockKind.LIST_ITEM:
                 kind = (
@@ -109,23 +129,32 @@ class Canonicalizer:
                     if raw.marker and raw.marker[0].isdigit()
                     else BlockKind.UNORDERED_LIST
                 )
-                if pending_list and kind is not pending_kind:
+                level = raw.level or 0
+                if pending_list and level == 0 and kind is not pending_kind:
                     result.append(self._list_block(source_id, pending_kind, pending_list, index))
                     pending_list = []
-                pending_kind = kind
-                pending_list.append(
-                    CanonicalListItem(
-                        text=raw.text,
-                        level=raw.level or 0,
-                        marker=raw.marker,
-                        source=self._locator(source_id, raw),
-                    )
+                    level_stack = []
+                if not pending_list:
+                    pending_kind = kind
+                item = CanonicalListItem(
+                    text=raw.text,
+                    level=level,
+                    marker=raw.marker,
+                    source=self._locator(source_id, raw),
                 )
+                while level_stack and level_stack[-1].level >= level:
+                    level_stack.pop()
+                if level_stack:
+                    level_stack[-1].children.append(item)
+                else:
+                    pending_list.append(item)
+                level_stack.append(item)
                 continue
             if pending_list:
                 result.append(self._list_block(source_id, pending_kind, pending_list, index))
                 pending_list = []
                 pending_kind = None
+                level_stack = []
             if raw.kind is RawBlockKind.TABLE:
                 locator = self._locator(source_id, raw)
                 table = CanonicalTable(
@@ -189,14 +218,18 @@ class Canonicalizer:
         )
 
     @staticmethod
-    def _block_text(block: CanonicalBlock) -> str:
+    def block_text(block: CanonicalBlock) -> str:
         if block.text:
             return block.text
         if block.list_items:
-            return "\n".join(item.text for item in block.list_items)
+            return "\n".join(Canonicalizer._list_text(item) for item in block.list_items)
         if block.table:
             return "\n".join(cell.text for cell in block.table.cells)
         return ""
+
+    @staticmethod
+    def _list_text(item: CanonicalListItem) -> str:
+        return "\n".join([item.text, *(Canonicalizer._list_text(child) for child in item.children)])
 
     @staticmethod
     def _section_locator(source_id: str, blocks: list[CanonicalBlock]) -> SourceLocator:
@@ -211,8 +244,8 @@ class Canonicalizer:
 
     @staticmethod
     def _policy_number(heading: str) -> str | None:
-        labelled = re.match(
-            r"^((?:SOP|Policy)\s*(?:No\.?|Number|#|-)?\s*"
+        labelled = re.search(
+            r"\b((?:SOP|Policy)\s*(?:No\.?|Number|#|-)?\s*"
             r"(?=[A-Za-z0-9./-]*\d)[A-Za-z0-9][A-Za-z0-9./-]*)\b",
             heading,
             flags=re.IGNORECASE,

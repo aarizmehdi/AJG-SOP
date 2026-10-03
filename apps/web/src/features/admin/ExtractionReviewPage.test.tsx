@@ -20,12 +20,6 @@ const locator = {
 
 function renderReview() {
   window.localStorage.setItem('ajt-fixture-identity', 'system-admin');
-  const NativeURL = URL;
-  class PreviewURL extends NativeURL {
-    static createObjectURL = vi.fn(() => 'blob:preview');
-    static revokeObjectURL = vi.fn();
-  }
-  vi.stubGlobal('URL', PreviewURL);
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -52,12 +46,22 @@ function renderReview() {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           ),
         );
-      if (url.endsWith('/original'))
+      if (url.endsWith('/original/preview'))
         return Promise.resolve(
-          new Response(new Blob(['pdf']), {
-            status: 200,
-            headers: { 'Content-Type': 'application/pdf' },
-          }),
+          new Response(
+            JSON.stringify({
+              kind: 'pdf',
+              url: 'https://example.test/private-pdf',
+              file_name: 'Store SOP.pdf',
+              media_type: 'application/pdf',
+              legacy_repair_required: false,
+              expires_in_seconds: 120,
+            }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
         );
       if (init?.method === 'PUT')
         return Promise.resolve(
@@ -76,6 +80,7 @@ function renderReview() {
       return Promise.resolve(
         new Response(
           JSON.stringify({
+            version: { id: 'version-one', status: 'extraction_review' },
             source: {
               id: 'source-one',
               organization_id: 'ajt',
@@ -120,6 +125,30 @@ function renderReview() {
                       list_items: [],
                       table: null,
                       source: locator,
+                    },
+                    {
+                      id: 'nested-steps',
+                      kind: 'ordered_list',
+                      text: null,
+                      source: locator,
+                      table: null,
+                      list_items: [
+                        {
+                          text: 'Check records',
+                          level: 0,
+                          marker: '1.',
+                          source: locator,
+                          children: [
+                            {
+                              text: 'Compare totals',
+                              level: 1,
+                              marker: '1.',
+                              source: locator,
+                              children: [],
+                            },
+                          ],
+                        },
+                      ],
                     },
                   ],
                 },
@@ -176,9 +205,12 @@ describe('extraction review workspace', () => {
       screen.getByRole('button', { name: 'Edit canonical content' }),
     );
     expect(screen.getByDisplayValue('1. Opening')).toBeVisible();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Item 1.1' }), {
+      target: { value: 'Compare corrected totals' },
+    });
     expect(
-      screen.getByRole('button', { name: 'Submit review' }),
-    ).toBeDisabled();
+      screen.queryByRole('button', { name: 'Submit review' }),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByDisplayValue('1. Opening'), {
       target: { value: '1. Updated opening' },
@@ -187,6 +219,10 @@ describe('extraction review workspace', () => {
     expect(
       await screen.findByRole('heading', { name: '1. Updated opening' }),
     ).toBeVisible();
+    expect(screen.getByText('Compare corrected totals')).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Submit review' }),
+    ).toBeDisabled();
 
     fireEvent.click(
       screen.getByRole('button', { name: 'Edit canonical content' }),

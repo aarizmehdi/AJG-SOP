@@ -2,16 +2,13 @@ from datetime import UTC, datetime, timedelta
 
 from apps.api.app.models.organization import EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
-from apps.api.app.services.storage_service import ArtifactStore
 from packages.contracts.canonical import BlockKind, CanonicalSection
 from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
 from packages.contracts.retrieval import (
     AvailablePolicySummary,
     PolicyReaderDocument,
     PolicyReaderSection,
-    PolicyReaderSource,
 )
-from packages.contracts.source import SourceDocument
 from services.retrieval.authorization_filter import AuthorizationFilter
 
 
@@ -20,11 +17,10 @@ class PolicyReaderService:
         self,
         store: FoundationStore,
         authorization: AuthorizationFilter,
-        artifacts: ArtifactStore,
+        artifacts: object,
     ) -> None:
         self.store = store
         self.authorization = authorization
-        self.artifacts = artifacts
 
     def read_policy(self, profile: EmployeeProfile, policy_id: str) -> PolicyReaderDocument | None:
         resolved = self._active(profile, policy_id)
@@ -43,22 +39,6 @@ class PolicyReaderService:
         ]
         if not sections:
             return None
-        original_download_allowed = all(
-            self._source_fully_authorized(profile, source_id)
-            for source_id in version.source_document_ids
-        )
-        original_sources = [
-            PolicyReaderSource(
-                source_id=source.id,
-                file_name=source.file_name,
-                media_type=source.media_type,
-                source_format=source.source_format,
-            )
-            for source_id in version.source_document_ids
-            if original_download_allowed
-            and (source := self.store.sources.get(source_id))
-            and source.organization_id == profile.organization_id
-        ]
         return PolicyReaderDocument(
             policy_id=policy.id,
             title=policy.title,
@@ -68,8 +48,6 @@ class PolicyReaderService:
                 self._reader_section(profile.organization_id, policy.id, version.id, item)
                 for item in sections
             ],
-            original_download_allowed=original_download_allowed,
-            original_sources=original_sources,
         )
 
     def list_available(self, profile: EmployeeProfile) -> list[AvailablePolicySummary]:
@@ -99,32 +77,6 @@ class PolicyReaderService:
             )
         return sorted(
             result, key=lambda item: (-item.updated_at.timestamp(), item.title.casefold())
-        )
-
-    async def read_original(
-        self, profile: EmployeeProfile, policy_id: str, source_id: str
-    ) -> tuple[SourceDocument, bytes] | None:
-        resolved = self._active(profile, policy_id)
-        if not resolved:
-            return None
-        _, version = resolved
-        source = self.store.sources.get(source_id)
-        if (
-            not source
-            or source.organization_id != profile.organization_id
-            or source.id not in version.source_document_ids
-            or not self._source_fully_authorized(profile, source.id)
-        ):
-            return None
-        content = await self.artifacts.get(profile.organization_id, source.original_artifact_uri)
-        return source, content
-
-    def _source_fully_authorized(self, profile: EmployeeProfile, source_id: str) -> bool:
-        canonical = self.store.canonicals.get(source_id)
-        if not canonical or canonical.organization_id != profile.organization_id:
-            return False
-        return bool(canonical.sections) and all(
-            self.authorization.allows(profile, section.access) for section in canonical.sections
         )
 
     def _active(

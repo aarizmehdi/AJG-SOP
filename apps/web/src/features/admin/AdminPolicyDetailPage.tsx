@@ -6,6 +6,9 @@ import {
   ChevronDown,
   FileText,
   History,
+  ListTree,
+  Info,
+  X,
 } from 'lucide-react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiRequest, ApiError } from '../../api/client';
@@ -192,6 +195,8 @@ export default function AdminPolicyDetailPage() {
   const [params, setParams] = useSearchParams();
   const versionId = params.get('version');
   const [tab, setTab] = useState<Tab>('Content');
+  const [contentsOpen, setContentsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const viewer = useQuery({
     queryKey: ['admin-policy-viewer', policyId, versionId],
     queryFn: () =>
@@ -228,6 +233,8 @@ export default function AdminPolicyDetailPage() {
       id === viewer.data?.policy.active_version_id ? {} : { version: id },
     );
     setTab('Content');
+    setContentsOpen(false);
+    setDetailsOpen(false);
   }
   if (viewer.isPending)
     return (
@@ -271,6 +278,22 @@ export default function AdminPolicyDetailPage() {
       source.original_allowed &&
       (source.status === 'review_required' || source.status === 'failed'),
   );
+  const workflowSource = data.sources.find((source) => source.original_allowed);
+  const lifecycleAction =
+    status === 'Review Required' || (status === 'Failed' && reviewSource)
+      ? {
+          label: status === 'Failed' ? copy.reviewSource : copy.reviewSop,
+          source: reviewSource,
+        }
+      : status === 'Failed' && canRunTechnicalWorkflow
+        ? { label: copy.prepareSearchIndex, source: workflowSource }
+        : data.version.status === 'ready_for_indexing' &&
+            canRunTechnicalWorkflow
+          ? { label: copy.prepareSearchIndex, source: workflowSource }
+          : data.version.status === 'ready_to_publish' &&
+              canRunTechnicalWorkflow
+            ? { label: copy.publish, source: workflowSource }
+            : null;
   const fullDocumentManageable = data.sources.every(
     (source) => source.original_allowed,
   );
@@ -285,8 +308,14 @@ export default function AdminPolicyDetailPage() {
           <h2>{data.policy.title}</h2>
           <p>
             <FileText size={15} />{' '}
-            {data.sources.map((source) => source.file_name).join(', ') ||
-              copy.noSource}
+            {data.sources
+              .map((source) =>
+                source.source_format === 'markdown' &&
+                !source.structured_file_name
+                  ? copy.originalNeedsVerification
+                  : source.file_name,
+              )
+              .join(', ') || copy.noSource}
           </p>
         </div>
         <div className="admin-policy-header-side">
@@ -308,9 +337,9 @@ export default function AdminPolicyDetailPage() {
       {status === 'Failed' && (
         <div className="admin-failed-banner">
           {copy.failedHelp}{' '}
-          {reviewSource ? (
-            <Link to={`/admin/review/${reviewSource.id}`}>
-              {copy.reviewSource} →
+          {lifecycleAction?.source ? (
+            <Link to={`/admin/review/${lifecycleAction.source.id}`}>
+              {lifecycleAction.label} →
             </Link>
           ) : (
             copy.inspectSource
@@ -318,6 +347,16 @@ export default function AdminPolicyDetailPage() {
         </div>
       )}
       <div className="admin-policy-commandbar">
+        <button
+          type="button"
+          className="admin-utility-button"
+          aria-expanded={contentsOpen}
+          onClick={() => {
+            setContentsOpen(!contentsOpen);
+          }}
+        >
+          <ListTree size={17} /> {copy.contents}
+        </button>
         <nav className="admin-document-tabs" aria-label={copy.sopContent}>
           {tabs.map((item) => (
             <button
@@ -333,10 +372,23 @@ export default function AdminPolicyDetailPage() {
             </button>
           ))}
         </nav>
+        <button
+          type="button"
+          className="admin-utility-button"
+          aria-expanded={detailsOpen}
+          onClick={() => {
+            setDetailsOpen(!detailsOpen);
+          }}
+        >
+          <Info size={17} /> {copy.documentInformation}
+        </button>
         <div className="admin-policy-actions">
-          {reviewSource && (
-            <Link to={`/admin/review/${reviewSource.id}`}>
-              {copy.reviewExtraction}
+          {lifecycleAction?.source && (
+            <Link
+              className="button button--primary"
+              to={`/admin/review/${lifecycleAction.source.id}`}
+            >
+              {lifecycleAction.label}
             </Link>
           )}
           {fullDocumentManageable && canRunTechnicalWorkflow && (
@@ -371,13 +423,47 @@ export default function AdminPolicyDetailPage() {
           <AdminCanonicalReader
             key={data.version.id}
             viewer={data}
-            details={<Details viewer={data} />}
+            contentsOpen={contentsOpen}
+            onCloseContents={() => {
+              setContentsOpen(false);
+            }}
           />
         )}
         {tab === 'Original Document' && (
-          <AdminOriginalDocument sources={data.sources} />
+          <AdminOriginalDocument
+            sources={data.sources}
+            versionStatus={data.version.status}
+          />
         )}
       </div>
+      {detailsOpen && (
+        <>
+          <button
+            type="button"
+            className="admin-drawer-scrim"
+            aria-label={copy.collapse}
+            onClick={() => {
+              setDetailsOpen(false);
+            }}
+          />
+          <aside
+            className="admin-details-drawer"
+            aria-label={copy.documentInformation}
+          >
+            <button
+              className="admin-drawer-close"
+              type="button"
+              aria-label={copy.collapse}
+              onClick={() => {
+                setDetailsOpen(false);
+              }}
+            >
+              <X size={18} />
+            </button>
+            <Details viewer={data} />
+          </aside>
+        </>
+      )}
       <details className="admin-version-disclosure surface">
         <summary>
           <span>

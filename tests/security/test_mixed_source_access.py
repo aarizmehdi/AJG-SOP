@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from apps.api.app.api.search import router as employee_router
 from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.policy_reader_service import PolicyReaderService
@@ -110,9 +111,7 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
                     heading_path=("store-section",),
                     text="Policy content",
                     access=scope("store"),
-                    source=SourceLocator(
-                        source_document_id="source", page_start=1, page_end=1
-                    ),
+                    source=SourceLocator(source_document_id="source", page_start=1, page_end=1),
                     chunk_index=0,
                     publication_status="published",
                 ),
@@ -126,9 +125,7 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
                     heading_path=("hr-section",),
                     text="Policy content",
                     access=scope("hr"),
-                    source=SourceLocator(
-                        source_document_id="source", page_start=1, page_end=1
-                    ),
+                    source=SourceLocator(source_document_id="source", page_start=1, page_end=1),
                     chunk_index=1,
                     publication_status="published",
                 ),
@@ -148,14 +145,14 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
 
     document = reader.read_policy(profile, "policy")
     available = reader.list_available(profile)
-    original = await reader.read_original(profile, "policy", "source")
 
     assert document is not None
     assert [item.section_id for item in document.sections] == ["store-section"]
     assert [item.policy_id for item in available] == ["policy"]
-    assert not document.original_download_allowed
-    assert document.original_sources == []
-    assert original is None
+    assert "original_sources" not in document.model_dump()
+    assert "original_download_allowed" not in document.model_dump()
+    assert "original_artifact_uri" not in document.model_dump_json()
+    assert all("/sources/" not in route.path for route in employee_router.routes)
 
     system_admin = profile.model_copy(
         update={
@@ -167,15 +164,11 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
         }
     )
     system_document = reader.read_policy(system_admin, "policy")
-    system_original = await reader.read_original(system_admin, "policy", "source")
 
     assert system_document is not None
     assert {item.section_id for item in system_document.sections} == {
         "store-section",
         "hr-section",
     }
-    assert system_document.original_download_allowed
-    assert [item.file_name for item in system_document.original_sources] == ["policy.pdf"]
+    assert "original_sources" not in system_document.model_dump()
     assert system_document.sections[0].blocks[0].kind is BlockKind.PARAGRAPH
-    assert system_original is not None
-    assert system_original[1] == b"private"

@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, ListTree } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { CanonicalDocumentRenderer } from '../../components/documents/CanonicalDocumentRenderer';
 import { canonicalSectionDomId } from '../../components/documents/canonicalDocumentIds';
 import type { PolicyViewer } from '../../types/policy';
@@ -102,19 +102,21 @@ function TreeNode({
 
 export function AdminCanonicalReader({
   viewer,
-  details,
+  contentsOpen,
+  onCloseContents,
 }: {
   viewer: PolicyViewer;
-  details?: ReactNode;
+  contentsOpen: boolean;
+  onCloseContents: () => void;
 }) {
   const { copy } = useAdminCopy();
   const sections = viewer.canonicals.flatMap((canonical) => canonical.sections);
   const [selected, setSelected] = useState<string>(sections[0]?.id ?? '');
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [filter, setFilter] = useState('');
 
   function select(id: string) {
     setSelected(id);
-    setMobileOpen(false);
+    onCloseContents();
     document
       .getElementById(canonicalSectionDomId('admin-canonical', id))
       ?.scrollIntoView({
@@ -136,39 +138,62 @@ export function AdminCanonicalReader({
 
   return (
     <div className="admin-reader-layout">
-      <button
-        className="admin-mobile-sections"
-        type="button"
-        aria-expanded={mobileOpen}
-        onClick={() => {
-          setMobileOpen(!mobileOpen);
-        }}
-      >
-        <ListTree size={18} /> {copy.sectionsControl} <ChevronDown size={16} />
-      </button>
-      <aside
-        className={`admin-reader-sidebar ${mobileOpen ? 'open' : ''}`}
-        aria-label={copy.sectionsControl}
-      >
-        <div className="admin-sidebar-heading">
-          <strong>{copy.contents}</strong>
-          <span>
-            {sections.length}{' '}
-            {sections.length === 1 ? copy.section : copy.sections}
+      {contentsOpen && (
+        <button
+          type="button"
+          className="admin-drawer-scrim"
+          aria-label={copy.collapse}
+          onClick={onCloseContents}
+        />
+      )}
+      {contentsOpen && (
+        <aside
+          className="admin-reader-sidebar admin-reader-drawer"
+          aria-label={copy.sectionsControl}
+        >
+          <div className="admin-sidebar-heading">
+            <strong>{copy.contents}</strong>
+            <button
+              type="button"
+              aria-label={copy.collapse}
+              onClick={onCloseContents}
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <input
+            className="admin-contents-search"
+            type="search"
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.target.value);
+            }}
+            placeholder={`${copy.contents}…`}
+          />
+          <span className="admin-contents-count">
+            {sections.length} {copy.sections}
           </span>
-        </div>
-        <ul className="admin-section-tree">
-          {sectionTree(sections).map((node) => (
-            <TreeNode
-              key={node.section.id}
-              node={node}
-              selected={selected}
-              onSelect={select}
-              copy={copy}
-            />
-          ))}
-        </ul>
-      </aside>
+          <ul className="admin-section-tree">
+            {sectionTree(
+              sections.filter(
+                (section) =>
+                  !filter ||
+                  section.heading
+                    .toLocaleLowerCase()
+                    .includes(filter.toLocaleLowerCase()),
+              ),
+            ).map((node) => (
+              <TreeNode
+                key={node.section.id}
+                node={node}
+                selected={selected}
+                onSelect={select}
+                copy={copy}
+              />
+            ))}
+          </ul>
+        </aside>
+      )}
       <article className="admin-document" aria-label={copy.sopContent}>
         <div className="admin-document-kicker">
           {copy.sopContent} · {sections.length} {copy.sections}
@@ -194,7 +219,6 @@ export function AdminCanonicalReader({
           }
         />
       </article>
-      {details && <aside className="admin-reader-details">{details}</aside>}
     </div>
   );
 }

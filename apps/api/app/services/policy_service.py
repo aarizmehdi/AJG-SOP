@@ -272,6 +272,7 @@ class PolicyService:
         version.index_revision = None
         version.status = VersionStatus.EXTRACTION_REVIEW
         self.store.chunks.pop(version.id, None)
+        self.store.mark_modified("policy_versions", version.id, version)
         return version
 
     def attach_source(self, organization_id: str, version_id: str, source_id: str) -> None:
@@ -361,6 +362,9 @@ class PolicyService:
             self._jobs_transition(
                 jobs, IngestionState.FAILED, "Index staging failed; published version unchanged"
             )
+            self.store.mark_modified("policy_versions", version.id, version)
+            for job in jobs:
+                self.store.mark_modified("ingestion_jobs", job.id, job)
             raise PublicationError(
                 "Index staging failed; current version remains active"
             ) from error
@@ -371,6 +375,9 @@ class PolicyService:
                 IngestionState.FAILED,
                 "Index verification failed; published version unchanged",
             )
+            self.store.mark_modified("policy_versions", version.id, version)
+            for job in jobs:
+                self.store.mark_modified("ingestion_jobs", job.id, job)
             raise PublicationError("Index verification failed; current version remains active")
         version.index_revision = revision
         version.status = VersionStatus.READY_TO_PUBLISH
@@ -384,9 +391,7 @@ class PolicyService:
         )
         return version
 
-    async def publish(
-        self, organization_id: str, actor_id: str, version_id: str
-    ) -> SOPVersion:
+    async def publish(self, organization_id: str, actor_id: str, version_id: str) -> SOPVersion:
         version = self._version(organization_id, version_id)
         if version.status is not VersionStatus.READY_TO_PUBLISH or not version.index_revision:
             raise PublicationError("Version must pass index verification before publication")
@@ -410,6 +415,9 @@ class PolicyService:
                 IngestionState.FAILED,
                 "Index activation failed; published version unchanged",
             )
+            for job in self.store.jobs.values():
+                if job.version_id == version.id and job.organization_id == organization_id:
+                    self.store.mark_modified("ingestion_jobs", job.id, job)
             raise PublicationError(
                 "Index activation failed; current version remains active"
             ) from error

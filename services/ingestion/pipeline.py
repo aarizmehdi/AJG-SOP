@@ -1,12 +1,18 @@
 import hashlib
 import json
+import re
 from time import perf_counter
 from uuid import uuid4
 
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.metrics import MetricsRegistry
 from apps.api.app.services.storage_service import ArtifactStore
-from packages.contracts.canonical import CanonicalSOP, ReviewRevision, SourceLocator
+from packages.contracts.canonical import (
+    CanonicalListItem,
+    CanonicalSOP,
+    ReviewRevision,
+    SourceLocator,
+)
 from packages.contracts.policy import IngestionEvent, IngestionJob, IngestionState
 from packages.contracts.source import SourceDocument, SourceFormat, SourceStatus
 from services.ingestion.extractors.base import DocumentParser, ParserUnavailableError
@@ -145,7 +151,32 @@ class IngestionPipeline:
             canonical = self.canonicalizer.canonicalize(source, raw, version.access)
             policy = self.store.policies.get(source.policy_id)
             if policy and policy.organization_id == organization_id:
-                if canonical.policy_number and not policy.policy_number:
+                collection_numbers = {
+                    section.policy_number.casefold()
+                    for item in [
+                        canonical,
+                        *(
+                            item
+                            for item in self.store.canonicals.values()
+                            if item.policy_id == source.policy_id
+                            and item.version_id == source.version_id
+                            and item.organization_id == organization_id
+                        ),
+                    ]
+                    for section in item.sections
+                    if section.policy_number
+                    and re.match(r"^(?:SOP|Policy)\b", section.policy_number, re.IGNORECASE)
+                }
+                if len(collection_numbers) > 1 and (
+                    policy.policy_number and policy.policy_number.casefold() in collection_numbers
+                ):
+                    policy.policy_number = None
+                    self.store.mark_modified("policies", policy.id, policy)
+                elif (
+                    canonical.policy_number
+                    and not policy.policy_number
+                    and len(collection_numbers) <= 1
+                ):
                     policy.policy_number = canonical.policy_number
                     self.store.mark_modified("policies", policy.id, policy)
                 if canonical.effective_date and version.effective_date is None:
@@ -233,18 +264,21 @@ class IngestionPipeline:
         ):
             raise PermissionError("Canonical ownership fields cannot be changed during review")
         raw = self.store.raw_results.get(source_id)
-        if raw is not None and hasattr(raw, "blocks"):
-            valid_pages = {block.page for block in raw.blocks if block.page is not None}
-            for section in canonical.sections:
-                self._validate_locator(section.source, source_id, valid_pages)
-                for block in section.blocks:
-                    self._validate_locator(block.source, source_id, valid_pages)
-                    for item in block.list_items:
-                        self._validate_locator(item.source, source_id, valid_pages)
-                    if block.table:
-                        self._validate_locator(block.table.source, source_id, valid_pages)
-                        for cell in block.table.cells:
-                            self._validate_locator(cell.source, source_id, valid_pages)
+        valid_pages = (
+            {block.page for block in raw.blocks if block.page is not None}
+            if raw is not None and hasattr(raw, "blocks")
+            else set()
+        )
+        for section in canonical.sections:
+            self._validate_locator(section.source, source_id, valid_pages)
+            for block in section.blocks:
+                self._validate_locator(block.source, source_id, valid_pages)
+                for item in block.list_items:
+                    self._validate_list_item(item, source_id, valid_pages)
+                if block.table:
+                    self._validate_locator(block.table.source, source_id, valid_pages)
+                    for cell in block.table.cells:
+                        self._validate_locator(cell.source, source_id, valid_pages)
         heading_stack: list[tuple[int, str, str]] = []
         for section in canonical.sections:
             while heading_stack and heading_stack[-1][0] >= section.heading_level:
@@ -258,12 +292,7 @@ class IngestionPipeline:
             }
             if sources != {source_id}:
                 raise PermissionError("Review content must retain its original source mapping")
-            content = "\n".join(
-                block.text
-                or "\n".join(item.text for item in block.list_items)
-                or ("\n".join(cell.text for cell in block.table.cells) if block.table else "")
-                for block in section.blocks
-            )
+            content = "\n".join(self.canonicalizer.block_text(block) for block in section.blocks)
             section.content_hash = hashlib.sha256(content.encode()).hexdigest()
         canonical.approved = False
         canonical.approved_at = None
@@ -287,6 +316,14 @@ class IngestionPipeline:
         )
         self.store.mark_modified("source_documents", source_id, self.store.sources[source_id])
         return canonical
+
+    @classmethod
+    def _validate_list_item(
+        cls, item: CanonicalListItem, source_id: str, valid_pages: set[int]
+    ) -> None:
+        cls._validate_locator(item.source, source_id, valid_pages)
+        for child in item.children:
+            cls._validate_list_item(child, source_id, valid_pages)
 
     @staticmethod
     def _validate_locator(locator: SourceLocator, source_id: str, valid_pages: set[int]) -> None:

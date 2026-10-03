@@ -91,6 +91,9 @@ async def test_failed_new_index_keeps_current_version_active(tmp_path: Path) -> 
     assert policy.active_version_id == first_id
     assert store.versions[first_id].status is VersionStatus.PUBLISHED
     assert store.versions[second_id].status is VersionStatus.FAILED
+    assert (
+        store.get_mutations()["policy_versions"].upserted[second_id].status is VersionStatus.FAILED
+    )
 
 
 @pytest.mark.asyncio
@@ -160,6 +163,9 @@ async def test_failed_index_activation_keeps_current_version_active(tmp_path: Pa
     assert policy.active_version_id == first_id
     assert store.versions[first_id].status is VersionStatus.PUBLISHED
     assert store.versions[second_id].status is VersionStatus.FAILED
+    assert (
+        store.get_mutations()["policy_versions"].upserted[second_id].status is VersionStatus.FAILED
+    )
 
 
 @pytest.mark.asyncio

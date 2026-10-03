@@ -92,12 +92,3 @@ export async function apiRequest<T>(
   }
   return parsed.data;
 }
-
-export async function apiBlob(path: string): Promise<Blob> {
-  const response = await fetch(`${apiUrl}${path}`, {
-    headers: await authorizedHeaders(),
-  });
-  if (!response.ok)
-    throw new ApiError('Source preview unavailable', response.status);
-  return response.blob();
-}

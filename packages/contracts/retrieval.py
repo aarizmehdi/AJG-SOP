@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from packages.contracts.canonical import CanonicalBlock, SourceLocator
 from packages.contracts.common import Language, OrganizationOwned
-from packages.contracts.source import SourceFormat
 
 
 class CandidateChannel(StrEnum):
@@ -62,14 +61,6 @@ class PolicyReaderSection(OrganizationOwned):
     source: SourceLocator
 
 
-class PolicyReaderSource(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    source_id: str
-    file_name: str
-    media_type: str
-    source_format: SourceFormat
-
-
 class PolicyReaderDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
     policy_id: str
@@ -77,8 +68,6 @@ class PolicyReaderDocument(BaseModel):
     category: str
     version_label: str
     sections: list[PolicyReaderSection]
-    original_download_allowed: bool
-    original_sources: list[PolicyReaderSource] = Field(default_factory=list)
 
 
 class AvailablePolicySummary(BaseModel):

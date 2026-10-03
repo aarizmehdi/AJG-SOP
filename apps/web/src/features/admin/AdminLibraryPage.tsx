@@ -200,6 +200,8 @@ export default function AdminLibraryPage() {
                 'Processing',
                 'Review Required',
                 'Ready for Review',
+                'Approved',
+                'Ready to Publish',
                 'Failed',
                 'Superseded',
                 'Inactive / Archived',
@@ -294,18 +296,21 @@ export default function AdminLibraryPage() {
               policy.status,
             );
             const scope = version?.access.departments;
+            const reviewSource = policy.sources?.find(
+              (source) =>
+                source.status === 'review_required' && source.original_allowed,
+            );
             return (
-              <Link
-                className="library-card"
-                key={policy.id}
-                to={`/admin/policies/${policy.id}`}
-                aria-label={`${copy.open} ${policy.title}`}
-              >
+              <article className="library-card" key={policy.id}>
                 <span className="library-file-icon">
                   <FileText size={21} />
                 </span>
                 <span className="library-card-main">
-                  <strong>{policy.title}</strong>
+                  <strong>
+                    <Link to={`/admin/policies/${policy.id}`}>
+                      {policy.title}
+                    </Link>
+                  </strong>
                   <span className="library-card-meta">
                     {policy.policy_number && (
                       <span>{policy.policy_number} · </span>
@@ -354,10 +359,24 @@ export default function AdminLibraryPage() {
                     </span>
                   )}
                 </span>
-                <span className="library-open">
-                  {copy.open} <ArrowUpRight size={17} />
+                <span className="library-card-actions">
+                  {reviewSource && (
+                    <Link
+                      className="library-review"
+                      to={`/admin/review/${reviewSource.id}`}
+                    >
+                      {copy.reviewSource}
+                    </Link>
+                  )}
+                  <Link
+                    className="library-open"
+                    to={`/admin/policies/${policy.id}`}
+                    aria-label={`${copy.open} ${policy.title}`}
+                  >
+                    {copy.open} <ArrowUpRight size={17} />
+                  </Link>
                 </span>
-              </Link>
+              </article>
             );
           })}
           {!data.length && (

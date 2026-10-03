@@ -10,6 +10,7 @@
     "lint": "eslint . --max-warnings 0",
     "format:check": "prettier --check .",
     "test": "vitest run --pool=forks --maxWorkers=1",
+    "test:e2e": "playwright test",
     "contracts": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.generated.ts"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
     "@types/react": "19.3.0",

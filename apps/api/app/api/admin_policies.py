@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from typing import cast
 
@@ -11,6 +12,7 @@ from apps.api.app.auth.permissions import (
     require_management_scope,
     require_system_admin,
 )
+from apps.api.app.repositories.foundation_persistence import FoundationPersistence
 from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.organization_service import CatalogReferenceError, OrganizationService
 from apps.api.app.services.policy_service import PolicyService, PublicationError
@@ -51,6 +53,14 @@ def _service(request: Request) -> PolicyService:
 
 def _store(request: Request) -> FoundationStore:
     return cast(FoundationStore, request.app.state.foundation_store)
+
+
+async def _persist_failed_publication(request: Request) -> None:
+    """Persist failed index state even though the API reports a conflict."""
+    store = _store(request)
+    persistence = cast(FoundationPersistence, request.app.state.foundation_persistence)
+    await persistence.flush(store)
+    store.clear_mutations()
 
 
 async def _validate_catalog_scope(
@@ -133,6 +143,17 @@ def _source_summary(source: SourceDocument) -> dict[str, object]:
     }
 
 
+def _source_fully_manageable(
+    store: FoundationStore, source: SourceDocument, version_id: str, profile: CurrentProfile
+) -> bool:
+    canonical = store.canonicals.get(source.id)
+    return canonical is None or (
+        canonical.organization_id == profile.organization_id
+        and canonical.version_id == version_id
+        and all(can_manage_scope(profile, section.access) for section in canonical.sections)
+    )
+
+
 def _version_sources(
     store: FoundationStore, version: SOPVersion, profile: CurrentProfile
 ) -> list[SourceDocument]:
@@ -154,6 +175,28 @@ def _page_count(canonicals: list[CanonicalSOP]) -> int | None:
             if page is not None:
                 pages.append(page)
     return max(pages) if pages else None
+
+
+def _document_policy_number(
+    store: FoundationStore, version: SOPVersion, policy: SOPPolicy
+) -> str | None:
+    numbers = {
+        match.group(1).casefold()
+        for source_id in version.source_document_ids
+        if (canonical := store.canonicals.get(source_id))
+        and canonical.organization_id == version.organization_id
+        for section in canonical.sections
+        for value in (section.policy_number, section.heading)
+        if value
+        and (
+            match := re.search(
+                r"\b(?:SOP|Policy)\s*(?:No\.?|Number|#|-)?\s*(\d+(?:[.-]\d+)*)\b",
+                value,
+                re.IGNORECASE,
+            )
+        )
+    }
+    return policy.policy_number if len(numbers) <= 1 else None
 
 
 @router.get("/policies")
@@ -182,9 +225,18 @@ async def list_policies(request: Request, profile: CurrentProfile) -> list[dict[
         result.append(
             {
                 **policy.model_dump(mode="json"),
+                "policy_number": _document_policy_number(store, selected, policy),
                 "versions": [version.model_dump(mode="json") for version in versions],
                 "display_version_id": selected.id,
-                "sources": [_source_summary(source) for source in sources],
+                "sources": [
+                    {
+                        **_source_summary(source),
+                        "original_allowed": _source_fully_manageable(
+                            store, source, selected.id, profile
+                        ),
+                    }
+                    for source in sources
+                ],
                 "section_count": sum(len(canonical.sections) for canonical in canonicals),
                 "page_count": _page_count(canonicals),
             }
@@ -221,17 +273,14 @@ async def policy_viewer(
     canonicals = _visible_canonicals(store, selected, profile)
     sources = _version_sources(store, selected, profile)
     original_allowed = {
-        source.id: canonical is None
-        or (
-            canonical.organization_id == profile.organization_id
-            and canonical.version_id == selected.id
-            and all(can_manage_scope(profile, section.access) for section in canonical.sections)
-        )
+        source.id: _source_fully_manageable(store, source, selected.id, profile)
         for source in sources
-        for canonical in [store.canonicals.get(source.id)]
     }
     return {
-        "policy": policy.model_dump(mode="json"),
+        "policy": {
+            **policy.model_dump(mode="json"),
+            "policy_number": _document_policy_number(store, selected, policy),
+        },
         "version": selected.model_dump(mode="json"),
         "versions": [
             {
@@ -363,6 +412,8 @@ async def prepare_publication(
             profile.organization_id, profile.id, version_id
         )
     except (KeyError, PublicationError) as error:
+        if isinstance(error, PublicationError):
+            await _persist_failed_publication(request)
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 
@@ -373,6 +424,8 @@ async def publish_version(request: Request, version_id: str, profile: CurrentPro
     try:
         return await _service(request).publish(profile.organization_id, profile.id, version_id)
     except (KeyError, PublicationError) as error:
+        if isinstance(error, PublicationError):
+            await _persist_failed_publication(request)
         raise HTTPException(status_code=409, detail=str(error)) from error
 
 

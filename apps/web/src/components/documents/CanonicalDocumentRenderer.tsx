@@ -43,6 +43,16 @@ export type CanonicalSectionView = {
   };
 };
 
+function renderCanonicalInline(value: string): ReactNode {
+  return value.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**'))
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('*') && part.endsWith('*'))
+      return <em key={index}>{part.slice(1, -1)}</em>;
+    return part;
+  });
+}
+
 function isListItem(value: unknown): value is CanonicalListItemView {
   return (
     !!value &&
@@ -64,9 +74,15 @@ function CanonicalList({
     <List>
       {items.filter(isListItem).map((item, index) => (
         <li key={`${item.text}-${String(index)}`} dir="auto">
-          <span>{item.text}</span>
+          <span>{renderCanonicalInline(item.text)}</span>
           {item.children?.length ? (
-            <CanonicalList items={item.children} ordered={ordered} />
+            <CanonicalList
+              items={item.children}
+              ordered={
+                isListItem(item.children[0]) &&
+                /^\d/.test(item.children[0].marker ?? '')
+              }
+            />
           ) : null}
         </li>
       ))}
@@ -85,7 +101,9 @@ function CanonicalTable({
   return (
     <div className="canonical-table-wrap">
       <table>
-        {table.caption && <caption dir="auto">{table.caption}</caption>}
+        {table.caption && (
+          <caption dir="auto">{renderCanonicalInline(table.caption)}</caption>
+        )}
         <tbody>
           {rows.map((row) => (
             <tr key={row}>
@@ -101,7 +119,7 @@ function CanonicalTable({
                       rowSpan={cell.row_span}
                       dir="auto"
                     >
-                      {cell.text}
+                      {renderCanonicalInline(cell.text)}
                     </Cell>
                   );
                 })}
@@ -115,7 +133,9 @@ function CanonicalTable({
 
 function CanonicalBlock({ block }: { block: CanonicalBlockView }) {
   if (block.kind === 'paragraph')
-    return block.text ? <p dir="auto">{block.text}</p> : null;
+    return block.text ? (
+      <p dir="auto">{renderCanonicalInline(block.text)}</p>
+    ) : null;
   if (block.kind === 'ordered_list' || block.kind === 'unordered_list')
     return (
       <CanonicalList
@@ -158,17 +178,19 @@ export function CanonicalDocumentRenderer({
           >
             {section.chapter && (
               <div className="canonical-chapter" dir="auto">
-                {section.chapter}
+                {renderCanonicalInline(section.chapter)}
               </div>
             )}
             <div className="canonical-section-heading">
               <div>
                 {section.policy_number && (
                   <span className="canonical-policy-number">
-                    {section.policy_number}
+                    {renderCanonicalInline(section.policy_number)}
                   </span>
                 )}
-                <Heading dir="auto">{section.heading}</Heading>
+                <Heading dir="auto">
+                  {renderCanonicalInline(section.heading)}
+                </Heading>
               </div>
               {sectionActions?.(section)}
             </div>
