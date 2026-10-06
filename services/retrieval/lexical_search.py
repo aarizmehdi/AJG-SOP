@@ -78,8 +78,8 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
                 policy_number=chunk.policy_number,
                 heading_path=chunk.heading_path,
                 allowed_roles=list(chunk.access.roles.values),
-                department=next(iter(chunk.access.departments.values)) if chunk.access.departments.values else None,
-                location=next(iter(chunk.access.locations.values)) if chunk.access.locations.values else None,
+                department=next(iter(chunk.access.departments.values)) if chunk.access.departments.values else None,  # noqa: E501
+                location=next(iter(chunk.access.locations.values)) if chunk.access.locations.values else None,  # noqa: E501
             )
             for rank, (chunk, score) in enumerate(scored[:limit], start=1)
         ]

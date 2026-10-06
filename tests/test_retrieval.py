@@ -29,6 +29,7 @@ def test_restricted_chunk_security():
     filter_expr = pinecone_authorization_filter(
         organization_id="tenant-1",
         active_version_ids=["v1"],
+        chunk_ids=["chunk-1"],
         departments=["finance"],
         locations=["karachi"],
         roles=["admin"],

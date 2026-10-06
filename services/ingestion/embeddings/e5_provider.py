@@ -48,12 +48,10 @@ class E5EmbeddingProvider(EmbeddingProvider):
             )
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        prefixed_texts = [f"passage: {text}" for text in texts]
-        return await self._embed(prefixed_texts, "passage")
+        return await self._embed(texts, "passage")
 
     async def embed_query(self, text: str) -> list[float]:
-        prefixed_text = f"query: {text}"
-        vectors = await self._embed([prefixed_text], "query")
+        vectors = await self._embed([text], "query")
         return vectors[0]
 
     async def _embed(self, texts: Sequence[str], input_type: str) -> list[list[float]]:

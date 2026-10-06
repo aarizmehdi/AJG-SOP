@@ -48,11 +48,12 @@ class RecordingLexical(LexicalCandidateRetriever):
         self.seen: list[str] = []
 
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int
     ) -> list[RetrievalCandidate]:
         self.seen = [item.id for item in eligible_chunks]
         return [
             RetrievalCandidate(
+                tenant_id=item.organization_id,
                 organization_id=item.organization_id,
                 chunk_id=item.id,
                 channel=CandidateChannel.LEXICAL,
@@ -68,11 +69,12 @@ class RecordingSemantic(SemanticCandidateRetriever):
         self.seen: list[str] = []
 
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int
     ) -> list[RetrievalCandidate]:
         self.seen = [item.id for item in eligible_chunks]
         return [
             RetrievalCandidate(
+                tenant_id=item.organization_id,
                 organization_id=item.organization_id,
                 chunk_id=item.id,
                 channel=CandidateChannel.SEMANTIC,
@@ -213,8 +215,8 @@ class RecordingPineconeIndex:
         self.query_kwargs = kwargs
         return SimpleNamespace(
             matches=[
-                SimpleNamespace(id="restricted", score=0.99),
-                SimpleNamespace(id="allowed", score=0.9),
+                SimpleNamespace(id="restricted", score=0.99, metadata={}),
+                SimpleNamespace(id="allowed", score=0.9, metadata={}),
             ]
         )
 
@@ -229,15 +231,20 @@ async def test_pinecone_semantic_query_rejects_noneligible_matches() -> None:
         index=index,
     )
 
-    results = await retriever.search("damaged stock", [chunk("allowed", "store")], 5)
+    profile = EmployeeProfile(id="test", organization_id="ajt", identity_subject="test", display_name="test", email="test@example.com", application_roles=frozenset(), departments=frozenset())
+    results = await retriever.search("damaged stock", profile, [chunk("allowed", "store")], 5)
 
     assert [result.chunk_id for result in results] == ["allowed"]
     assert index.query_kwargs["namespace"] == "aziz-jan-trust--ajt"
     assert index.query_kwargs["filter"] == {
         "$and": [
             {"organization_id": {"$eq": "ajt"}},
+            {"version_id": {"$in": ["version"]}},
             {"publication_status": {"$eq": "published"}},
             {"chunk_id": {"$in": ["allowed"]}},
+            {"$or": [{"departments_mode": {"$eq": "all"}}, {"departments": {"$in": []}}]},
+            {"$or": [{"locations_mode": {"$eq": "all"}}, {"locations": {"$in": []}}]},
+            {"$or": [{"roles_mode": {"$eq": "all"}}, {"roles": {"$in": []}}]},
         ]
     }
 
@@ -252,5 +259,6 @@ async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
         index=RecordingPineconeIndex(),
     )
 
+    profile = EmployeeProfile(id="test", organization_id="ajt", identity_subject="test", display_name="test", email="test@example.com", application_roles=frozenset(), departments=frozenset())
     with pytest.raises(PermissionError, match="cannot cross organizations"):
-        await retriever.search("damaged stock", [chunk("allowed", "store"), other], 5)
+        await retriever.search("damaged stock", profile, [chunk("allowed", "store"), other], 5)

@@ -55,8 +55,8 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
                 policy_number=chunk.policy_number,
                 heading_path=chunk.heading_path,
                 allowed_roles=list(chunk.access.roles.values),
-                department=next(iter(chunk.access.departments.values)) if chunk.access.departments.values else None,
-                location=next(iter(chunk.access.locations.values)) if chunk.access.locations.values else None,
+                department=next(iter(chunk.access.departments.values)) if chunk.access.departments.values else None,  # noqa: E501
+                location=next(iter(chunk.access.locations.values)) if chunk.access.locations.values else None,  # noqa: E501
             )
             for rank, (chunk, score) in enumerate(scored[:limit], start=1)
             if score > 0
@@ -88,14 +88,20 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
+            
         organization_id = profile.organization_id
+        if any(chunk.organization_id != organization_id for chunk in eligible_chunks):
+            raise PermissionError("Eligible chunks cannot cross organizations")
+            
         vector = await self._embeddings.embed_query(query)
         active_version_ids = list({chunk.version_id for chunk in eligible_chunks})
+        chunk_ids = [chunk.id for chunk in eligible_chunks]
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
 
         filter_expr = pinecone_authorization_filter(
             organization_id=organization_id,
             active_version_ids=active_version_ids,
+            chunk_ids=chunk_ids,
             departments=list(profile.departments) if profile.departments else [],
             locations=list(profile.locations) if profile.locations else [],
             roles=list(profile.organizational_roles) if profile.organizational_roles else [],
@@ -132,6 +138,7 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
                 else "published",  # noqa: E501
             )
             for rank, match in enumerate(matches, start=1)
+            if str(match.id) in chunk_ids
         ]
 
     @staticmethod
@@ -146,6 +153,7 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
 def pinecone_authorization_filter(
     organization_id: str,
     active_version_ids: list[str],
+    chunk_ids: list[str],
     departments: list[str],
     locations: list[str],
     roles: list[str],
@@ -156,6 +164,7 @@ def pinecone_authorization_filter(
             {"organization_id": {"$eq": organization_id}},
             {"version_id": {"$in": active_version_ids}},
             {"publication_status": {"$eq": "published"}},
+            {"chunk_id": {"$in": chunk_ids}},
             {
                 "$or": [
                     {"departments_mode": {"$eq": "all"}},
