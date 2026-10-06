@@ -60,7 +60,7 @@ from services.assistant.citations import CitationValidator
 from services.assistant.grounding import GroundingVerifier
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
-from services.ingestion.embeddings.pinecone_e5 import PineconeE5EmbeddingProvider
+from services.ingestion.embeddings.e5_provider import PineconeE5EmbeddingProvider
 from services.ingestion.extractors.azure_document_intelligence import (
     AzureDocumentIntelligenceParser,
 )
