@@ -7,19 +7,27 @@ from packages.contracts.canonical import CanonicalBlock, SourceLocator
 from packages.contracts.common import Language, OrganizationOwned
 
 
+class AccessControlled(OrganizationOwned):
+    tenant_id: str
+    allowed_roles: list[str] = Field(default_factory=list)
+    department: str | None = None
+    location: str | None = None
+    publication_state: str = "published"
+
+
 class CandidateChannel(StrEnum):
     SEMANTIC = "semantic"
     LEXICAL = "lexical"
 
 
-class RetrievalCandidate(OrganizationOwned):
+class RetrievalCandidate(AccessControlled):
     chunk_id: str
     channel: CandidateChannel
     score: float
     rank: int = Field(ge=1)
 
 
-class SearchEvidence(OrganizationOwned):
+class SearchEvidence(AccessControlled):
     chunk_id: str
     policy_id: str
     version_id: str
@@ -52,7 +60,7 @@ class SearchResponse(BaseModel):
     language: Language
 
 
-class PolicyReaderSection(OrganizationOwned):
+class PolicyReaderSection(AccessControlled):
     policy_id: str
     version_id: str
     section_id: str

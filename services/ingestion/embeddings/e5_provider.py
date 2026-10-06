@@ -15,8 +15,8 @@ class EmbeddingDimensionError(RuntimeError):
     pass
 
 
-class PineconeE5EmbeddingProvider(EmbeddingProvider):
-    """Pinecone-hosted multilingual E5 with distinct passage/query semantics."""
+class E5EmbeddingProvider(EmbeddingProvider):
+    """E5 embeddings with explicit passage/query prefix semantics."""
 
     def __init__(
         self,
@@ -48,10 +48,12 @@ class PineconeE5EmbeddingProvider(EmbeddingProvider):
             )
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return await self._embed(texts, "passage")
+        prefixed_texts = [f"passage: {text}" for text in texts]
+        return await self._embed(prefixed_texts, "passage")
 
     async def embed_query(self, text: str) -> list[float]:
-        vectors = await self._embed([text], "query")
+        prefixed_text = f"query: {text}"
+        vectors = await self._embed([prefixed_text], "query")
         return vectors[0]
 
     async def _embed(self, texts: Sequence[str], input_type: str) -> list[list[float]]:
@@ -88,3 +90,7 @@ class PineconeE5EmbeddingProvider(EmbeddingProvider):
         if isinstance(item, Mapping):
             return item.get(key)
         return getattr(item, key, None)
+
+
+PineconeE5EmbeddingProvider = E5EmbeddingProvider
+

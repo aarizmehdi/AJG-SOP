@@ -36,20 +36,29 @@ class Settings(BaseSettings):
     )
 
     pinecone_api_key: SecretStr | None = None
-    pinecone_index: str = "aziz-jan-sop"
+    pinecone_index_name: str = Field(
+        default="aziz-jan-sop", validation_alias=AliasChoices("pinecone_index_name", "pinecone_index")
+    )
+    pinecone_environment: str = "gcp-starter"
+    pinecone_dimension: int = 1024
     pinecone_namespace_prefix: str = "aziz-jan-trust"
 
     firebase_project_id: str | None = None
     firebase_service_account_json: SecretStr | None = None
 
-    llm_provider: Literal["fixture", "deepseek"] = "deepseek"
+    llm_provider: Literal["fixture", "deepseek", "groq"] = "groq"
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
     deepseek_temperature: float = Field(default=0.2, ge=0, le=1)
 
-    embedding_provider: Literal["fixture", "pinecone_e5"] = "fixture"
-    embedding_model: str = "multilingual-e5-large"
+    groq_api_key: SecretStr | None = None
+    groq_model_name: str = "llama-3.3-70b-versatile"
+
+    embedding_provider: Literal["fixture", "e5"] = "e5"
+    e5_model_name: str = "multilingual-e5-large"
+    e5_passage_prefix: str = "passage: "
+    e5_query_prefix: str = "query: "
     reranker_provider: str = "fixture"
     document_parser_provider: Literal["fixture", "azure", "docling", "auto"] = "fixture"
     speech_provider: Literal["disabled"] = "disabled"
@@ -86,8 +95,8 @@ class Settings(BaseSettings):
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
-            if self.embedding_provider != "pinecone_e5":
-                raise ValueError("EMBEDDING_PROVIDER must be pinecone_e5 in live mode")
+            if self.embedding_provider != "e5":
+                raise ValueError("EMBEDDING_PROVIDER must be e5 in live mode")
             if "localhost" in self.web_origin:
                 raise ValueError(
                     "WEB_ORIGIN must not be localhost in live mode; "
