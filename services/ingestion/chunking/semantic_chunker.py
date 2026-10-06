@@ -5,6 +5,7 @@ from packages.contracts.canonical import (
     CanonicalBlock,
     CanonicalListItem,
     CanonicalSOP,
+    CanonicalSection,
     CanonicalTable,
     RetrievalChunk,
 )
@@ -78,15 +79,15 @@ class SemanticChunker(Chunker):
             chunks.extend(self._chunk_section(document, section, publication_status))
         return chunks
 
-    def _chunk_section(self, document, section, publication_status) -> list[RetrievalChunk]:
-        chunks = []
-        current_text = []
+    def _chunk_section(self, document: CanonicalSOP, section: CanonicalSection, publication_status: str) -> list[RetrievalChunk]:
+        chunks: list[RetrievalChunk] = []
+        current_text: list[str] = []
         current_words = 0
         chunk_index = 0
 
         heading = " > ".join(section.heading_path)
 
-        def flush():
+        def flush() -> None:
             nonlocal current_text, current_words, chunk_index
             if not current_text:
                 return

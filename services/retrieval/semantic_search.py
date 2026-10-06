@@ -54,9 +54,9 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
                 text=chunk.text,
                 policy_number=chunk.policy_number,
                 heading_path=chunk.heading_path,
-                allowed_roles=chunk.access.roles,
-                department=chunk.access.departments[0] if chunk.access.departments else None,
-                location=chunk.access.locations[0] if chunk.access.locations else None,
+                allowed_roles=list(chunk.access.roles.values),
+                department=next(iter(chunk.access.departments.values)) if chunk.access.departments.values else None,
+                location=next(iter(chunk.access.locations.values)) if chunk.access.locations.values else None,
             )
             for rank, (chunk, score) in enumerate(scored[:limit], start=1)
             if score > 0
@@ -96,9 +96,9 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         filter_expr = pinecone_authorization_filter(
             organization_id=organization_id,
             active_version_ids=active_version_ids,
-            departments=profile.departments,
-            locations=profile.locations,
-            roles=profile.organizational_roles,
+            departments=list(profile.departments) if profile.departments else [],
+            locations=list(profile.locations) if profile.locations else [],
+            roles=list(profile.organizational_roles) if profile.organizational_roles else [],
         )
 
         response = await anyio.to_thread.run_sync(

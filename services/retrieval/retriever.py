@@ -166,6 +166,7 @@ class RetrievalService:
     def _evidence(title: str, chunk: RetrievalChunk, score: float) -> SearchEvidence:
         excerpt = chunk.text[:420] + ("…" if len(chunk.text) > 420 else "")
         return SearchEvidence(
+            tenant_id=chunk.tenant_id,
             organization_id=chunk.organization_id,
             chunk_id=chunk.id,
             policy_id=chunk.policy_id,
