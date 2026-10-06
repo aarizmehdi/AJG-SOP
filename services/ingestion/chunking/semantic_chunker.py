@@ -1,6 +1,13 @@
 from abc import ABC, abstractmethod
 
-from packages.contracts.canonical import BlockKind, CanonicalBlock, CanonicalListItem, CanonicalSOP, RetrievalChunk, CanonicalTable
+from packages.contracts.canonical import (
+    BlockKind,
+    CanonicalBlock,
+    CanonicalListItem,
+    CanonicalSOP,
+    CanonicalTable,
+    RetrievalChunk,
+)
 
 
 def serialize_list(items: list[CanonicalListItem], parent_text: str = "") -> list[str]:
@@ -29,8 +36,8 @@ def serialize_table(table: CanonicalTable) -> list[str]:
         row_header = grid.get((cell.row, 0))
         col_header = grid.get((0, cell.column))
 
-        r_text = row_header.text if row_header and row_header.is_header and row_header != cell else None
-        c_text = col_header.text if col_header and col_header.is_header and col_header != cell else None
+        r_text = row_header.text if row_header and row_header.is_header and row_header != cell else None  # noqa: E501
+        c_text = col_header.text if col_header and col_header.is_header and col_header != cell else None  # noqa: E501
 
         parts = [f"[{table_heading}]"]
         if r_text:

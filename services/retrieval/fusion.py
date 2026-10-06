@@ -1,8 +1,5 @@
 from abc import ABC, abstractmethod
 
-from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
-
-
 from apps.api.app.models.organization import EmployeeProfile
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 
@@ -43,12 +40,12 @@ class ReciprocalRankFusion(CandidateFusion):
                 continue
             if candidate.publication_state != "published":
                 continue
-            if candidate.department and candidate.department not in profile.departments and "all" not in profile.departments:
+            if candidate.department and candidate.department not in profile.departments and "all" not in profile.departments:  # noqa: E501
                 continue
-            if candidate.location and candidate.location not in profile.locations and "all" not in profile.locations:
+            if candidate.location and candidate.location not in profile.locations and "all" not in profile.locations:  # noqa: E501
                 continue
             if candidate.allowed_roles:
-                if not any(role in profile.organizational_roles for role in candidate.allowed_roles) and "all" not in profile.organizational_roles:
+                if not any(role in profile.organizational_roles for role in candidate.allowed_roles) and "all" not in profile.organizational_roles:  # noqa: E501
                     continue
 
             # Deduplicate by SOP ID and chunk range (using chunk_id logic)

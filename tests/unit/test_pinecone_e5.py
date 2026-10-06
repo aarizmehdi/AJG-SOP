@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.ingestion.embeddings.pinecone_e5 import (
+from services.ingestion.embeddings.e5_provider import (
     EmbeddingConfigurationError,
     EmbeddingDimensionError,
     PineconeE5EmbeddingProvider,

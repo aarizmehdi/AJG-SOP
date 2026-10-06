@@ -10,7 +10,7 @@ from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 class LexicalCandidateRetriever(ABC):
     @abstractmethod
     async def search(
-        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int  # noqa: E501
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
@@ -33,7 +33,7 @@ ROMAN_URDU_MAP = {
 
 class FixtureLexicalRetriever(LexicalCandidateRetriever):
     async def search(
-        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int  # noqa: E501
     ) -> list[RetrievalCandidate]:
         normalized_query = self._normalize_urdu(query)
         terms = self._terms(normalized_query)

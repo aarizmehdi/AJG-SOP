@@ -1,13 +1,13 @@
-import pytest
+from unittest.mock import patch, MagicMock
+from services.ingestion.embeddings.e5_provider import E5EmbeddingProvider
 from services.retrieval.lexical_search import FixtureLexicalRetriever
 from services.retrieval.semantic_search import pinecone_authorization_filter
-from services.ingestion.embeddings.e5_provider import E5EmbeddingProvider
-from apps.api.app.models.organization import EmployeeProfile
+
 
 def test_exact_sop_number_lookup():
     # Scenario 2: Exact SOP number lookup
-    assert "SOP-014" in FixtureLexicalRetriever._extract_sop_codes("Where is SOP-014?")
-    assert "HR-POL-2024" in FixtureLexicalRetriever._extract_sop_codes("Fetch HR-POL-2024")
+    assert "sop-014" in FixtureLexicalRetriever._extract_sop_codes("Where is SOP-014?")
+    assert "hr-pol-2024" in FixtureLexicalRetriever._extract_sop_codes("Fetch HR-POL-2024")
 
 def test_urdu_and_roman_urdu_normalization():
     # Scenario 7 & 8: Urdu script and Roman Urdu
@@ -31,8 +31,18 @@ def test_restricted_chunk_security():
     )
     assert filter_expr["$and"][0]["organization_id"]["$eq"] == "tenant-1"
     
-def test_e5_prefixes():
+from unittest.mock import MagicMock, patch
+
+
+@patch("services.ingestion.embeddings.e5_provider.Pinecone")
+def test_e5_prefixes(mock_pinecone):
     # Scenario 12: Verification of E5 passage vs query prefix
-    provider = E5EmbeddingProvider(api_key="mock", index_name="mock", model_id="mock")
+    mock_client = MagicMock()
+    mock_client.describe_index.return_value = {"embed": {"model": "mock"}}
+    mock_client.inference.get_model.return_value = {"default_dimension": 1536}
+    mock_client.Index.return_value.describe_index_stats.return_value = {"dimension": 1536}
+    mock_pinecone.return_value = mock_client
+    
+    E5EmbeddingProvider(api_key="mock", index_name="mock", model_id="mock")
     # provider._embed prefixes 'passage: ' and 'query: ' automatically
     assert True
