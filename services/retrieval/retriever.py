@@ -76,7 +76,7 @@ class RetrievalService:
             if self.metrics:
                 self.metrics.observe("retrieval", (perf_counter() - started) * 1000, failed=True)
             raise
-        fused = self.fusion.fuse(lexical, semantic)
+        fused = self.fusion.fuse(lexical, semantic, profile)
         chunks = {chunk.id: chunk for chunk in eligible}
         ranked = await self.reranker.rerank(query, fused, chunks)
         await self._refresh()
