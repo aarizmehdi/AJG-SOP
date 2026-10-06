@@ -25,6 +25,9 @@ class RetrievalCandidate(AccessControlled):
     channel: CandidateChannel
     score: float
     rank: int = Field(ge=1)
+    text: str | None = None
+    policy_number: str | None = None
+    heading_path: tuple[str, ...] | None = None
 
 
 class SearchEvidence(AccessControlled):

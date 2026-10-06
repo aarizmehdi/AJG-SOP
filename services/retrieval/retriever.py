@@ -69,8 +69,8 @@ class RetrievalService:
         eligible = self.authorization.eligible_chunks(profile)
         try:
             lexical, semantic = await asyncio.gather(
-                self.lexical.search(query, eligible, limit * 3),
-                self.semantic.search(query, eligible, limit * 3),
+                self.lexical.search(query, profile, eligible, limit * 3),
+                self.semantic.search(query, profile, eligible, limit * 3),
             )
         except Exception:
             if self.metrics:

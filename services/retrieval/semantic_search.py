@@ -5,6 +5,7 @@ from typing import Any
 import anyio
 from pinecone import Pinecone
 
+from apps.api.app.models.organization import EmployeeProfile
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 from services.ingestion.embeddings.base import EmbeddingProvider
@@ -13,7 +14,7 @@ from services.ingestion.embeddings.base import EmbeddingProvider
 class SemanticCandidateRetriever(ABC):
     @abstractmethod
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
@@ -23,7 +24,7 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
         self._embeddings = embeddings
 
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
@@ -38,11 +39,18 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
         scored.sort(key=lambda item: (-item[1], item[0].id))
         return [
             RetrievalCandidate(
+                tenant_id=chunk.organization_id,
                 organization_id=chunk.organization_id,
                 chunk_id=chunk.id,
                 channel=CandidateChannel.SEMANTIC,
                 score=score,
                 rank=rank,
+                text=chunk.text,
+                policy_number=chunk.policy_number,
+                heading_path=chunk.heading_path,
+                allowed_roles=chunk.access.roles,
+                department=chunk.access.departments[0] if chunk.access.departments else None,
+                location=chunk.access.locations[0] if chunk.access.locations else None,
             )
             for rank, (chunk, score) in enumerate(scored[:limit], start=1)
             if score > 0
@@ -66,41 +74,50 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         self._embeddings = embeddings
 
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
-        organization_id = eligible_chunks[0].organization_id
-        if any(chunk.organization_id != organization_id for chunk in eligible_chunks):
-            raise PermissionError("Semantic corpus cannot cross organizations")
+        organization_id = profile.organization_id
         vector = await self._embeddings.embed_query(query)
-        eligible_ids = [chunk.id for chunk in eligible_chunks]
+        active_version_ids = list({chunk.version_id for chunk in eligible_chunks})
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
+        
+        filter_expr = pinecone_authorization_filter(
+            organization_id=organization_id,
+            active_version_ids=active_version_ids,
+            departments=profile.departments,
+            locations=profile.locations,
+            roles=profile.organizational_roles,
+        )
+
         response = await anyio.to_thread.run_sync(
             lambda: self._index.query(
                 namespace=namespace,
                 vector=vector,
                 top_k=limit,
-                filter={
-                    "$and": [
-                        {"organization_id": {"$eq": organization_id}},
-                        {"publication_status": {"$eq": "published"}},
-                        {"chunk_id": {"$in": eligible_ids}},
-                    ]
-                },
+                include_metadata=True,
+                filter=filter_expr,
             )
         )
         matches = getattr(response, "matches", [])
         return [
             RetrievalCandidate(
+                tenant_id=organization_id,
                 organization_id=organization_id,
                 chunk_id=str(match.id),
                 channel=CandidateChannel.SEMANTIC,
                 score=float(match.score),
                 rank=rank,
+                text=match.metadata.get("text") if match.metadata else None,
+                policy_number=match.metadata.get("policy_number") if match.metadata else None,
+                heading_path=tuple(match.metadata.get("heading_path", [])) if match.metadata else None,
+                allowed_roles=match.metadata.get("roles", []) if match.metadata else [],
+                department=match.metadata.get("department") if match.metadata else None,
+                location=match.metadata.get("location") if match.metadata else None,
+                publication_state=match.metadata.get("publication_status", "published") if match.metadata else "published",
             )
             for rank, match in enumerate(matches, start=1)
-            if str(match.id) in eligible_ids
         ]
 
     @staticmethod
