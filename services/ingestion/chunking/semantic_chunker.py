@@ -1,10 +1,52 @@
 from abc import ABC, abstractmethod
 
-from packages.contracts.canonical import BlockKind, CanonicalBlock, CanonicalListItem, CanonicalSOP, RetrievalChunk
+from packages.contracts.canonical import BlockKind, CanonicalBlock, CanonicalListItem, CanonicalSOP, RetrievalChunk, CanonicalTable
 
 
-def list_text(item: CanonicalListItem) -> list[str]:
-    return [item.text, *(text for child in item.children for text in list_text(child))]
+def serialize_list(items: list[CanonicalListItem], parent_text: str = "") -> list[str]:
+    result = []
+    for item in items:
+        current = f"{parent_text} > {item.text}" if parent_text else item.text
+        result.append(current)
+        if item.children:
+            result.extend(serialize_list(item.children, current))
+    return result
+
+def serialize_table(table: CanonicalTable) -> list[str]:
+    grid = {}
+    for cell in table.cells:
+        for r in range(cell.row, cell.row + cell.row_span):
+            for c in range(cell.column, cell.column + cell.column_span):
+                grid[(r, c)] = cell
+
+    lines = []
+    table_heading = table.caption or "Table"
+
+    for cell in table.cells:
+        if cell.is_header:
+            continue
+
+        row_header = grid.get((cell.row, 0))
+        col_header = grid.get((0, cell.column))
+
+        r_text = row_header.text if row_header and row_header.is_header and row_header != cell else None
+        c_text = col_header.text if col_header and col_header.is_header and col_header != cell else None
+
+        parts = [f"[{table_heading}]"]
+        if r_text:
+            parts.append(r_text)
+        if c_text:
+            parts.append(f"{c_text}: {cell.text}")
+        else:
+            parts.append(cell.text)
+
+        lines.append(" -> ".join(parts))
+
+    if not lines:
+        return [cell.text for cell in table.cells]
+    
+    # Deduplicate in case of spans
+    return list(dict.fromkeys(lines))
 
 
 class Chunker(ABC):
@@ -85,12 +127,9 @@ class SemanticChunker(Chunker):
         if block.text:
             return block.text
         elif block.list_items:
-            texts = []
-            for item in block.list_items:
-                texts.extend(list_text(item))
-            return "\n".join(texts)
+            return "\n".join(serialize_list(block.list_items))
         elif block.kind is BlockKind.TABLE and block.table:
-            return "\n".join(cell.text for cell in block.table.cells)
+            return "\n".join(serialize_table(block.table))
         return ""
 
 
