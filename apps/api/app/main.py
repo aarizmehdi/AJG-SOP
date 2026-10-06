@@ -163,7 +163,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             raise ValueError("Pinecone API key is required in live mode")
         app.state.retrieval_index = PineconeRetrievalIndex(
             settings.pinecone_api_key.get_secret_value(),
-            settings.pinecone_index,
+            settings.pinecone_index_name,
             settings.pinecone_namespace_prefix,
         )
 
@@ -174,8 +174,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         publication_embeddings = PineconeE5EmbeddingProvider(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
-            settings.pinecone_index,
-            settings.embedding_model,
+            settings.pinecone_index_name,
+            settings.e5_model_name,
         )
 
     app.state.audit_service = AuditService(app.state.foundation_store)
@@ -207,7 +207,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         semantic = PineconeSemanticRetriever(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
-            settings.pinecone_index,
+            settings.pinecone_index_name,
             settings.pinecone_namespace_prefix,
             publication_embeddings,
         )

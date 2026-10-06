@@ -37,7 +37,8 @@ class Settings(BaseSettings):
 
     pinecone_api_key: SecretStr | None = None
     pinecone_index_name: str = Field(
-        default="aziz-jan-sop", validation_alias=AliasChoices("pinecone_index_name", "pinecone_index")  # noqa: E501
+        default="aziz-jan-sop",
+        validation_alias=AliasChoices("pinecone_index_name", "pinecone_index"),  # noqa: E501
     )
     pinecone_environment: str = "gcp-starter"
     pinecone_dimension: int = 1024

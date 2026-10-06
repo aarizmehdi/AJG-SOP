@@ -177,9 +177,7 @@ def test_system_admin_reads_tenant_wide_but_sop_admin_keeps_employee_scope() -> 
         identity_subject="fixture|sop-admin",
         display_name="SOP Administrator",
         email="sop-admin@example.test",
-        application_roles=frozenset(
-            {ApplicationRole.EMPLOYEE, ApplicationRole.SOP_ADMIN}
-        ),
+        application_roles=frozenset({ApplicationRole.EMPLOYEE, ApplicationRole.SOP_ADMIN}),
         departments=frozenset({"store"}),
     )
     system_admin = sop_admin.model_copy(

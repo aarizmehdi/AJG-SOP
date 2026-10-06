@@ -53,29 +53,29 @@ class ProductionReranker(Reranker):
         for chunk_id, base_score in fused:
             if chunk_id not in chunks:
                 continue
-            
+
             chunk = chunks[chunk_id]
             text = chunk.text.casefold()
-            
+
             # Prioritize exact heading matches
             heading_bonus = 0.0
             if chunk.heading_path:
                 heading_text = " > ".join(chunk.heading_path).casefold()
                 if query.casefold() in heading_text:
                     heading_bonus = 5.0
-            
+
             # Prioritize late-section information in candidates
             late_section_bonus = min(2.0, chunk.chunk_index * 0.5)
 
             # Basic relevance calculation for cross-encoder approximation
             relevance = len(query_terms & set(text.split())) * 0.5
-            
+
             final_score = base_score + heading_bonus + late_section_bonus + relevance
-            
+
             if self.use_dev_routing:
                 # Dev / benchmark routing for candidate relevance components
                 final_score += 1.5
 
             reranked.append((chunk_id, final_score))
-            
+
         return sorted(reranked, key=lambda item: (-item[1], item[0]))

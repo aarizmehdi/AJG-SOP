@@ -17,9 +17,7 @@ class FakeInference:
     def get_model(self, *, model: str) -> SimpleNamespace:
         return SimpleNamespace(model=model, default_dimension=self.dimension)
 
-    def embed(
-        self, model: str, inputs: list[str], parameters: dict[str, str]
-    ) -> SimpleNamespace:
+    def embed(self, model: str, inputs: list[str], parameters: dict[str, str]) -> SimpleNamespace:
         self.calls.append((model, inputs, parameters))
         return SimpleNamespace(
             data=[

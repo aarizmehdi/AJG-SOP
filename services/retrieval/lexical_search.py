@@ -10,7 +10,11 @@ from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 class LexicalCandidateRetriever(ABC):
     @abstractmethod
     async def search(
-        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int  # noqa: E501
+        self,
+        query: str,
+        profile: EmployeeProfile,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,  # noqa: E501
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
@@ -31,31 +35,36 @@ ROMAN_URDU_MAP = {
     "usool": "policy",
 }
 
+
 class FixtureLexicalRetriever(LexicalCandidateRetriever):
     async def search(
-        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int  # noqa: E501
+        self,
+        query: str,
+        profile: EmployeeProfile,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,  # noqa: E501
     ) -> list[RetrievalCandidate]:
         normalized_query = self._normalize_urdu(query)
         terms = self._terms(normalized_query)
         query_sop_codes = self._extract_sop_codes(query)
-        
+
         scored: list[tuple[RetrievalChunk, float]] = []
         for chunk in eligible_chunks:
             content = chunk.text.casefold()
-            
+
             # Exact SOP number match
             policy_bonus = 0.0
             if chunk.policy_number and chunk.policy_number.casefold() in query_sop_codes:
                 policy_bonus = 10.0
-                
+
             # Exact phrase match
             exact_bonus = 4.0 if normalized_query in content else 0.0
-            
+
             hits = sum(content.count(term) for term in terms)
-            
+
             if hits > 0 or exact_bonus > 0 or policy_bonus > 0:
                 scored.append((chunk, float(hits) + exact_bonus + policy_bonus))
-                
+
         scored.sort(key=lambda item: (-item[1], item[0].id))
         return [
             RetrievalCandidate(

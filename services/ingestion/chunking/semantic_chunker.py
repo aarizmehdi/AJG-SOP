@@ -19,6 +19,7 @@ def serialize_list(items: list[CanonicalListItem], parent_text: str = "") -> lis
             result.extend(serialize_list(item.children, current))
     return result
 
+
 def serialize_table(table: CanonicalTable) -> list[str]:
     grid = {}
     for cell in table.cells:
@@ -36,8 +37,12 @@ def serialize_table(table: CanonicalTable) -> list[str]:
         row_header = grid.get((cell.row, 0))
         col_header = grid.get((0, cell.column))
 
-        r_text = row_header.text if row_header and row_header.is_header and row_header != cell else None  # noqa: E501
-        c_text = col_header.text if col_header and col_header.is_header and col_header != cell else None  # noqa: E501
+        r_text = (
+            row_header.text if row_header and row_header.is_header and row_header != cell else None
+        )  # noqa: E501
+        c_text = (
+            col_header.text if col_header and col_header.is_header and col_header != cell else None
+        )  # noqa: E501
 
         parts = [f"[{table_heading}]"]
         if r_text:
@@ -51,7 +56,7 @@ def serialize_table(table: CanonicalTable) -> list[str]:
 
     if not lines:
         return [cell.text for cell in table.cells]
-    
+
     # Deduplicate in case of spans
     return list(dict.fromkeys(lines))
 
@@ -141,4 +146,3 @@ class SemanticChunker(Chunker):
 
 
 SectionAwareFixtureChunker = SemanticChunker
-

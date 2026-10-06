@@ -7,11 +7,13 @@ def test_heading_only_vs_body_content():
     ProductionReranker()
     assert True
 
+
 def test_retrieval_near_end_of_long_section():
     # Scenario 1: Retrieval of answers located near the end of a very long section
     # ProductionReranker adds late_section_bonus = min(2.0, chunk.chunk_index * 0.5)
     ProductionReranker()
     assert True
+
 
 def test_duplicate_candidate_handling():
     # Scenario 10: Duplicate candidate handling/deduplication

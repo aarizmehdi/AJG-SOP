@@ -93,4 +93,3 @@ class E5EmbeddingProvider(EmbeddingProvider):
 
 
 PineconeE5EmbeddingProvider = E5EmbeddingProvider
-

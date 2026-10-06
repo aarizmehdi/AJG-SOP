@@ -14,7 +14,11 @@ from services.ingestion.embeddings.base import EmbeddingProvider
 class SemanticCandidateRetriever(ABC):
     @abstractmethod
     async def search(
-        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int  # noqa: E501
+        self,
+        query: str,
+        profile: EmployeeProfile,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,  # noqa: E501
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
@@ -24,14 +28,16 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
         self._embeddings = embeddings
 
     async def search(
-        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int  # noqa: E501
+        self,
+        query: str,
+        profile: EmployeeProfile,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,  # noqa: E501
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
         query_vector = await self._embeddings.embed_query(query)
-        vectors = await self._embeddings.embed_documents(
-            [chunk.text for chunk in eligible_chunks]
-        )
+        vectors = await self._embeddings.embed_documents([chunk.text for chunk in eligible_chunks])
         scored = [
             (chunk, sum(left * right for left, right in zip(query_vector, vector, strict=True)))
             for chunk, vector in zip(eligible_chunks, vectors, strict=True)
@@ -74,7 +80,11 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         self._embeddings = embeddings
 
     async def search(
-        self, query: str, profile: EmployeeProfile, eligible_chunks: Sequence[RetrievalChunk], limit: int  # noqa: E501
+        self,
+        query: str,
+        profile: EmployeeProfile,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,  # noqa: E501
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
@@ -82,7 +92,7 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         vector = await self._embeddings.embed_query(query)
         active_version_ids = list({chunk.version_id for chunk in eligible_chunks})
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
-        
+
         filter_expr = pinecone_authorization_filter(
             organization_id=organization_id,
             active_version_ids=active_version_ids,
@@ -111,11 +121,15 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
                 rank=rank,
                 text=match.metadata.get("text") if match.metadata else None,
                 policy_number=match.metadata.get("policy_number") if match.metadata else None,
-                heading_path=tuple(match.metadata.get("heading_path", [])) if match.metadata else None,  # noqa: E501
+                heading_path=tuple(match.metadata.get("heading_path", []))
+                if match.metadata
+                else None,  # noqa: E501
                 allowed_roles=match.metadata.get("roles", []) if match.metadata else [],
                 department=match.metadata.get("department") if match.metadata else None,
                 location=match.metadata.get("location") if match.metadata else None,
-                publication_state=match.metadata.get("publication_status", "published") if match.metadata else "published",  # noqa: E501
+                publication_state=match.metadata.get("publication_status", "published")
+                if match.metadata
+                else "published",  # noqa: E501
             )
             for rank, match in enumerate(matches, start=1)
         ]

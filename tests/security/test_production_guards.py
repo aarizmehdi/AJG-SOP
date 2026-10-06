@@ -34,7 +34,7 @@ async def test_fixture_identity_prohibited_in_live_mode():
                 firebase_project_id="ajg-sop-web",
                 firebase_service_account_json="{}",
                 pinecone_api_key="test-key",
-                embedding_provider="pinecone_e5",
+                embedding_provider="e5",
                 s3_access_key_id="test-access",
                 s3_secret_access_key="test-secret",
             )
@@ -63,14 +63,14 @@ def test_live_mode_requires_mongodb_uri():
             firebase_project_id="ajg-sop-web",
             firebase_service_account_json="{}",
             pinecone_api_key="test-key",
-            embedding_provider="pinecone_e5",
+            embedding_provider="e5",
             s3_access_key_id="test-access",
             s3_secret_access_key="test-secret",
         )
 
 
 def test_live_mode_prohibits_fixture_embeddings() -> None:
-    with pytest.raises((ValueError, ValidationError), match="pinecone_e5"):
+    with pytest.raises((ValueError, ValidationError), match="e5"):
         Settings(
             app_mode="live",
             web_origin="https://app.example.com",
@@ -113,7 +113,7 @@ async def test_unknown_firebase_user_is_not_auto_provisioned_or_email_linked() -
         firebase_project_id="ajg-sop-web",
         firebase_service_account_json="{}",
         pinecone_api_key="test-key",
-        embedding_provider="pinecone_e5",
+        embedding_provider="e5",
         s3_access_key_id="test-access",
         s3_secret_access_key="test-secret",
     )
