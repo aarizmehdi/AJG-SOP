@@ -72,7 +72,7 @@ class InventedCitationProvider(LLMProvider):
         )
 
     async def plan_query(self, *args, **kwargs):
-        from packages.contracts.assistant import QueryPlan, InternalAnswerMode
+        from packages.contracts.assistant import InternalAnswerMode, QueryPlan
         return QueryPlan(
             resolved_query="test",
             is_follow_up=False,
