@@ -1,0 +1,55 @@
+{
+  "ks": [1, 3, 5, 10],
+  "primary_k": 5,
+  "configs": [
+    {
+      "name": "current-default",
+      "description": "Today's pipeline: section chunker, RRF 1:1, fixture reranker, stable hash embedding stand-in"
+    },
+    {
+      "name": "no-reranker",
+      "description": "Isolates what the fixture reranker contributes",
+      "reranker": "none"
+    },
+    {
+      "name": "lexical-only",
+      "description": "Lexical channel only",
+      "semantic": false
+    },
+    {
+      "name": "semantic-only",
+      "description": "Semantic channel only (hash stand-in, not a real semantic model)",
+      "lexical": false
+    },
+    {
+      "name": "fusion-lexical-2x",
+      "description": "Fusion weights lexical 2 : semantic 1",
+      "lexical_weight": 2.0
+    },
+    {
+      "name": "fusion-semantic-2x",
+      "description": "Fusion weights lexical 1 : semantic 2",
+      "semantic_weight": 2.0
+    },
+    {
+      "name": "pool-5",
+      "description": "At most 5 candidates per channel before fusion",
+      "candidate_pool": 5
+    },
+    {
+      "name": "pool-15",
+      "description": "At most 15 candidates per channel before fusion",
+      "candidate_pool": 15
+    },
+    {
+      "name": "e5",
+      "description": "Hosted multilingual E5 (needs PINECONE_API_KEY); skipped when unavailable",
+      "embedding": "pinecone-e5"
+    },
+    {
+      "name": "bge-m3",
+      "description": "BGE-M3 dense (needs sentence-transformers and weights); skipped when unavailable",
+      "embedding": "bge-m3"
+    }
+  ]
+}

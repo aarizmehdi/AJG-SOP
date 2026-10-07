@@ -1,0 +1,39 @@
+{
+  "note": "SYNTHETIC evaluation labels. The source Markdown SOPs carry no access metadata, so these rules assign restrictions to a few sections purely so authorization behaviour can be measured. They are not real AJG access policy and must never be applied to production data.",
+  "rules": [
+    {
+      "keys": [
+        "d1:aj-textile-mills-ltd",
+        "d1:motor-bike-maintenance",
+        "d1:a-general-maintenance",
+        "d1:b-other-general-maintenance-accidental"
+      ],
+      "departments": ["admin"],
+      "reason": "Policy 93 (motor bike maintenance): department-restricted fixture"
+    },
+    {
+      "keys": [
+        "d1:procedure-for-handing-taking-over-and-sa",
+        "d2:sop-for-waste-receipt-and-dispatch",
+        "d2:waste-weight-comparasion",
+        "d2:bale-wise-weight*",
+        "d2:report-no-*",
+        "d2:large-bale-press",
+        "d2:small-bale-press",
+        "d2:useable-wastes"
+      ],
+      "departments": ["excise"],
+      "reason": "Waste weighing, bale press and waste sale: department-restricted fixture"
+    },
+    {
+      "keys": ["d2:sop-64-sop-for-paper-cone-mill-3-sorting"],
+      "locations": ["mill-3"],
+      "reason": "SOP #64 concerns Mill 3: location-restricted fixture"
+    },
+    {
+      "keys": ["d2:sop-70-emergency-store-issue"],
+      "roles": ["store_officer", "admin_manager"],
+      "reason": "SOP #70 emergency store issue: role-restricted fixture"
+    }
+  ]
+}
