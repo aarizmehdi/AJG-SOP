@@ -77,6 +77,7 @@ class AssistantRequest(BaseModel):
 
 class ChatSession(OrganizationOwned):
     """Legacy record shape retained only for historical purge compatibility."""
+
     id: str
     employee_id: str
     language: Language
@@ -85,6 +86,7 @@ class ChatSession(OrganizationOwned):
 
 class ChatMessage(OrganizationOwned):
     """Legacy record shape retained only for historical purge compatibility."""
+
     id: str
     session_id: str
     role: MessageRole

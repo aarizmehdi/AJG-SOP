@@ -14,14 +14,17 @@ class SemanticVerificationResult(BaseModel):
     is_grounded: bool
     unsupported_claims: list[str]
 
+
 class SemanticVerifier(ABC):
     @abstractmethod
     async def verify_claims(self, answer: str, evidence: Sequence[SearchEvidence]) -> bool:
         pass
 
+
 class FixtureSemanticVerifier(SemanticVerifier):
     async def verify_claims(self, answer: str, evidence: Sequence[SearchEvidence]) -> bool:
         return True
+
 
 class DeepSeekSemanticVerifier(SemanticVerifier):
     def __init__(self, api_key: str, base_url: str, model: str = "deepseek-flash"):
@@ -38,17 +41,21 @@ class DeepSeekSemanticVerifier(SemanticVerifier):
                     "content": (
                         "You are a factual verification assistant. Verify if ALL claims in the "
                         "generated answer are fully supported by the provided authorized evidence. "
-                        "Do NOT use outside knowledge. Return a JSON object with 'is_grounded' (bool) "
+                        "Do NOT use outside knowledge. Return a JSON object with 'is_grounded' (bool) "  # noqa: E501
                         "and 'unsupported_claims' (list of strings)."
-                    )
+                    ),
                 },
                 {
                     "role": "user",
-                    "content": json.dumps({
-                        "generated_answer": answer,
-                        "authorized_evidence": [getattr(item, "full_text", item.excerpt) for item in evidence]
-                    })
-                }
+                    "content": json.dumps(
+                        {
+                            "generated_answer": answer,
+                            "authorized_evidence": [
+                                getattr(item, "full_text", item.excerpt) for item in evidence
+                            ],
+                        }
+                    ),
+                },
             ],
             "response_format": {"type": "json_object"},
             "temperature": 0.0,
@@ -58,7 +65,7 @@ class DeepSeekSemanticVerifier(SemanticVerifier):
                 response = await client.post(
                     f"{self._base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self._api_key}"},
-                    json=payload
+                    json=payload,
                 )
             response.raise_for_status()
             data = response.json()
@@ -134,7 +141,7 @@ class GroundingVerifier:
         )
         if not deterministic:
             return False
-            
+
         # Layer 2: Semantic verification
         try:
             return await self.semantic_verifier.verify_claims(answer.answer, evidence)

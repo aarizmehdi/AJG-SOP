@@ -28,9 +28,7 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
         if not eligible_chunks:
             return []
         query_vector = await self._embeddings.embed_query(query)
-        vectors = await self._embeddings.embed_documents(
-            [chunk.text for chunk in eligible_chunks]
-        )
+        vectors = await self._embeddings.embed_documents([chunk.text for chunk in eligible_chunks])
         scored = [
             (chunk, sum(left * right for left, right in zip(query_vector, vector, strict=True)))
             for chunk, vector in zip(eligible_chunks, vectors, strict=True)

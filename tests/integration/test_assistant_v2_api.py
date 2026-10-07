@@ -67,12 +67,15 @@ def test_invalid_generation_is_never_streamed_and_only_retried_once():
     class InvalidProvider(FixtureLLMProvider):
         calls = 0
 
-        async def generate(self, question, evidence, language, repair_feedback=None, answer_mode=None):
+        async def generate(
+            self, question, evidence, language, repair_feedback=None, answer_mode=None
+        ):
             self.calls += 1
             return GeneratedAnswer(answerable=True, answer="Invented 999 days", citations=[])
 
         async def plan_query(self, question, history):
             from services.assistant.conversation import build_query_plan
+
             return build_query_plan(question, history)
 
     with TestClient(app) as client:
@@ -138,11 +141,14 @@ def test_twenty_turns_create_no_chat_records_or_mutations():
 
 def test_no_answer_is_neutral_verified_response():
     class AbstainProvider(FixtureLLMProvider):
-        async def generate(self, question, evidence, language, repair_feedback=None, answer_mode=None):
+        async def generate(
+            self, question, evidence, language, repair_feedback=None, answer_mode=None
+        ):
             return GeneratedAnswer(answerable=False, answer="", citations=[])
 
         async def plan_query(self, question, history):
             from services.assistant.conversation import build_query_plan
+
             return build_query_plan(question, history)
 
     with TestClient(app) as client:

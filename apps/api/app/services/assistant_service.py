@@ -80,12 +80,12 @@ class AssistantService:
         progress: Callable[[str], None] | None = None,
     ) -> tuple[VerifiedAnswer, list[AssistantEvidence]]:
         started = perf_counter()
-        
+
         try:
             plan = await self.provider.plan_query(question, history)
         except Exception:
             plan = build_query_plan(question, history)
-        
+
         if plan.answer_mode in {InternalAnswerMode.NO_ANSWER, InternalAnswerMode.ASK_CLARIFICATION}:
             kind_map = {
                 "smalltalk": ResponseKind.SMALLTALK,
@@ -121,7 +121,11 @@ class AssistantService:
             llm_started = perf_counter()
             try:
                 generated = await self.provider.generate(
-                    question, context, language, repair_feedback=feedback, answer_mode=plan.answer_mode
+                    question,
+                    context,
+                    language,
+                    repair_feedback=feedback,
+                    answer_mode=plan.answer_mode,
                 )
             except LLMResponseError:
                 self._metric("llm", llm_started, failed=True)
@@ -167,7 +171,9 @@ class AssistantService:
                 continue
         raise VerificationError("Generated answer failed citation or grounding verification")
 
-    async def _valid(self, generated: GeneratedAnswer, context: Sequence[AssistantEvidence]) -> bool:
+    async def _valid(
+        self, generated: GeneratedAnswer, context: Sequence[AssistantEvidence]
+    ) -> bool:
         return (
             bool(generated.answer.strip())
             and bool(generated.citations)

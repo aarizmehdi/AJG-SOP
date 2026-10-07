@@ -88,7 +88,7 @@ class QueryPlan(BaseModel):
 
 def build_query_plan(question: str, history: Sequence[ConversationTurn]) -> QueryPlan:
     kind = classify(question, history)
-    
+
     if kind == ResponseKind.SMALLTALK:
         intent = "smalltalk"
         mode = InternalAnswerMode.NO_ANSWER
@@ -106,13 +106,13 @@ def build_query_plan(question: str, history: Sequence[ConversationTurn]) -> Quer
     is_follow_up = False
     resolved = question[:500]
     previous = prior_user_question(history)
-    
+
     # Heuristics for follow-up and reference resolution
     normalized = question.strip().casefold()
     if previous and (_FOLLOWUP.match(question.strip()) or len(question.split()) <= 5):
         is_follow_up = True
         # NOTE: Deterministic concatenation fails to resolve references like "second one"
-        # from the assistant's previous response, because it only prepends the user's prior question.
+        # from the assistant's previous response, because it only prepends the user's prior question.  # noqa: E501
         resolved = f"{previous} {question}"[:500]
     elif "second one" in normalized or "former" in normalized or "latter" in normalized:
         is_follow_up = True
@@ -123,9 +123,8 @@ def build_query_plan(question: str, history: Sequence[ConversationTurn]) -> Quer
         original_question=question,
         resolved_query=resolved,
         is_follow_up=is_follow_up,
-        answer_mode=mode
+        answer_mode=mode,
     )
-
 
 
 def canned(kind: ResponseKind, language: Language, question: str = "") -> str:
