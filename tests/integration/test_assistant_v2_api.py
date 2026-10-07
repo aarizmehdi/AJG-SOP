@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from apps.api.app.main import app
 from packages.contracts.assistant import GeneratedAnswer
 from services.assistant.answer_generator import FixtureLLMProvider
+from services.assistant.grounding import FixtureSemanticVerifier
 
 HEADERS = {"Authorization": "Fixture employee"}
 
@@ -23,6 +24,7 @@ def events(text: str) -> list[tuple[str, dict]]:
 def test_stream_releases_only_verified_answer_and_truthful_stages():
     with TestClient(app) as client:
         client.app.state.assistant_service.provider = FixtureLLMProvider()
+        client.app.state.assistant_service.grounding.semantic_verifier = FixtureSemanticVerifier()
         assert (
             client.post(
                 "/api/v1/assistant/answer/events",
@@ -65,13 +67,18 @@ def test_invalid_generation_is_never_streamed_and_only_retried_once():
     class InvalidProvider(FixtureLLMProvider):
         calls = 0
 
-        async def generate(self, question, evidence, language, repair_feedback=None):
+        async def generate(self, question, evidence, language, repair_feedback=None, answer_mode=None):
             self.calls += 1
             return GeneratedAnswer(answerable=True, answer="Invented 999 days", citations=[])
+
+        async def plan_query(self, question, history):
+            from services.assistant.conversation import build_query_plan
+            return build_query_plan(question, history)
 
     with TestClient(app) as client:
         provider = InvalidProvider()
         client.app.state.assistant_service.provider = provider
+        client.app.state.assistant_service.grounding.semantic_verifier = FixtureSemanticVerifier()
         response = client.post(
             "/api/v1/assistant/answer/events",
             headers=HEADERS,
@@ -92,6 +99,7 @@ def test_invalid_generation_is_never_streamed_and_only_retried_once():
 def test_twenty_turns_create_no_chat_records_or_mutations():
     with TestClient(app) as client:
         client.app.state.assistant_service.provider = FixtureLLMProvider()
+        client.app.state.assistant_service.grounding.semantic_verifier = FixtureSemanticVerifier()
         store = client.app.state.foundation_store
         before_sessions = len(client.app.state.database.collections.get("chat_sessions", []))
         before_messages = len(client.app.state.database.collections.get("chat_messages", []))
@@ -130,11 +138,16 @@ def test_twenty_turns_create_no_chat_records_or_mutations():
 
 def test_no_answer_is_neutral_verified_response():
     class AbstainProvider(FixtureLLMProvider):
-        async def generate(self, question, evidence, language, repair_feedback=None):
+        async def generate(self, question, evidence, language, repair_feedback=None, answer_mode=None):
             return GeneratedAnswer(answerable=False, answer="", citations=[])
+
+        async def plan_query(self, question, history):
+            from services.assistant.conversation import build_query_plan
+            return build_query_plan(question, history)
 
     with TestClient(app) as client:
         client.app.state.assistant_service.provider = AbstainProvider()
+        client.app.state.assistant_service.grounding.semantic_verifier = FixtureSemanticVerifier()
         response = client.post(
             "/api/v1/assistant/answer/events",
             headers=HEADERS,

@@ -10,6 +10,7 @@ from apps.api.app.services.metrics import MetricsRegistry
 from packages.contracts.assistant import (
     ConversationTurn,
     GeneratedAnswer,
+    InternalAnswerMode,
     ResponseKind,
     VerifiedAnswer,
 )
@@ -18,7 +19,7 @@ from packages.contracts.retrieval import AssistantEvidence, SearchEvidence
 from services.assistant.answer_generator import LLMProvider, LLMResponseError
 from services.assistant.answerability import AnswerabilityGate
 from services.assistant.citations import CitationValidator
-from services.assistant.conversation import canned, classify, retrieval_query
+from services.assistant.conversation import build_query_plan, canned
 from services.assistant.grounding import GroundingVerifier
 
 
@@ -79,15 +80,26 @@ class AssistantService:
         progress: Callable[[str], None] | None = None,
     ) -> tuple[VerifiedAnswer, list[AssistantEvidence]]:
         started = perf_counter()
-        mode = classify(question, history)
-        if mode is not None:
-            result = self._canned(profile, language, mode, question)
-            self._observe(mode, started)
+        
+        try:
+            plan = await self.provider.plan_query(question, history)
+        except Exception:
+            plan = build_query_plan(question, history)
+        
+        if plan.answer_mode in {InternalAnswerMode.NO_ANSWER, InternalAnswerMode.ASK_CLARIFICATION}:
+            kind_map = {
+                "smalltalk": ResponseKind.SMALLTALK,
+                "out_of_scope": ResponseKind.OUT_OF_SCOPE,
+                "clarification": ResponseKind.CLARIFICATION,
+            }
+            kind = kind_map.get(plan.intent, ResponseKind.NO_ANSWER)
+            result = self._canned(profile, language, kind, question)
+            self._observe(kind, started)
             return result, []
 
         if progress:
             progress("retrieving")
-        evidence = await self.retrieval.retrieve(profile, retrieval_query(question, history), 8)
+        evidence = await self.retrieval.retrieve(profile, plan.resolved_query, 8)
         if not self.answerability.is_answerable(question, evidence):
             result = self._canned(profile, language, ResponseKind.NO_ANSWER)
             self._observe(result.kind, started)
@@ -109,7 +121,7 @@ class AssistantService:
             llm_started = perf_counter()
             try:
                 generated = await self.provider.generate(
-                    question, context, language, repair_feedback=feedback
+                    question, context, language, repair_feedback=feedback, answer_mode=plan.answer_mode
                 )
             except LLMResponseError:
                 self._metric("llm", llm_started, failed=True)
@@ -131,7 +143,7 @@ class AssistantService:
                 result = self._canned(profile, language, ResponseKind.NO_ANSWER)
                 self._observe(result.kind, started)
                 return result, []
-            if self._valid(generated, context):
+            if await self._valid(generated, context):
                 await self.assert_release_authorized(profile, context)
                 self._metric("grounding_verification", verification_started)
                 citations = list({item.chunk_id: item for item in generated.citations}.values())
@@ -155,12 +167,12 @@ class AssistantService:
                 continue
         raise VerificationError("Generated answer failed citation or grounding verification")
 
-    def _valid(self, generated: GeneratedAnswer, context: Sequence[AssistantEvidence]) -> bool:
+    async def _valid(self, generated: GeneratedAnswer, context: Sequence[AssistantEvidence]) -> bool:
         return (
             bool(generated.answer.strip())
             and bool(generated.citations)
             and self.citations.validate(generated.citations, context)
-            and self.grounding.verify(generated, context)
+            and await self.grounding.verify(generated, context)
         )
 
     async def assert_release_authorized(

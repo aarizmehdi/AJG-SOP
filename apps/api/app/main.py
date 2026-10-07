@@ -57,7 +57,11 @@ from services.assistant.answer_generator import (
 )
 from services.assistant.answerability import FixtureAnswerabilityGate
 from services.assistant.citations import CitationValidator
-from services.assistant.grounding import GroundingVerifier
+from services.assistant.grounding import (
+    DeepSeekSemanticVerifier,
+    FixtureSemanticVerifier,
+    GroundingVerifier,
+)
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
 from services.ingestion.embeddings.pinecone_e5 import PineconeE5EmbeddingProvider
@@ -235,16 +239,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.deepseek_model,
             settings.deepseek_temperature,
         )
+        semantic_verifier = DeepSeekSemanticVerifier(
+            settings.deepseek_api_key.get_secret_value(),
+            settings.deepseek_base_url,
+            settings.deepseek_model,
+        )
     elif settings.llm_provider == "fixture":
         llm_provider = FixtureLLMProvider()
+        semantic_verifier = FixtureSemanticVerifier()
     else:
         llm_provider = UnavailableLLMProvider()
+        semantic_verifier = FixtureSemanticVerifier()
     app.state.assistant_service = AssistantService(
         app.state.retrieval_service,
         FixtureAnswerabilityGate(),
         llm_provider,
         CitationValidator(),
-        GroundingVerifier(),
+        GroundingVerifier(semantic_verifier=semantic_verifier),
         app.state.metrics,
         app.state.database if settings.app_mode == "live" else None,
     )

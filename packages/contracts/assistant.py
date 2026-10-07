@@ -25,6 +25,13 @@ class GeneratedAnswer(BaseModel):
     citations: list[AssistantCitation]
 
 
+class InternalAnswerMode(StrEnum):
+    ANSWER = "answer"
+    SYNTHESIZE_MULTIPLE_POLICIES = "synthesize_multiple_policies"
+    ASK_CLARIFICATION = "ask_clarification"
+    NO_ANSWER = "no_answer"
+
+
 class ResponseKind(StrEnum):
     SMALLTALK = "smalltalk"
     POLICY_ANSWER = "policy_answer"
