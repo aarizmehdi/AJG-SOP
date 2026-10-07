@@ -52,6 +52,7 @@ class InventedCitationProvider(LLMProvider):
         items: Sequence[SearchEvidence],
         language: Language,
         repair_feedback: str | None = None,
+        **kwargs,
     ) -> GeneratedAnswer:
         item = items[0]
         return GeneratedAnswer(
@@ -68,6 +69,14 @@ class InventedCitationProvider(LLMProvider):
                     source=item.source,
                 )
             ],
+        )
+
+    async def plan_query(self, *args, **kwargs):
+        from packages.contracts.assistant import QueryPlan, InternalAnswerMode
+        return QueryPlan(
+            resolved_query="test",
+            is_follow_up=False,
+            answer_mode=InternalAnswerMode.ANSWER
         )
 
 

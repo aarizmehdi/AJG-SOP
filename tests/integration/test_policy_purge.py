@@ -390,8 +390,8 @@ async def test_answer_generating_during_purge_is_never_released(tmp_path):
     _, confirmation = await confirmed(purge, target.id)
 
     class PurgingProvider(FixtureLLMProvider):
-        async def generate(self, question, evidence, language, repair_feedback=None):
-            response = await super().generate(question, evidence, language, repair_feedback)
+        async def generate(self, question, evidence, language, repair_feedback=None, **kwargs):
+            response = await super().generate(question, evidence, language, repair_feedback, **kwargs)
             assert (await purge.purge(SYSTEM, target.id, confirmation)).status == "complete"
             return response
 
