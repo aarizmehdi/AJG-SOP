@@ -61,6 +61,7 @@ from services.assistant.grounding import (
     DeepSeekSemanticVerifier,
     FixtureSemanticVerifier,
     GroundingVerifier,
+    SemanticVerifier,
 )
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
@@ -232,6 +233,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # --- LLM provider ---
     llm_provider: LLMProvider
+    semantic_verifier: SemanticVerifier
     if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
         llm_provider = DeepSeekLLMProvider(
             settings.deepseek_api_key.get_secret_value(),
