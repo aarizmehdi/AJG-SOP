@@ -1,11 +1,13 @@
 import asyncio
+
 from fastapi.testclient import TestClient
-from apps.api.app.main import app
+
 from apps.api.app.config import get_settings
-from services.assistant.conversation import ConversationTurn
+from apps.api.app.main import app
 from packages.contracts.assistant import Language, MessageRole
-from apps.api.app.models.organization import EmployeeProfile
+from services.assistant.conversation import ConversationTurn
 from tests.unit.test_assistant_v2 import PROFILE
+
 
 async def smoke_test():
     settings = get_settings()
@@ -29,7 +31,7 @@ async def smoke_test():
             print("\n[Standalone Question]")
             print("Answer:", response.answer)
             print("Verified:", response.verified)
-        except Exception as e:
+        except Exception:
             import traceback
             traceback.print_exc()
             return
@@ -50,7 +52,7 @@ async def smoke_test():
             print("\n[Follow-up Question]")
             print("Answer:", response2.answer)
             print("Verified:", response2.verified)
-        except Exception as e:
+        except Exception:
             import traceback
             traceback.print_exc()
 

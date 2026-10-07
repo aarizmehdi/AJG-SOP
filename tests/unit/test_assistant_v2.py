@@ -22,7 +22,10 @@ from services.assistant.answer_generator import DeepSeekLLMProvider, LLMProvider
 from services.assistant.answerability import FixtureAnswerabilityGate
 from services.assistant.citations import CitationValidator
 from services.assistant.conversation import QueryPlan, build_query_plan
-from services.assistant.grounding import GroundingVerifier, SemanticVerifier, SemanticVerificationResult
+from services.assistant.grounding import (
+    GroundingVerifier,
+    SemanticVerifier,
+)
 
 PROFILE = EmployeeProfile(
     id="employee",
@@ -601,7 +604,8 @@ async def test_deterministic_unsupported_number_rejected_before_semantic():
 
 @pytest.mark.asyncio
 async def test_history_cannot_be_used_as_evidence_for_grounding():
-    # If a claim is in history but not in evidence, the semantic verifier is only passed the evidence.
+    # If a claim is in history but not in evidence,
+    # the semantic verifier is only passed the evidence.
     verifier = MockSemanticVerifier(is_grounded=False)
     retriever = Retriever()
     provider = Provider([grounded("The rule is XYZ."), grounded("The rule is XYZ.")])

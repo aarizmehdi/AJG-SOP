@@ -1,14 +1,14 @@
-import re
-from collections.abc import Sequence
-
 import json
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from packages.contracts.assistant import GeneratedAnswer
 from packages.contracts.retrieval import SearchEvidence
+
 
 class SemanticVerificationResult(BaseModel):
     is_grounded: bool

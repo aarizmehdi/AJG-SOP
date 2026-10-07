@@ -5,7 +5,12 @@ from collections.abc import Sequence
 import httpx
 from pydantic import ValidationError
 
-from packages.contracts.assistant import AssistantCitation, GeneratedAnswer, InternalAnswerMode, ConversationTurn
+from packages.contracts.assistant import (
+    AssistantCitation,
+    ConversationTurn,
+    GeneratedAnswer,
+    InternalAnswerMode,
+)
 from packages.contracts.common import Language
 from packages.contracts.retrieval import SearchEvidence
 from services.assistant.conversation import QueryPlan

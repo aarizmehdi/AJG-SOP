@@ -5,7 +5,12 @@ from collections.abc import Sequence
 
 from pydantic import BaseModel
 
-from packages.contracts.assistant import ConversationTurn, InternalAnswerMode, MessageRole, ResponseKind
+from packages.contracts.assistant import (
+    ConversationTurn,
+    InternalAnswerMode,
+    MessageRole,
+    ResponseKind,
+)
 from packages.contracts.common import Language
 
 _SMALLTALK = {
