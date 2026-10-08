@@ -44,23 +44,23 @@ without weights) are reported as `skipped` and do not fail the gate. `report.md`
 job summary and `report.md` + `results.json` are uploaded as the `evaluation-results` artifact.
 
 **Required configuration.** The SOP Markdown is private and never committed, so CI reads it from
-the repository secret `AJG_EVAL_CORPUS_B64` (a base64-encoded `tar.gz` of the `*.md` files).
+the repository secret `AJG_EVAL_CORPUS_B64` (a base64-encoded `tar.xz` of the `*.md` files).
 Create it once from the folder that holds the SOPs, then paste the output as the secret value in
 GitHub, Settings, Secrets and variables, Actions:
 
 ```bash
 # Linux / macOS / Git Bash
-tar -czf - -C services/evaluation/corpus . | base64 -w0 > corpus.b64
+tar -cJf - -C services/evaluation/corpus . | base64 -w0 > corpus.b64
 # PowerShell (Windows)
-tar -czf corpus.tgz -C services/evaluation/corpus .
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("corpus.tgz")) | Set-Content -NoNewline corpus.b64
+tar -cJf corpus.txz -C services/evaluation/corpus .
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("corpus.txz")) | Set-Content -NoNewline corpus.b64
 ```
 
 A GitHub secret holds at most 48 KB, so check the size of `corpus.b64`. If it is larger, store the
 corpus in private storage and replace the "Restore private SOP corpus" step with a download step.
 Pull requests from forks cannot read secrets; the job then fails with a clear message instead of
 skipping. To enforce the gate, mark `benchmark` as a required check in the branch protection
-rules for `main`. Delete `corpus.b64` and `corpus.tgz` after uploading the secret.
+rules for `main`. Delete `corpus.b64` and `corpus.txz` after uploading the secret.
 
 ## What is exercised
 

@@ -44,7 +44,7 @@ jobs:
         run: uv sync --python 3.12 --locked
 
       # The SOP Markdown is private and git-ignored, so it is supplied as a repository secret:
-      # a base64-encoded tar.gz of the *.md files. The job fails (it never skips) when the
+      # a base64-encoded tar.xz of the *.md files. The job fails (it never skips) when the
       # secret is missing, so a PR cannot pass without the benchmark really running.
       - name: Restore private SOP corpus
         env:
@@ -56,13 +56,13 @@ jobs:
             exit 2
           fi
           mkdir -p "$AJG_EVAL_CORPUS_DIR"
-          printf '%s' "$AJG_EVAL_CORPUS_B64" | base64 -d > "$RUNNER_TEMP/corpus.tar.gz"
-          if tar -tzf "$RUNNER_TEMP/corpus.tar.gz" | grep -E '(^/|(^|/)\.\.(/|$))'; then
+          printf '%s' "$AJG_EVAL_CORPUS_B64" | base64 -d > "$RUNNER_TEMP/corpus.tar.xz"
+          if tar -tf "$RUNNER_TEMP/corpus.tar.xz" | grep -E '(^/|(^|/)\.\.(/|$))'; then
             echo "::error::Corpus archive contains unsafe paths"
             exit 2
           fi
-          tar -xzf "$RUNNER_TEMP/corpus.tar.gz" -C "$AJG_EVAL_CORPUS_DIR" --no-same-owner
-          rm -f "$RUNNER_TEMP/corpus.tar.gz"
+          tar -xf "$RUNNER_TEMP/corpus.tar.xz" -C "$AJG_EVAL_CORPUS_DIR" --no-same-owner
+          rm -f "$RUNNER_TEMP/corpus.tar.xz"
           # Files may sit in a single top-level folder inside the archive; flatten them.
           find "$AJG_EVAL_CORPUS_DIR" -mindepth 2 -type f -name '*.md' -exec mv -n {} "$AJG_EVAL_CORPUS_DIR"/ \;
           count=$(find "$AJG_EVAL_CORPUS_DIR" -maxdepth 1 -type f -name '*.md' | wc -l)
