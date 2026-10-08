@@ -18,6 +18,50 @@ dataset/config/corpus.
 unauthorized section may reach assistant context. Optional: `--baseline` fails on metric
 regressions beyond `--tolerance`; `--max-technical-failure-rate` fails on technical errors.
 
+## Running in CI
+
+`.github/workflows/evaluation.yml` (job `benchmark`) runs the benchmark automatically on every
+pull request that touches `apps/`, `services/`, `packages/`, `scripts/evaluation/`, `tests/`,
+`pyproject.toml` or `uv.lock`, on pushes to `main`, and on demand (`workflow_dispatch`).
+
+Command executed (after `uv sync --python 3.12 --locked`):
+
+```bash
+uv run python -m scripts.evaluation.run_benchmark --validate-only
+uv run python -m scripts.evaluation.run_benchmark \
+  --corpus-dir "$AJG_EVAL_CORPUS_DIR" --output-dir evaluation_runs/ci
+```
+
+This is the full matrix plus assistant evaluation on the 141-case dataset. The job fails when:
+
+* unauthorized retrieval is above 0 in any configuration at any k, or an unauthorized section
+  reaches assistant context (exit code `1`);
+* a configuration fails to run, or no configuration produces results (exit code `1`);
+* the dataset does not match the corpus, or the corpus is missing (exit code `2`).
+
+Configurations that need unavailable components (`e5` without `PINECONE_API_KEY`, `bge-m3`
+without weights) are reported as `skipped` and do not fail the gate. `report.md` is shown in the
+job summary and `report.md` + `results.json` are uploaded as the `evaluation-results` artifact.
+
+**Required configuration.** The SOP Markdown is private and never committed, so CI reads it from
+the repository secret `AJG_EVAL_CORPUS_B64` (a base64-encoded `tar.gz` of the `*.md` files).
+Create it once from the folder that holds the SOPs, then paste the output as the secret value in
+GitHub, Settings, Secrets and variables, Actions:
+
+```bash
+# Linux / macOS / Git Bash
+tar -czf - -C services/evaluation/corpus . | base64 -w0 > corpus.b64
+# PowerShell (Windows)
+tar -czf corpus.tgz -C services/evaluation/corpus .
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("corpus.tgz")) | Set-Content -NoNewline corpus.b64
+```
+
+A GitHub secret holds at most 48 KB, so check the size of `corpus.b64`. If it is larger, store the
+corpus in private storage and replace the "Restore private SOP corpus" step with a download step.
+Pull requests from forks cannot read secrets; the job then fails with a clear message instead of
+skipping. To enforce the gate, mark `benchmark` as a required check in the branch protection
+rules for `main`. Delete `corpus.b64` and `corpus.tgz` after uploading the secret.
+
 ## What is exercised
 
 The real `FixtureDocumentParser` + `Canonicalizer`, `SectionAwareFixtureChunker`,
