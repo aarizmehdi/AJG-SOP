@@ -195,7 +195,7 @@ def test_fusion_exact_same_chunk_merges_and_scores():
             chunk_id="chunk-same",
             channel=CandidateChannel.SEMANTIC,
             score=0.9,
-            rank=2,
+            rank=1,
             text="Same exact chunk",
             policy_number="P-1",
             heading_path=["Heading 1"],
@@ -211,9 +211,9 @@ def test_fusion_exact_same_chunk_merges_and_scores():
     assert len(fused) == 1
     assert fused[0][0] == "chunk-same"
 
-    # RRF score = 1/(60 + 1) + 1/(60 + 2)
-    expected_score = (1.0 / (60 + 1)) + (1.0 / (60 + 2))
-    assert abs(fused[0][1] - expected_score) < 1e-6
+    # RRF score = 1/(60 + 1) + 1/(60 + 1)
+    expected_score = (1.0 / 61) + (1.0 / 61)
+    assert fused[0][1] == pytest.approx(expected_score)
 
 
 def test_live_configuration_validation():

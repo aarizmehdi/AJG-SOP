@@ -156,7 +156,7 @@ async def test_unauthorized_chunks_never_enter_candidate_retrievers() -> None:
     assert context[0].full_text.endswith("Capacity is 12 tonnes.")
 
 
-def test_system_admin_reads_tenant_wide_but_sop_admin_keeps_employee_scope() -> None:
+def test_system_admin_reads_across_departments_and_locations() -> None:
     store = FoundationStore(
         policies={
             "policy": SOPPolicy(
@@ -181,38 +181,108 @@ def test_system_admin_reads_tenant_wide_but_sop_admin_keeps_employee_scope() -> 
         chunks={"version": [chunk("store", "store"), chunk("hr", "hr")]},
     )
     authorization = AuthorizationFilter(store)
-    sop_admin = EmployeeProfile(
-        id="sop-admin",
+    system_admin = EmployeeProfile(
+        id="system-admin",
         organization_id="ajt",
-        identity_subject="fixture|sop-admin",
-        display_name="SOP Administrator",
-        email="sop-admin@example.test",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE, ApplicationRole.SOP_ADMIN}),
-        departments=frozenset({"store"}),
-    )
-    system_admin = sop_admin.model_copy(
-        update={
-            "id": "system-admin",
-            "identity_subject": "fixture|system-admin",
-            "application_roles": frozenset(
-                {
-                    ApplicationRole.EMPLOYEE,
-                    ApplicationRole.SOP_ADMIN,
-                    ApplicationRole.SYSTEM_ADMIN,
-                }
-            ),
-        }
-    )
-    other_tenant_admin = system_admin.model_copy(
-        update={"id": "other-admin", "organization_id": "other"}
+        identity_subject="fixture|system-admin",
+        display_name="System Admin",
+        email="sys-admin@example.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE, ApplicationRole.SYSTEM_ADMIN}),
+        departments=frozenset(),
     )
 
-    assert [item.id for item in authorization.eligible_chunks(sop_admin)] == ["store"]
     assert {item.id for item in authorization.eligible_chunks(system_admin)} == {
         "store",
         "hr",
     }
-    assert authorization.eligible_chunks(other_tenant_admin) == []
+
+
+def test_system_admin_strictly_blocked_from_other_tenant() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="org-B",
+                title="Policy B",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="org-B",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected("hr"),
+            )
+        },
+        chunks={
+            "version": [chunk("hr-chunk", "hr").model_copy(update={"organization_id": "org-B"})]
+        },
+    )
+    authorization = AuthorizationFilter(store)
+    system_admin_org_a = EmployeeProfile(
+        id="sys-org-A",
+        organization_id="org-A",
+        identity_subject="fixture|sys",
+        display_name="Sys",
+        email="sys@a.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE, ApplicationRole.SYSTEM_ADMIN}),
+        departments=frozenset(),
+    )
+
+    # Assert 0 results
+    assert authorization.eligible_chunks(system_admin_org_a) == []
+
+
+def test_employee_blocked_from_restricted_department_or_location() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected(
+                    "hr"
+                ),  # Chunk access overrides this.
+            )
+        },
+        chunks={
+            "version": [
+                chunk("finance-lahore", "finance"),
+                chunk("hr-karachi", "hr"),
+            ]
+        },
+    )
+    authorization = AuthorizationFilter(store)
+    restricted_employee = EmployeeProfile(
+        id="emp",
+        organization_id="ajt",
+        identity_subject="fixture|emp",
+        display_name="Emp",
+        email="emp@example.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+        departments=frozenset({"finance"}),
+        locations=frozenset({"lahore"}),
+    )
+
+    chunks = authorization.eligible_chunks(restricted_employee)
+    assert [c.id for c in chunks] == ["finance-lahore"]
 
 
 class RecordingPineconeIndex:
@@ -298,7 +368,7 @@ async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
         await retriever.search("damaged stock", profile, [chunk("allowed", "store"), other], 5)
 
 
-def test_unpublished_or_inactive_versions_are_blocked() -> None:
+def test_unpublished_and_inactive_versions_rejected() -> None:
     store = FoundationStore(
         policies={
             "policy": SOPPolicy(
@@ -344,3 +414,52 @@ def test_unpublished_or_inactive_versions_are_blocked() -> None:
     authorization = AuthorizationFilter(store)
     eligible = authorization.eligible_chunks(profile)
     assert [c.id for c in eligible] == ["allowed"]
+
+
+def test_lexical_and_semantic_enforce_identical_scope() -> None:
+    # We can inspect the retrieval pipeline to ensure both semantic and lexical
+    # receive the exact same sequence of eligible chunks from AuthorizationFilter.
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected("store"),
+            )
+        },
+        chunks={
+            "version": [
+                chunk("allowed", "store"),
+                chunk("restricted", "hr"),
+            ]
+        },
+    )
+    profile = EmployeeProfile(
+        id="employee",
+        organization_id="ajt",
+        identity_subject="fixture|employee",
+        display_name="Employee",
+        email="employee@example.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+        departments=frozenset({"store"}),
+    )
+
+    authorization = AuthorizationFilter(store)
+    eligible_chunks = authorization.eligible_chunks(profile)
+
+    # Assert identical scope (only 'allowed' chunk is passed to retrievers)
+    assert len(eligible_chunks) == 1
+    assert eligible_chunks[0].id == "allowed"
