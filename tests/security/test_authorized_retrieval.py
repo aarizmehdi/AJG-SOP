@@ -257,9 +257,7 @@ def test_employee_blocked_from_restricted_department_or_location() -> None:
                 policy_id="policy",
                 version_label="1",
                 status=VersionStatus.PUBLISHED,
-                access=selected(
-                    "hr"
-                ),  # Chunk access overrides this.
+                access=selected("hr"),  # Chunk access overrides this.
             )
         },
         chunks={
@@ -463,3 +461,239 @@ def test_lexical_and_semantic_enforce_identical_scope() -> None:
     # Assert identical scope (only 'allowed' chunk is passed to retrievers)
     assert len(eligible_chunks) == 1
     assert eligible_chunks[0].id == "allowed"
+
+
+def _matches_pinecone_filter(metadata: dict[str, object], filter_expr: dict[str, object]) -> bool:
+    for k, v in filter_expr.items():
+        if k == "$and":
+            if not all(_matches_pinecone_filter(metadata, c) for c in v):
+                return False
+        elif k == "$or":
+            if not any(_matches_pinecone_filter(metadata, c) for c in v):
+                return False
+        else:
+            if isinstance(v, dict):
+                if "$eq" in v and metadata.get(k) != v["$eq"]:
+                    return False
+                if "$in" in v:
+                    val = metadata.get(k)
+                    if isinstance(val, list):
+                        if not any(item in v["$in"] for item in val):
+                            return False
+                    elif val not in v["$in"]:
+                        return False
+    return True
+
+
+def test_pinecone_and_in_memory_authorization_parity() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected("store"),
+            )
+        },
+        chunks={
+            "version": [
+                chunk("allowed", "store"),
+                chunk("restricted", "hr"),
+            ]
+        },
+    )
+    profile = EmployeeProfile(
+        id="employee",
+        organization_id="ajt",
+        identity_subject="fixture|emp",
+        display_name="Emp",
+        email="emp@example.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+        departments=frozenset({"store"}),
+    )
+
+    authorization = AuthorizationFilter(store)
+    eligible = authorization.eligible_chunks(profile)
+    in_memory_allowed = {c.id for c in eligible}
+
+    from services.retrieval.semantic_search import pinecone_authorization_filter
+
+    pinecone_filter = pinecone_authorization_filter(
+        organization_id=profile.organization_id,
+        active_version_ids=["version"],
+        chunk_ids=["allowed", "restricted"],
+        departments=list(profile.departments),
+        locations=list(profile.locations),
+        roles=list(profile.organizational_roles),
+        is_organization_wide_reader=AuthorizationFilter.is_organization_wide_reader(profile),
+    )
+
+    # Flatten chunks to metadata format
+    pinecone_allowed = set()
+    for c in store.chunks["version"]:
+        metadata = {
+            "organization_id": c.organization_id,
+            "version_id": c.version_id,
+            "publication_status": c.publication_status,
+            "chunk_id": c.id,
+            "departments_mode": c.access.departments.mode.value,
+            "locations_mode": c.access.locations.mode.value,
+            "roles_mode": c.access.roles.mode.value,
+            "departments": list(c.access.departments.values),
+            "locations": list(c.access.locations.values),
+            "roles": list(c.access.roles.values),
+        }
+        if _matches_pinecone_filter(metadata, pinecone_filter):
+            pinecone_allowed.add(c.id)
+
+    assert in_memory_allowed == pinecone_allowed
+
+
+def test_employee_unauthorized_role_gets_zero_chunks() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=AccessScope(
+                    departments=AccessDimension(mode=AccessMode.ALL),
+                    locations=AccessDimension(mode=AccessMode.ALL),
+                    roles=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"manager"})),
+                ),
+            )
+        },
+        chunks={
+            "version": [
+                chunk("allowed", "store").model_copy(
+                    update={
+                        "access": AccessScope(
+                            departments=AccessDimension(mode=AccessMode.ALL),
+                            locations=AccessDimension(mode=AccessMode.ALL),
+                            roles=AccessDimension(
+                                mode=AccessMode.SELECTED, values=frozenset({"manager"})
+                            ),
+                        )
+                    }
+                ),
+            ]
+        },
+    )
+    profile = EmployeeProfile(
+        id="emp",
+        organization_id="ajt",
+        identity_subject="fixture|emp",
+        display_name="Emp",
+        email="emp@example.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+        organizational_roles=frozenset({"staff"}),
+    )
+
+    authorization = AuthorizationFilter(store)
+    eligible = authorization.eligible_chunks(profile)
+    assert len(eligible) == 0
+
+
+async def test_fusion_leak_unauthorized_chunks_never_appear() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected("store"),
+            )
+        },
+        chunks={
+            "version": [
+                chunk("allowed", "store"),
+                chunk("restricted", "hr"),
+            ]
+        },
+    )
+    profile = EmployeeProfile(
+        id="employee",
+        organization_id="ajt",
+        identity_subject="fixture|employee",
+        display_name="Employee",
+        email="employee@example.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+        departments=frozenset({"store"}),
+    )
+
+    class MaliciousRetriever(SemanticCandidateRetriever):
+        async def search(
+            self,
+            query: str,
+            profile: EmployeeProfile,
+            eligible_chunks: Sequence[RetrievalChunk],
+            limit: int,
+        ) -> list[RetrievalCandidate]:
+            # Ignores eligible_chunks and returns restricted!
+            return [
+                RetrievalCandidate(
+                    tenant_id="ajt",
+                    organization_id="ajt",
+                    chunk_id="restricted",
+                    channel=CandidateChannel.SEMANTIC,
+                    score=1.0,
+                    rank=1,
+                    text="R",
+                    policy_number="P",
+                    heading_path=[],
+                    allowed_roles=[],
+                    department=None,
+                )
+            ]
+
+    lexical = RecordingLexical()
+    semantic = MaliciousRetriever()
+    service = RetrievalService(
+        store,
+        AuthorizationFilter(store),
+        lexical,
+        semantic,
+        ReciprocalRankFusion(),
+        FixtureReranker(),
+    )
+
+    results = await service.retrieve(profile, "query", 5)
+
+    # The restricted chunk must be dropped by RetrievalService post-fusion, but allowed must remain
+    assert [item.chunk_id for item in results] == ["allowed"]
