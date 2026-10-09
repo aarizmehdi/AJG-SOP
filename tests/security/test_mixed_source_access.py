@@ -179,20 +179,20 @@ def test_policy_reader_constructs_tenant_dynamic_metadata():
 
     # organization 1
     reader_section_org1 = PolicyReaderService._reader_section(
-        organization_id="org-1",
+        organization_id="org-alpha",
         policy_id="pol-1",
         version_id="ver-1",
         section=s,
     )
-    assert reader_section_org1.tenant_id == "org-1"
-    assert reader_section_org1.organization_id == "org-1"
+    assert reader_section_org1.tenant_id == "org-alpha"
+    assert reader_section_org1.organization_id == "org-alpha"
 
     # organization 2
     reader_section_org2 = PolicyReaderService._reader_section(
-        organization_id="org-2",
+        organization_id="org-beta",
         policy_id="pol-1",
         version_id="ver-1",
         section=s,
     )
-    assert reader_section_org2.tenant_id == "org-2"
-    assert reader_section_org2.organization_id == "org-2"
+    assert reader_section_org2.tenant_id == "org-beta"
+    assert reader_section_org2.organization_id == "org-beta"

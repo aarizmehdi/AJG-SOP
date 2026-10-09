@@ -160,3 +160,50 @@ def test_live_mode_fails_fast_missing_keys() -> None:
             web_origin="https://app.example.com",
             mongodb_uri="mongodb://remote:27017",
         )
+
+
+def test_embedding_provider_e5_and_pinecone_e5_aliases() -> None:
+    # Assert both embedding_provider="e5" and embedding_provider="pinecone_e5" initialize Settings without validation errors.
+    valid_e5 = Settings(
+        app_mode="live",
+        web_origin="https://app.example.com",
+        mongodb_uri="mongodb://remote:27017",
+        firebase_project_id="ajg-sop-web",
+        firebase_service_account_json="{}",
+        pinecone_api_key="test-key",
+        deepseek_api_key="test-key",
+        s3_access_key_id="test-access",
+        s3_secret_access_key="test-secret",
+        embedding_provider="e5",
+    )
+    valid_pinecone_e5 = Settings(
+        app_mode="live",
+        web_origin="https://app.example.com",
+        mongodb_uri="mongodb://remote:27017",
+        firebase_project_id="ajg-sop-web",
+        firebase_service_account_json="{}",
+        pinecone_api_key="test-key",
+        deepseek_api_key="test-key",
+        s3_access_key_id="test-access",
+        s3_secret_access_key="test-secret",
+        embedding_provider="pinecone_e5",
+    )
+    assert valid_e5.embedding_provider == "e5"
+    assert valid_pinecone_e5.embedding_provider == "pinecone_e5"
+
+
+def test_live_mode_prohibits_fixture_llm_and_retriever() -> None:
+    # Assert that when app_mode="live", attempting to set llm_provider="fixture" raises a fail-fast ValueError.
+    with pytest.raises((ValueError, ValidationError)):
+        Settings(
+            app_mode="live",
+            web_origin="https://app.example.com",
+            mongodb_uri="mongodb://remote:27017",
+            firebase_project_id="ajg-sop-web",
+            firebase_service_account_json="{}",
+            pinecone_api_key="test-key",
+            deepseek_api_key="test-key",
+            s3_access_key_id="test-access",
+            s3_secret_access_key="test-secret",
+            llm_provider="fixture",
+        )
