@@ -1,0 +1,107 @@
+name: Evaluation
+
+# Phase 2 evaluation gate: runs the real AJG SOP benchmark (141 cases, full retrieval matrix and
+# assistant evaluation) against the code in the PR. The job fails if unauthorized retrieval is
+# above 0 in any configuration, if any configuration fails to run, or if the dataset/corpus is
+# invalid. Exit codes of run_benchmark: 0 = gate passed, 1 = gate failed, 2 = dataset/corpus error.
+
+on:
+  pull_request:
+    paths:
+      - "apps/**"
+      - "services/**"
+      - "packages/**"
+      - "scripts/evaluation/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/evaluation.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      AJG_EVAL_CORPUS_DIR: ${{ github.workspace }}/.eval-corpus
+      EVAL_OUTPUT_DIR: evaluation_runs/ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync --python 3.12 --locked
+
+      # The SOP Markdown is private and git-ignored, so it is supplied as a repository secret:
+      # a base64-encoded tar.xz of the *.md files. The job fails (it never skips) when the
+      # secret is missing, so a PR cannot pass without the benchmark really running.
+      - name: Restore private SOP corpus
+        env:
+          AJG_EVAL_CORPUS_B64: ${{ secrets.AJG_EVAL_CORPUS_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AJG_EVAL_CORPUS_B64:-}" ]; then
+            echo "::error title=SOP corpus missing::Repository secret AJG_EVAL_CORPUS_B64 is not available to this run (not configured, or this PR comes from a fork). The evaluation gate cannot run without it. See services/evaluation/README.md, section 'Running in CI'."
+            exit 2
+          fi
+          mkdir -p "$AJG_EVAL_CORPUS_DIR"
+          printf '%s' "$AJG_EVAL_CORPUS_B64" | base64 -d > "$RUNNER_TEMP/corpus.tar.xz"
+          if tar -tf "$RUNNER_TEMP/corpus.tar.xz" | grep -E '(^/|(^|/)\.\.(/|$))'; then
+            echo "::error::Corpus archive contains unsafe paths"
+            exit 2
+          fi
+          tar -xf "$RUNNER_TEMP/corpus.tar.xz" -C "$AJG_EVAL_CORPUS_DIR" --no-same-owner
+          rm -f "$RUNNER_TEMP/corpus.tar.xz"
+          # Files may sit in a single top-level folder inside the archive; flatten them.
+          find "$AJG_EVAL_CORPUS_DIR" -mindepth 2 -type f -name '*.md' -exec mv -n {} "$AJG_EVAL_CORPUS_DIR"/ \;
+          count=$(find "$AJG_EVAL_CORPUS_DIR" -maxdepth 1 -type f -name '*.md' | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::Corpus archive contained no .md files"
+            exit 2
+          fi
+          echo "Restored $count SOP Markdown file(s) (contents are never printed)."
+
+      # Fast structural check first: dataset parses and every expected fact is present in the
+      # corpus. Exits 2 on any problem.
+      - name: Validate dataset against corpus
+        run: uv run python -m scripts.evaluation.run_benchmark --validate-only
+
+      # The evaluation itself. Exit code 1 (gate failed) fails this step and the job.
+      - name: Run evaluation benchmark (gate)
+        run: >-
+          uv run python -m scripts.evaluation.run_benchmark
+          --corpus-dir "$AJG_EVAL_CORPUS_DIR"
+          --output-dir "$EVAL_OUTPUT_DIR"
+
+      - name: Publish report
+        if: always()
+        run: |
+          if [ -f "$EVAL_OUTPUT_DIR/report.md" ]; then
+            cat "$EVAL_OUTPUT_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report was produced (the benchmark did not complete)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-results
+          path: ${{ env.EVAL_OUTPUT_DIR }}
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Remove corpus
+        if: always()
+        run: rm -rf "$AJG_EVAL_CORPUS_DIR"
