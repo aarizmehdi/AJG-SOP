@@ -31,7 +31,7 @@ import anyio
 from packages.contracts.canonical import RetrievalChunk
 from services.ingestion.chunking.semantic_chunker import Chunker, SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider
-from services.ingestion.embeddings.pinecone_e5 import PineconeE5EmbeddingProvider
+from services.ingestion.embeddings.e5_provider import E5EmbeddingProvider
 from services.retrieval.reranker import FixtureReranker, Reranker
 
 
@@ -224,7 +224,7 @@ def _build_pinecone_e5(environment: Mapping[str, str] | None) -> EmbeddingProvid
     if not api_key:
         raise ProviderUnavailableError("PINECONE_API_KEY is not set; cannot run the E5 baseline")
     try:
-        return PineconeE5EmbeddingProvider(
+        return E5EmbeddingProvider(
             api_key,
             env.get("PINECONE_INDEX", "aziz-jan-sop"),
             env.get("EMBEDDING_MODEL", "multilingual-e5-large"),
