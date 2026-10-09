@@ -102,6 +102,9 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         chunk_ids = [chunk.id for chunk in eligible_chunks]
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
 
+        from services.retrieval.authorization_filter import AuthorizationFilter
+
+        is_admin = AuthorizationFilter.is_organization_wide_reader(profile)
         filter_expr = pinecone_authorization_filter(
             organization_id=organization_id,
             active_version_ids=active_version_ids,
@@ -109,6 +112,7 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
             departments=list(profile.departments) if profile.departments else [],
             locations=list(profile.locations) if profile.locations else [],
             roles=list(profile.organizational_roles) if profile.organizational_roles else [],
+            is_organization_wide_reader=is_admin,
         )
 
         response = await anyio.to_thread.run_sync(
@@ -161,31 +165,38 @@ def pinecone_authorization_filter(
     departments: list[str],
     locations: list[str],
     roles: list[str],
+    is_organization_wide_reader: bool = False,
 ) -> dict[str, object]:
     """Mandatory pre-retrieval metadata filter for the live semantic adapter."""
-    return {
-        "$and": [
-            {"organization_id": {"$eq": organization_id}},
-            {"version_id": {"$in": active_version_ids}},
-            {"publication_status": {"$eq": "published"}},
-            {"chunk_id": {"$in": chunk_ids}},
-            {
-                "$or": [
-                    {"departments_mode": {"$eq": "all"}},
-                    {"departments": {"$in": departments}},
-                ]
-            },
-            {
-                "$or": [
-                    {"locations_mode": {"$eq": "all"}},
-                    {"locations": {"$in": locations}},
-                ]
-            },
-            {
-                "$or": [
-                    {"roles_mode": {"$eq": "all"}},
-                    {"roles": {"$in": roles}},
-                ]
-            },
-        ]
-    }
+    base_filter: list[dict[str, object]] = [
+        {"organization_id": {"$eq": organization_id}},
+        {"version_id": {"$in": active_version_ids}},
+        {"publication_status": {"$eq": "published"}},
+        {"chunk_id": {"$in": chunk_ids}},
+    ]
+
+    if not is_organization_wide_reader:
+        base_filter.extend(
+            [
+                {
+                    "$or": [
+                        {"departments_mode": {"$eq": "all"}},
+                        {"departments": {"$in": departments}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"locations_mode": {"$eq": "all"}},
+                        {"locations": {"$in": locations}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"roles_mode": {"$eq": "all"}},
+                        {"roles": {"$in": roles}},
+                    ]
+                },
+            ]
+        )
+
+    return {"$and": base_filter}

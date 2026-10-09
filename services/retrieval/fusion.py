@@ -32,21 +32,13 @@ class ReciprocalRankFusion(CandidateFusion):
         profile: EmployeeProfile,
     ) -> list[tuple[str, float]]:
         scores: dict[str, float] = {}
-        seen_ranges: set[str] = set()
+        seen: set[tuple[str, CandidateChannel]] = set()
 
         for candidate in [*lexical, *semantic]:
-            # Deduplicate by SOP ID and chunk range (using chunk_id logic)
-            # Assuming chunk_id format: version_id:section_id:chunk_index
-            parts = candidate.chunk_id.split(":")
-            if len(parts) >= 2:
-                range_key = f"{parts[0]}:{parts[1]}"
-            else:
-                range_key = candidate.chunk_id
-
-            if range_key in seen_ranges and candidate.chunk_id not in scores:
-                continue  # Already have a higher ranked chunk from this section range
-
-            seen_ranges.add(range_key)
+            seen_key = (candidate.chunk_id, candidate.channel)
+            if seen_key in seen:
+                continue
+            seen.add(seen_key)
 
             weight = (
                 self.lexical_weight

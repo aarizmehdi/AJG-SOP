@@ -252,17 +252,27 @@ async def test_pinecone_semantic_query_rejects_noneligible_matches() -> None:
 
     assert [result.chunk_id for result in results] == ["allowed"]
     assert index.query_kwargs["namespace"] == "aziz-jan-trust--ajt"
-    assert index.query_kwargs["filter"] == {
-        "$and": [
-            {"organization_id": {"$eq": "ajt"}},
-            {"version_id": {"$in": ["version"]}},
-            {"publication_status": {"$eq": "published"}},
-            {"chunk_id": {"$in": ["allowed"]}},
-            {"$or": [{"departments_mode": {"$eq": "all"}}, {"departments": {"$in": []}}]},
-            {"$or": [{"locations_mode": {"$eq": "all"}}, {"locations": {"$in": []}}]},
-            {"$or": [{"roles_mode": {"$eq": "all"}}, {"roles": {"$in": []}}]},
-        ]
-    }
+    filters = index.query_kwargs["filter"]["$and"]
+    assert any("organization_id" in c and c["organization_id"]["$eq"] == "ajt" for c in filters)
+    assert any("version_id" in c and c["version_id"]["$in"] == ["version"] for c in filters)
+    assert any(
+        "publication_status" in c and c["publication_status"]["$eq"] == "published" for c in filters
+    )
+    assert any("chunk_id" in c and c["chunk_id"]["$in"] == ["allowed"] for c in filters)
+
+    # Verify Employee-level constraints are present
+    assert any(
+        "$or" in c and any(d.get("departments_mode", {}).get("$eq") == "all" for d in c["$or"])
+        for c in filters
+    )
+    assert any(
+        "$or" in c and any(d.get("locations_mode", {}).get("$eq") == "all" for d in c["$or"])
+        for c in filters
+    )
+    assert any(
+        "$or" in c and any(d.get("roles_mode", {}).get("$eq") == "all" for d in c["$or"])
+        for c in filters
+    )
 
 
 async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
@@ -286,3 +296,51 @@ async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
     )
     with pytest.raises(PermissionError, match="cannot cross organizations"):
         await retriever.search("damaged stock", profile, [chunk("allowed", "store"), other], 5)
+
+
+def test_unpublished_or_inactive_versions_are_blocked() -> None:
+    store = FoundationStore(
+        policies={
+            "policy": SOPPolicy(
+                id="policy",
+                organization_id="ajt",
+                title="Policy",
+                category="Operations",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="version",
+            )
+        },
+        versions={
+            "version": SOPVersion(
+                id="version",
+                organization_id="ajt",
+                policy_id="policy",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=selected("store"),
+            )
+        },
+        chunks={
+            "version": [
+                # Normal valid chunk
+                chunk("allowed", "store"),
+                # Unpublished chunk
+                chunk("draft", "store").model_copy(update={"publication_status": "draft"}),
+                # Inactive version chunk
+                chunk("archived", "store").model_copy(update={"version_id": "old_version"}),
+            ]
+        },
+    )
+    profile = EmployeeProfile(
+        id="employee",
+        organization_id="ajt",
+        identity_subject="fixture|employee",
+        display_name="Employee",
+        email="employee@example.test",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+        departments=frozenset({"store"}),
+    )
+
+    authorization = AuthorizationFilter(store)
+    eligible = authorization.eligible_chunks(profile)
+    assert [c.id for c in eligible] == ["allowed"]

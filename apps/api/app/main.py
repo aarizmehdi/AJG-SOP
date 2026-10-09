@@ -60,7 +60,7 @@ from services.assistant.citations import CitationValidator
 from services.assistant.grounding import GroundingVerifier
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
-from services.ingestion.embeddings.e5_provider import PineconeE5EmbeddingProvider
+from services.ingestion.embeddings.e5_provider import E5EmbeddingProvider
 from services.ingestion.extractors.azure_document_intelligence import (
     AzureDocumentIntelligenceParser,
 )
@@ -172,7 +172,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.app_mode == "fixture":
         publication_embeddings = FixtureEmbeddingProvider()
     else:
-        publication_embeddings = PineconeE5EmbeddingProvider(
+        publication_embeddings = E5EmbeddingProvider(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
             settings.pinecone_index_name,
             settings.e5_model_name,

@@ -47,16 +47,13 @@ class Settings(BaseSettings):
     firebase_project_id: str | None = None
     firebase_service_account_json: SecretStr | None = None
 
-    llm_provider: Literal["fixture", "deepseek", "groq"] = "groq"
+    llm_provider: Literal["fixture", "deepseek"] = "deepseek"
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
     deepseek_temperature: float = Field(default=0.2, ge=0, le=1)
 
-    groq_api_key: SecretStr | None = None
-    groq_model_name: str = "llama-3.3-70b-versatile"
-
-    embedding_provider: Literal["fixture", "e5"] = "e5"
+    embedding_provider: Literal["fixture", "e5", "pinecone_e5"] = "e5"
     e5_model_name: str = "multilingual-e5-large"
     e5_passage_prefix: str = "passage: "
     e5_query_prefix: str = "query: "
@@ -92,12 +89,16 @@ class Settings(BaseSettings):
                 "FIREBASE_SERVICE_ACCOUNT_JSON": self.firebase_service_account_json,
                 "S3_ACCESS_KEY_ID": self.s3_access_key_id,
                 "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
+                "PINECONE_API_KEY": self.pinecone_api_key,
+                "DEEPSEEK_API_KEY": self.deepseek_api_key,
             }
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
-            if self.embedding_provider != "e5":
-                raise ValueError("EMBEDDING_PROVIDER must be e5 in live mode")
+            if self.embedding_provider not in {"e5", "pinecone_e5"}:
+                raise ValueError("EMBEDDING_PROVIDER must be e5 or pinecone_e5 in live mode")
+            if self.llm_provider != "deepseek":
+                raise ValueError("LLM_PROVIDER must be deepseek in live mode")
             if "localhost" in self.web_origin:
                 raise ValueError(
                     "WEB_ORIGIN must not be localhost in live mode; "
@@ -105,6 +106,11 @@ class Settings(BaseSettings):
                 )
             if "localhost" in self.mongodb_uri and "127.0.0.1" not in self.mongodb_uri:
                 pass  # Allow explicit localhost for local live testing
+            if not self.mongodb_uri or self.mongodb_uri == "mongodb://localhost:27017":
+                raise ValueError(
+                    "MONGODB_URI must be configured for live mode, "
+                    "preventing default localhost usage"
+                )
         return self
 
 

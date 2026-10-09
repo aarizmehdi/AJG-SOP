@@ -22,44 +22,28 @@ def serialize_list(items: list[CanonicalListItem], parent_text: str = "") -> lis
 
 
 def serialize_table(table: CanonicalTable) -> list[str]:
-    grid = {}
+    if not table.cells:
+        return []
+
+    max_row = max(c.row + c.row_span - 1 for c in table.cells)
+    max_col = max(c.column + c.column_span - 1 for c in table.cells)
+
+    grid = [["" for _ in range(max_col + 1)] for _ in range(max_row + 1)]
     for cell in table.cells:
         for r in range(cell.row, cell.row + cell.row_span):
             for c in range(cell.column, cell.column + cell.column_span):
-                grid[(r, c)] = cell
+                grid[r][c] = cell.text.replace("\n", " ").replace("|", "\\|")
 
     lines = []
-    table_heading = table.caption or "Table"
+    if table.caption:
+        lines.append(f"**{table.caption}**")
 
-    for cell in table.cells:
-        if cell.is_header:
-            continue
+    for i, row in enumerate(grid):
+        lines.append("| " + " | ".join(row) + " |")
+        if i == 0:
+            lines.append("|" + "|".join(["---"] * (max_col + 1)) + "|")
 
-        row_header = grid.get((cell.row, 0))
-        col_header = grid.get((0, cell.column))
-
-        r_text = (
-            row_header.text if row_header and row_header.is_header and row_header != cell else None
-        )  # noqa: E501
-        c_text = (
-            col_header.text if col_header and col_header.is_header and col_header != cell else None
-        )  # noqa: E501
-
-        parts = [f"[{table_heading}]"]
-        if r_text:
-            parts.append(r_text)
-        if c_text:
-            parts.append(f"{c_text}: {cell.text}")
-        else:
-            parts.append(cell.text)
-
-        lines.append(" -> ".join(parts))
-
-    if not lines:
-        return [cell.text for cell in table.cells]
-
-    # Deduplicate in case of spans
-    return list(dict.fromkeys(lines))
+    return lines
 
 
 class Chunker(ABC):
@@ -118,6 +102,39 @@ class SemanticChunker(Chunker):
             current_words = 0
 
         for block in section.blocks:
+            is_table = block.kind is BlockKind.TABLE and block.table is not None
+
+            if is_table:
+                table_lines = serialize_table(block.table)  # type: ignore
+                header_count = 3 if block.table and block.table.caption else 2
+                header_lines = table_lines[:header_count]
+                data_lines = table_lines[header_count:]
+
+                # Start with headers if we process data lines
+                table_words_so_far = 0
+                temp_table_lines = list(header_lines)
+
+                for line in data_lines:
+                    line_words = len(line.split())
+                    if current_words + table_words_so_far + line_words > self.MAX_WORDS and (
+                        current_words > 0 or table_words_so_far > 0
+                    ):
+                        if table_words_so_far > 0:
+                            current_text.extend(temp_table_lines)
+                            current_words += table_words_so_far
+                        flush()
+                        temp_table_lines = list(header_lines)
+                        table_words_so_far = 0
+
+                    temp_table_lines.append(line)
+                    table_words_so_far += line_words
+
+                if table_words_so_far > 0:
+                    current_text.extend(temp_table_lines)
+                    current_words += table_words_so_far
+
+                continue
+
             block_text = self._serialize_block(block)
             block_words = len(block_text.split())
 
@@ -125,12 +142,21 @@ class SemanticChunker(Chunker):
                 flush()
 
             if block_words > self.MAX_WORDS:
-                # Oversized section fallback
-                words = block_text.split()
-                for i in range(0, len(words), self.MAX_WORDS):
-                    segment = " ".join(words[i : i + self.MAX_WORDS])
-                    current_text.append(segment)
-                    flush()
+                # Oversized section fallback: split by lines to preserve table/list integrity
+                for line in block_text.split("\n"):
+                    line_words = len(line.split())
+                    if current_words + line_words > self.MAX_WORDS and current_words > 0:
+                        flush()
+
+                    if line_words > self.MAX_WORDS:
+                        words = line.split()
+                        for i in range(0, len(words), self.MAX_WORDS):
+                            segment = " ".join(words[i : i + self.MAX_WORDS])
+                            current_text.append(segment)
+                            flush()
+                    else:
+                        current_text.append(line)
+                        current_words += line_words
             else:
                 current_text.append(block_text)
                 current_words += block_words

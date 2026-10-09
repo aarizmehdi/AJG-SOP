@@ -36,8 +36,11 @@ class FixtureReranker(Reranker):
         return sorted(reranked, key=lambda item: (-item[1], item[0]))
 
 
-class ProductionReranker(Reranker):
-    """Production cross-encoder reranker with dev routing and heuristic bonuses."""
+class LexicalHeuristicReranker(Reranker):
+    """A token-overlap heuristic baseline for reranking.
+    This is NOT an operational cross-encoder and solely relies on lexical overlap
+    and metadata bonuses.
+    """
 
     def __init__(self, use_dev_routing: bool = False):
         self.use_dev_routing = use_dev_routing
