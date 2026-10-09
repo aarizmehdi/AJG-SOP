@@ -3,7 +3,14 @@
 import re
 from collections.abc import Sequence
 
-from packages.contracts.assistant import ConversationTurn, MessageRole, ResponseKind
+from pydantic import BaseModel
+
+from packages.contracts.assistant import (
+    ConversationTurn,
+    InternalAnswerMode,
+    MessageRole,
+    ResponseKind,
+)
 from packages.contracts.common import Language
 
 _SMALLTALK = {
@@ -69,6 +76,55 @@ def retrieval_query(question: str, history: Sequence[ConversationTurn]) -> str:
     if previous and (_FOLLOWUP.match(question.strip()) or len(question.split()) <= 5):
         return f"{previous} {question}"[:500]
     return question[:500]
+
+
+class QueryPlan(BaseModel):
+    intent: str
+    original_question: str
+    resolved_query: str
+    is_follow_up: bool
+    answer_mode: InternalAnswerMode
+
+
+def build_query_plan(question: str, history: Sequence[ConversationTurn]) -> QueryPlan:
+    kind = classify(question, history)
+
+    if kind == ResponseKind.SMALLTALK:
+        intent = "smalltalk"
+        mode = InternalAnswerMode.NO_ANSWER
+    elif kind == ResponseKind.OUT_OF_SCOPE:
+        intent = "out_of_scope"
+        mode = InternalAnswerMode.NO_ANSWER
+    elif kind == ResponseKind.CLARIFICATION:
+        intent = "clarification"
+        mode = InternalAnswerMode.ASK_CLARIFICATION
+    else:
+        intent = "question"
+        # Deterministic logic cannot reliably detect SYNTHESIZE_MULTIPLE_POLICIES
+        mode = InternalAnswerMode.ANSWER
+
+    is_follow_up = False
+    resolved = question[:500]
+    previous = prior_user_question(history)
+
+    # Heuristics for follow-up and reference resolution
+    normalized = question.strip().casefold()
+    if previous and (_FOLLOWUP.match(question.strip()) or len(question.split()) <= 5):
+        is_follow_up = True
+        # NOTE: Deterministic concatenation fails to resolve references like "second one"
+        # from the assistant's previous response, because it only prepends the user's prior question.  # noqa: E501
+        resolved = f"{previous} {question}"[:500]
+    elif "second one" in normalized or "former" in normalized or "latter" in normalized:
+        is_follow_up = True
+        resolved = f"{previous} {question}"[:500] if previous else question[:500]
+
+    return QueryPlan(
+        intent=intent,
+        original_question=question,
+        resolved_query=resolved,
+        is_follow_up=is_follow_up,
+        answer_mode=mode,
+    )
 
 
 def canned(kind: ResponseKind, language: Language, question: str = "") -> str:

@@ -1,12 +1,86 @@
+import json
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
+
+import httpx
+from pydantic import BaseModel
 
 from packages.contracts.assistant import GeneratedAnswer
 from packages.contracts.retrieval import SearchEvidence
 
 
+class SemanticVerificationResult(BaseModel):
+    is_grounded: bool
+    unsupported_claims: list[str]
+
+
+class SemanticVerifier(ABC):
+    @abstractmethod
+    async def verify_claims(self, answer: str, evidence: Sequence[SearchEvidence]) -> bool:
+        pass
+
+
+class FixtureSemanticVerifier(SemanticVerifier):
+    async def verify_claims(self, answer: str, evidence: Sequence[SearchEvidence]) -> bool:
+        return True
+
+
+class DeepSeekSemanticVerifier(SemanticVerifier):
+    def __init__(self, api_key: str, base_url: str, model: str = "deepseek-flash"):
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+        self.model_id = model
+
+    async def verify_claims(self, answer: str, evidence: Sequence[SearchEvidence]) -> bool:
+        payload = {
+            "model": self.model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a factual verification assistant. Verify if ALL claims in the "
+                        "generated answer are fully supported by the provided authorized evidence. "
+                        "Do NOT use outside knowledge. Return a JSON object with 'is_grounded' (bool) "  # noqa: E501
+                        "and 'unsupported_claims' (list of strings)."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "generated_answer": answer,
+                            "authorized_evidence": [
+                                getattr(item, "full_text", item.excerpt) for item in evidence
+                            ],
+                        }
+                    ),
+                },
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.0,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json=payload,
+                )
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            result = SemanticVerificationResult.model_validate_json(content)
+            return result.is_grounded
+        except Exception:
+            return False
+
+
 class GroundingVerifier:
-    """Deterministic safety checks; calibration awaits the real SOP evaluation set."""
+    """Deterministic safety checks combined with semantic claim verification."""
+
+    def __init__(self, semantic_verifier: SemanticVerifier | None = None) -> None:
+        self.semantic_verifier = semantic_verifier or FixtureSemanticVerifier()
 
     _unsupported_advice = (
         "contact hr",
@@ -33,7 +107,7 @@ class GroundingVerifier:
         re.I,
     )
 
-    def verify(self, answer: GeneratedAnswer, evidence: Sequence[SearchEvidence]) -> bool:
+    async def verify(self, answer: GeneratedAnswer, evidence: Sequence[SearchEvidence]) -> bool:
         cited_ids = {citation.chunk_id for citation in answer.citations}
         cited_text = " ".join(
             getattr(item, "full_text", item.excerpt).casefold()
@@ -61,7 +135,15 @@ class GroundingVerifier:
         ):
             if set(pattern.findall(prose)) - set(pattern.findall(cited_text)):
                 return False
-        return not any(
+        deterministic = not any(
             phrase in answer_text and phrase not in cited_text
             for phrase in self._unsupported_advice
         )
+        if not deterministic:
+            return False
+
+        # Layer 2: Semantic verification
+        try:
+            return await self.semantic_verifier.verify_claims(answer.answer, evidence)
+        except Exception:
+            return False

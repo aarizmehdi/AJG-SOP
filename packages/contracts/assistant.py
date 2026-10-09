@@ -25,6 +25,13 @@ class GeneratedAnswer(BaseModel):
     citations: list[AssistantCitation]
 
 
+class InternalAnswerMode(StrEnum):
+    ANSWER = "answer"
+    SYNTHESIZE_MULTIPLE_POLICIES = "synthesize_multiple_policies"
+    ASK_CLARIFICATION = "ask_clarification"
+    NO_ANSWER = "no_answer"
+
+
 class ResponseKind(StrEnum):
     SMALLTALK = "smalltalk"
     POLICY_ANSWER = "policy_answer"
@@ -70,6 +77,7 @@ class AssistantRequest(BaseModel):
 
 class ChatSession(OrganizationOwned):
     """Legacy record shape retained only for historical purge compatibility."""
+
     id: str
     employee_id: str
     language: Language
@@ -78,6 +86,7 @@ class ChatSession(OrganizationOwned):
 
 class ChatMessage(OrganizationOwned):
     """Legacy record shape retained only for historical purge compatibility."""
+
     id: str
     session_id: str
     role: MessageRole
