@@ -109,6 +109,7 @@ class PolicyReaderService:
         section: CanonicalSection,
     ) -> PolicyReaderSection:
         return PolicyReaderSection(
+            tenant_id=organization_id,
             organization_id=organization_id,
             policy_id=policy_id,
             version_id=version_id,

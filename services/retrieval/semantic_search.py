@@ -8,12 +8,16 @@ from pinecone import Pinecone
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 from services.ingestion.embeddings.base import EmbeddingProvider
+from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
 
 
 class SemanticCandidateRetriever(ABC):
     @abstractmethod
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self,
+        query: str,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
@@ -23,14 +27,15 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
         self._embeddings = embeddings
 
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self,
+        query: str,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
         query_vector = await self._embeddings.embed_query(query)
-        vectors = await self._embeddings.embed_documents(
-            [chunk.text for chunk in eligible_chunks]
-        )
+        vectors = await self._embeddings.embed_documents([chunk.text for chunk in eligible_chunks])
         scored = [
             (chunk, sum(left * right for left, right in zip(query_vector, vector, strict=True)))
             for chunk, vector in zip(eligible_chunks, vectors, strict=True)
@@ -38,11 +43,22 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
         scored.sort(key=lambda item: (-item[1], item[0].id))
         return [
             RetrievalCandidate(
+                tenant_id=chunk.organization_id,
                 organization_id=chunk.organization_id,
                 chunk_id=chunk.id,
                 channel=CandidateChannel.SEMANTIC,
                 score=score,
                 rank=rank,
+                text=chunk.text,
+                policy_number=chunk.policy_number,
+                heading_path=chunk.heading_path,
+                allowed_roles=list(chunk.access.roles.values),
+                department=next(iter(chunk.access.departments.values))
+                if chunk.access.departments.values
+                else None,  # noqa: E501
+                location=next(iter(chunk.access.locations.values))
+                if chunk.access.locations.values
+                else None,  # noqa: E501
             )
             for rank, (chunk, score) in enumerate(scored[:limit], start=1)
             if score > 0
@@ -61,38 +77,47 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         *,
         index: Any | None = None,
     ) -> None:
+        if isinstance(embeddings, BGEM3EmbeddingProvider):
+            raise ValueError("incompatible with the existing E5 Pinecone index")
         self._index: Any = index or Pinecone(api_key=api_key).Index(index_name)
         self._namespace_prefix = namespace_prefix
         self._embeddings = embeddings
 
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self,
+        query: str,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
+
         organization_id = eligible_chunks[0].organization_id
         if any(chunk.organization_id != organization_id for chunk in eligible_chunks):
             raise PermissionError("Semantic corpus cannot cross organizations")
         vector = await self._embeddings.embed_query(query)
         eligible_ids = [chunk.id for chunk in eligible_chunks]
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
+        filter_expr = {
+            "$and": [
+                {"organization_id": {"$eq": organization_id}},
+                {"publication_status": {"$eq": "published"}},
+                {"chunk_id": {"$in": eligible_ids}},
+            ]
+        }
+
         response = await anyio.to_thread.run_sync(
             lambda: self._index.query(
                 namespace=namespace,
                 vector=vector,
                 top_k=limit,
-                filter={
-                    "$and": [
-                        {"organization_id": {"$eq": organization_id}},
-                        {"publication_status": {"$eq": "published"}},
-                        {"chunk_id": {"$in": eligible_ids}},
-                    ]
-                },
+                filter=filter_expr,
             )
         )
         matches = getattr(response, "matches", [])
         return [
             RetrievalCandidate(
+                tenant_id=organization_id,
                 organization_id=organization_id,
                 chunk_id=str(match.id),
                 channel=CandidateChannel.SEMANTIC,
@@ -115,33 +140,42 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
 def pinecone_authorization_filter(
     organization_id: str,
     active_version_ids: list[str],
+    chunk_ids: list[str],
     departments: list[str],
     locations: list[str],
     roles: list[str],
+    is_organization_wide_reader: bool = False,
 ) -> dict[str, object]:
     """Mandatory pre-retrieval metadata filter for the live semantic adapter."""
-    return {
-        "$and": [
-            {"organization_id": {"$eq": organization_id}},
-            {"version_id": {"$in": active_version_ids}},
-            {"publication_status": {"$eq": "published"}},
-            {
-                "$or": [
-                    {"departments_mode": {"$eq": "all"}},
-                    {"departments": {"$in": departments}},
-                ]
-            },
-            {
-                "$or": [
-                    {"locations_mode": {"$eq": "all"}},
-                    {"locations": {"$in": locations}},
-                ]
-            },
-            {
-                "$or": [
-                    {"roles_mode": {"$eq": "all"}},
-                    {"roles": {"$in": roles}},
-                ]
-            },
-        ]
-    }
+    base_filter: list[dict[str, object]] = [
+        {"organization_id": {"$eq": organization_id}},
+        {"version_id": {"$in": active_version_ids}},
+        {"publication_status": {"$eq": "published"}},
+        {"chunk_id": {"$in": chunk_ids}},
+    ]
+
+    if not is_organization_wide_reader:
+        base_filter.extend(
+            [
+                {
+                    "$or": [
+                        {"departments_mode": {"$eq": "all"}},
+                        {"departments": {"$in": departments}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"locations_mode": {"$eq": "all"}},
+                        {"locations": {"$in": locations}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"roles_mode": {"$eq": "all"}},
+                        {"roles": {"$in": roles}},
+                    ]
+                },
+            ]
+        )
+
+    return {"$and": base_filter}

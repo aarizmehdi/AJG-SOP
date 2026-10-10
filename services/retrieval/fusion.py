@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from apps.api.app.models.organization import EmployeeProfile
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 
 
@@ -9,6 +10,7 @@ class CandidateFusion(ABC):
         self,
         lexical: list[RetrievalCandidate],
         semantic: list[RetrievalCandidate],
+        profile: EmployeeProfile,
     ) -> list[tuple[str, float]]:
         raise NotImplementedError
 
@@ -27,9 +29,17 @@ class ReciprocalRankFusion(CandidateFusion):
         self,
         lexical: list[RetrievalCandidate],
         semantic: list[RetrievalCandidate],
+        profile: EmployeeProfile,
     ) -> list[tuple[str, float]]:
         scores: dict[str, float] = {}
+        seen: set[tuple[str, CandidateChannel]] = set()
+
         for candidate in [*lexical, *semantic]:
+            seen_key = (candidate.chunk_id, candidate.channel)
+            if seen_key in seen:
+                continue
+            seen.add(seen_key)
+
             weight = (
                 self.lexical_weight
                 if candidate.channel is CandidateChannel.LEXICAL

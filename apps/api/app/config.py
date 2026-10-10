@@ -48,9 +48,10 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-flash"
     deepseek_temperature: float = Field(default=0.2, ge=0, le=1)
 
-    embedding_provider: Literal["fixture", "pinecone_e5"] = "fixture"
+    embedding_provider: Literal["fixture", "pinecone_e5", "e5", "bge_m3"] = "fixture"
     embedding_model: str = "multilingual-e5-large"
     reranker_provider: str = "fixture"
+    retrieval_reranker: Literal["fixture", "lexical_heuristic"] = "fixture"
     document_parser_provider: Literal["fixture", "azure", "docling", "auto"] = "fixture"
     speech_provider: Literal["disabled"] = "disabled"
 
@@ -82,12 +83,14 @@ class Settings(BaseSettings):
                 "FIREBASE_SERVICE_ACCOUNT_JSON": self.firebase_service_account_json,
                 "S3_ACCESS_KEY_ID": self.s3_access_key_id,
                 "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
+                "PINECONE_API_KEY": self.pinecone_api_key,
+                "DEEPSEEK_API_KEY": self.deepseek_api_key,
             }
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
-            if self.embedding_provider != "pinecone_e5":
-                raise ValueError("EMBEDDING_PROVIDER must be pinecone_e5 in live mode")
+            if self.embedding_provider not in {"pinecone_e5", "e5"}:
+                raise ValueError("EMBEDDING_PROVIDER must be pinecone_e5 or e5 in live mode")
             if "localhost" in self.web_origin:
                 raise ValueError(
                     "WEB_ORIGIN must not be localhost in live mode; "

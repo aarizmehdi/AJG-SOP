@@ -30,11 +30,12 @@ async def test_fixture_identity_prohibited_in_live_mode():
             live_settings = Settings(
                 app_mode="live",
                 web_origin="https://app.example.com",
-                mongodb_uri="mongodb://localhost:27017",
+                mongodb_uri="mongodb://remote:27017",
                 firebase_project_id="ajg-sop-web",
                 firebase_service_account_json="{}",
                 pinecone_api_key="test-key",
-                embedding_provider="pinecone_e5",
+                deepseek_api_key="test-key",
+                embedding_provider="e5",
                 s3_access_key_id="test-access",
                 s3_secret_access_key="test-secret",
             )
@@ -63,21 +64,23 @@ def test_live_mode_requires_mongodb_uri():
             firebase_project_id="ajg-sop-web",
             firebase_service_account_json="{}",
             pinecone_api_key="test-key",
-            embedding_provider="pinecone_e5",
+            deepseek_api_key="test-key",
+            embedding_provider="e5",
             s3_access_key_id="test-access",
             s3_secret_access_key="test-secret",
         )
 
 
 def test_live_mode_prohibits_fixture_embeddings() -> None:
-    with pytest.raises((ValueError, ValidationError), match="pinecone_e5"):
+    with pytest.raises((ValueError, ValidationError), match="e5"):
         Settings(
             app_mode="live",
             web_origin="https://app.example.com",
-            mongodb_uri="mongodb://localhost:27017",
+            mongodb_uri="mongodb://remote:27017",
             firebase_project_id="ajg-sop-web",
             firebase_service_account_json="{}",
             pinecone_api_key="test-key",
+            deepseek_api_key="test-key",
             s3_access_key_id="test-access",
             s3_secret_access_key="test-secret",
             embedding_provider="fixture",
@@ -109,11 +112,12 @@ async def test_unknown_firebase_user_is_not_auto_provisioned_or_email_linked() -
     live_settings = Settings(
         app_mode="live",
         web_origin="https://app.example.com",
-        mongodb_uri="mongodb://localhost:27017",
+        mongodb_uri="mongodb://remote:27017",
         firebase_project_id="ajg-sop-web",
         firebase_service_account_json="{}",
         pinecone_api_key="test-key",
-        embedding_provider="pinecone_e5",
+        deepseek_api_key="test-key",
+        embedding_provider="e5",
         s3_access_key_id="test-access",
         s3_secret_access_key="test-secret",
     )
@@ -134,3 +138,83 @@ async def test_unknown_firebase_user_is_not_auto_provisioned_or_email_linked() -
     assert exc_info.value.status_code == 403
     assert database.collections["employee_profiles"] == [existing_admin]
     assert existing_admin["identity_subject"] == "legacy-provider|existing-subject"
+
+
+def test_llm_provider_defaults_to_deepseek() -> None:
+    settings = Settings()
+    assert settings.llm_provider == "deepseek"
+
+
+def test_invalid_llm_provider_raises_validation_error() -> None:
+    with pytest.raises(ValidationError):
+        Settings(llm_provider="unauthorized_ai")
+
+
+def test_live_mode_fails_fast_missing_keys() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Missing required live configuration:.*DEEPSEEK_API_KEY",
+    ):
+        Settings(
+            app_mode="live",
+            web_origin="https://app.example.com",
+            mongodb_uri="mongodb://remote:27017",
+        )
+
+
+def test_embedding_provider_e5_and_pinecone_e5_aliases() -> None:
+    # Assert aliases work.
+    valid_e5 = Settings(
+        app_mode="live",
+        web_origin="https://app.example.com",
+        mongodb_uri="mongodb://remote:27017",
+        firebase_project_id="ajg-sop-web",
+        firebase_service_account_json="{}",
+        pinecone_api_key="test-key",
+        deepseek_api_key="test-key",
+        s3_access_key_id="test-access",
+        s3_secret_access_key="test-secret",
+        embedding_provider="e5",
+    )
+    valid_pinecone_e5 = Settings(
+        app_mode="live",
+        web_origin="https://app.example.com",
+        mongodb_uri="mongodb://remote:27017",
+        firebase_project_id="ajg-sop-web",
+        firebase_service_account_json="{}",
+        pinecone_api_key="test-key",
+        deepseek_api_key="test-key",
+        s3_access_key_id="test-access",
+        s3_secret_access_key="test-secret",
+        embedding_provider="pinecone_e5",
+    )
+    assert valid_e5.embedding_provider == "e5"
+    assert valid_pinecone_e5.embedding_provider == "pinecone_e5"
+
+
+def test_live_mode_prohibits_fixture_llm_and_retriever() -> None:
+    # Assert fixture llm raises.
+    with pytest.raises((ValueError, ValidationError)):
+        Settings(
+            app_mode="live",
+            web_origin="https://app.example.com",
+            mongodb_uri="mongodb://remote:27017",
+            firebase_project_id="ajg-sop-web",
+            firebase_service_account_json="{}",
+            pinecone_api_key="test-key",
+            deepseek_api_key="test-key",
+            s3_access_key_id="test-access",
+            s3_secret_access_key="test-secret",
+            llm_provider="fixture",
+        )
+
+
+def test_bge_m3_prohibited_from_pinecone_index() -> None:
+    # BGE-M3 produces 1024d vectors like E5, but the embedding space is completely different.
+    # We must explicitly prevent writing to or querying from the existing E5 index.
+    from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
+    from services.retrieval.semantic_search import PineconeSemanticRetriever
+
+    provider = BGEM3EmbeddingProvider(use_fake_model=True)
+    with pytest.raises(ValueError, match="incompatible with the existing E5 Pinecone index"):
+        PineconeSemanticRetriever("test-key", "aziz-jan-sop", "ns", provider)

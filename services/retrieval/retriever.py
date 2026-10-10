@@ -76,7 +76,7 @@ class RetrievalService:
             if self.metrics:
                 self.metrics.observe("retrieval", (perf_counter() - started) * 1000, failed=True)
             raise
-        fused = self.fusion.fuse(lexical, semantic)
+        fused = self.fusion.fuse(lexical, semantic, profile)
         chunks = {chunk.id: chunk for chunk in eligible}
         ranked = await self.reranker.rerank(query, fused, chunks)
         await self._refresh()
@@ -166,6 +166,7 @@ class RetrievalService:
     def _evidence(title: str, chunk: RetrievalChunk, score: float) -> SearchEvidence:
         excerpt = chunk.text[:420] + ("…" if len(chunk.text) > 420 else "")
         return SearchEvidence(
+            tenant_id=chunk.organization_id,
             organization_id=chunk.organization_id,
             chunk_id=chunk.id,
             policy_id=chunk.policy_id,
