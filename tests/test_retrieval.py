@@ -161,6 +161,41 @@ def test_fusion_preserves_same_section_distinct_chunks():
     assert "v1:sec1:1" in chunk_ids
 
 
+def test_fusion_same_channel_distinct_chunks_both_survive():
+    profile = EmployeeProfile(
+        id="emp-1",
+        organization_id="tenant-1",
+        identity_subject="auth0|456",
+        display_name="Emp",
+        email="emp@test.com",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+        departments=frozenset(),
+        locations=frozenset(),
+        organizational_roles=frozenset(),
+    )
+
+    def lexical_candidate(chunk_id: str, rank: int) -> RetrievalCandidate:
+        return RetrievalCandidate(
+            tenant_id="tenant-1",
+            organization_id="tenant-1",
+            chunk_id=chunk_id,
+            channel=CandidateChannel.LEXICAL,
+            score=10.0 - rank,
+            rank=rank,
+            text=f"text of {chunk_id}",
+            policy_number="P-1",
+            heading_path=["Heading 1"],
+            allowed_roles=[],
+            department=None,
+        )
+
+    lexical = [lexical_candidate("v1:sec1:0", 1), lexical_candidate("v1:sec1:1", 2)]
+
+    fused = ReciprocalRankFusion().fuse(lexical, [], profile)
+
+    assert [item[0] for item in fused] == ["v1:sec1:0", "v1:sec1:1"]
+
+
 def test_fusion_exact_same_chunk_merges_and_scores():
     profile = EmployeeProfile(
         id="emp-1",
