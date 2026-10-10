@@ -644,6 +644,131 @@ async def test_nested_list_retrieval():
     from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
     from apps.api.app.services.foundation_store import FoundationStore
     from packages.contracts.access import AccessDimension, AccessMode, AccessScope
+    from packages.contracts.canonical import (
+        BlockKind,
+        CanonicalBlock,
+        CanonicalListItem,
+        CanonicalSection,
+        CanonicalSOP,
+        SourceLocator,
+    )
+    from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
+    from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
+    from services.ingestion.embeddings.base import FixtureEmbeddingProvider
+    from services.retrieval.authorization_filter import AuthorizationFilter
+    from services.retrieval.fusion import ReciprocalRankFusion
+    from services.retrieval.lexical_search import FixtureLexicalRetriever
+    from services.retrieval.reranker import LexicalHeuristicReranker
+    from services.retrieval.retriever import RetrievalService
+    from services.retrieval.semantic_search import FixtureSemanticRetriever
+
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    dummy_source = SourceLocator(source_document_id="doc1")
+
+    doc = CanonicalSOP(
+        id="doc1",
+        organization_id="tenant-1",
+        policy_id="pol1",
+        version_id="v1",
+        source_document_ids=["doc1"],
+        title="Test SOP",
+        sections=[
+            CanonicalSection(
+                id="sec1",
+                heading="List Section",
+                heading_level=1,
+                heading_path=["List Section"],
+                stable_key="sec1-key",
+                content_hash="sec1-hash",
+                blocks=[
+                    CanonicalBlock(
+                        id="b1",
+                        kind=BlockKind.UNORDERED_LIST,
+                        list_items=[
+                            CanonicalListItem(
+                                text="Parent Item",
+                                children=[
+                                    CanonicalListItem(
+                                        text="Child Item A",
+                                        children=[
+                                            CanonicalListItem(
+                                                text="Deep Item B", children=[], source=dummy_source
+                                            )
+                                        ],
+                                        source=dummy_source,
+                                    )
+                                ],
+                                source=dummy_source,
+                            )
+                        ],
+                        source=dummy_source,
+                    )
+                ],
+                source=dummy_source,
+                access=scope,
+            )
+        ],
+    )
+
+    chunker = SectionAwareFixtureChunker()
+    chunks = chunker.chunk(doc, "published")
+
+    store = FoundationStore(
+        policies={
+            "pol1": SOPPolicy(
+                id="pol1",
+                organization_id="tenant-1",
+                title="Pol",
+                category="Ops",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="v1",
+            )
+        },
+        versions={
+            "v1": SOPVersion(
+                id="v1",
+                organization_id="tenant-1",
+                policy_id="pol1",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=scope,
+            )
+        },
+        chunks={"v1": chunks},
+    )
+
+    profile = EmployeeProfile(
+        id="user1",
+        organization_id="tenant-1",
+        identity_subject="auth0|user1",
+        display_name="Emp",
+        email="a@b.com",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+    )
+
+    service = RetrievalService(
+        store=store,
+        authorization=AuthorizationFilter(store),
+        lexical=FixtureLexicalRetriever(),
+        semantic=FixtureSemanticRetriever(FixtureEmbeddingProvider()),
+        fusion=ReciprocalRankFusion(),
+        reranker=LexicalHeuristicReranker(),
+    )
+
+    results = await service.retrieve(profile, "Deep Item B", limit=5)
+    assert len(results) == 1
+    assert "Parent Item" in results[0].excerpt
+    assert "Deep Item B" in results[0].excerpt
+
+
+async def test_retrieval_abstains_when_no_evidence_matches():
+    from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
+    from apps.api.app.services.foundation_store import FoundationStore
+    from packages.contracts.access import AccessDimension, AccessMode, AccessScope
     from packages.contracts.canonical import RetrievalChunk, SourceLocator
     from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
     from services.ingestion.embeddings.base import FixtureEmbeddingProvider
@@ -662,14 +787,14 @@ async def test_nested_list_retrieval():
     dummy_source = SourceLocator(source_document_id="doc1")
 
     chunk = RetrievalChunk(
-        id="chunk-list-1",
+        id="chunk-unrelated",
         organization_id="tenant-1",
         policy_id="pol1",
         version_id="v1",
         source_document_id="doc1",
         section_id="sec1",
-        heading_path=("List Section",),
-        text="* Parent Item\n  * Child Item A\n    * Deep Item B",
+        heading_path=("Unrelated",),
+        text="This is a perfectly normal chunk about office supplies and staplers.",
         access=scope,
         source=dummy_source,
         chunk_index=0,
@@ -699,7 +824,6 @@ async def test_nested_list_retrieval():
         },
         chunks={"v1": [chunk]},
     )
-
     profile = EmployeeProfile(
         id="user1",
         organization_id="tenant-1",
@@ -709,46 +833,17 @@ async def test_nested_list_retrieval():
         application_roles=frozenset({ApplicationRole.EMPLOYEE}),
     )
 
-    service = RetrievalService(
-        store=store,
-        authorization=AuthorizationFilter(store),
-        lexical=FixtureLexicalRetriever(),
-        semantic=FixtureSemanticRetriever(FixtureEmbeddingProvider()),
-        fusion=ReciprocalRankFusion(),
-        reranker=LexicalHeuristicReranker(),
-    )
+    embeddings = FixtureEmbeddingProvider()
+    # Mock to prevent random hash collisions in testing
+    import unittest.mock
 
-    results = await service.retrieve(profile, "Deep Item B", limit=5)
-    assert len(results) == 1
-    assert results[0].chunk_id == "chunk-list-1"
-
-
-async def test_retrieval_abstains_when_no_evidence_matches():
-    from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
-    from apps.api.app.services.foundation_store import FoundationStore
-    from services.ingestion.embeddings.base import FixtureEmbeddingProvider
-    from services.retrieval.authorization_filter import AuthorizationFilter
-    from services.retrieval.fusion import ReciprocalRankFusion
-    from services.retrieval.lexical_search import FixtureLexicalRetriever
-    from services.retrieval.reranker import LexicalHeuristicReranker
-    from services.retrieval.retriever import RetrievalService
-    from services.retrieval.semantic_search import FixtureSemanticRetriever
-
-    store = FoundationStore(policies={}, versions={}, chunks={})
-    profile = EmployeeProfile(
-        id="user1",
-        organization_id="tenant-1",
-        identity_subject="auth0|user1",
-        display_name="Emp",
-        email="a@b.com",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
-    )
+    embeddings._vector = unittest.mock.MagicMock(return_value=[0.0] * 32)
 
     service = RetrievalService(
         store=store,
         authorization=AuthorizationFilter(store),
         lexical=FixtureLexicalRetriever(),
-        semantic=FixtureSemanticRetriever(FixtureEmbeddingProvider()),
+        semantic=FixtureSemanticRetriever(embeddings),
         fusion=ReciprocalRankFusion(),
         reranker=LexicalHeuristicReranker(),
     )

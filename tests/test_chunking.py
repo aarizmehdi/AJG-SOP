@@ -346,132 +346,103 @@ def test_safe_index_rebuild_diff_computation():
 
     chunker = SectionAwareFixtureChunker()
     dummy_source = SourceLocator(source_document_id="doc1", page_start=1, page_end=1)
-    doc = CanonicalSOP(
+
+    scope = AccessScope(
+        departments=AccessDimension(mode="all", values=frozenset()),
+        locations=AccessDimension(mode="all", values=frozenset()),
+        roles=AccessDimension(mode="all", values=frozenset()),
+    )
+
+    sec1 = CanonicalSection(
+        id="sec1",
+        heading="H1",
+        heading_level=1,
+        heading_path=["H1"],
+        stable_key="sec1-key",
+        content_hash="hash1",
+        blocks=[
+            CanonicalBlock(id="b1", kind=BlockKind.PARAGRAPH, text="text1", source=dummy_source)
+        ],
+        source=dummy_source,
+        access=scope,
+    )
+    sec2 = CanonicalSection(
+        id="sec2",
+        heading="H2",
+        heading_level=1,
+        heading_path=["H2"],
+        stable_key="sec2-key",
+        content_hash="hash2",
+        blocks=[
+            CanonicalBlock(id="b2", kind=BlockKind.PARAGRAPH, text="text2", source=dummy_source)
+        ],
+        source=dummy_source,
+        access=scope,
+    )
+    sec3 = CanonicalSection(
+        id="sec3",
+        heading="H3",
+        heading_level=1,
+        heading_path=["H3"],
+        stable_key="sec3-key",
+        content_hash="hash3",
+        blocks=[
+            CanonicalBlock(id="b3", kind=BlockKind.PARAGRAPH, text="text3", source=dummy_source)
+        ],
+        source=dummy_source,
+        access=scope,
+    )
+
+    doc1 = CanonicalSOP(
         id="doc1",
         organization_id="tenant-1",
         policy_id="pol1",
         version_id="v1",
         source_document_ids=["doc1"],
-        title="Test Doc",
-        sections=[
-            CanonicalSection(
-                id="sec1",
-                heading="H1",
-                heading_level=1,
-                heading_path=["H1"],
-                stable_key="sec1-key",
-                content_hash="sec1-hash",
-                blocks=[
-                    CanonicalBlock(
-                        id="b1",
-                        kind=BlockKind.PARAGRAPH,
-                        text="This is the original text.",
-                        source=dummy_source,
-                    )
-                ],
-                source=dummy_source,
-                access=AccessScope(
-                    departments=AccessDimension(mode="all", values=frozenset()),
-                    locations=AccessDimension(mode="all", values=frozenset()),
-                    roles=AccessDimension(mode="all", values=frozenset()),
-                ),
-            ),
-            CanonicalSection(
-                id="sec2",
-                heading="H2",
-                heading_level=1,
-                heading_path=["H2"],
-                stable_key="sec2-key",
-                content_hash="sec2-hash",
-                blocks=[
-                    CanonicalBlock(
-                        id="b2",
-                        kind=BlockKind.PARAGRAPH,
-                        text="Section to be deleted.",
-                        source=dummy_source,
-                    )
-                ],
-                source=dummy_source,
-                access=AccessScope(
-                    departments=AccessDimension(mode="all", values=frozenset()),
-                    locations=AccessDimension(mode="all", values=frozenset()),
-                    roles=AccessDimension(mode="all", values=frozenset()),
-                ),
-            ),
-        ],
+        title="Doc",
+        sections=[sec1, sec2, sec3],
     )
 
-    old_chunks = chunker.chunk(doc, "published")
-    old_ids = {c.id for c in old_chunks}
+    sec1_changed = CanonicalSection(
+        id="sec1_v2",
+        heading="H1",
+        heading_level=1,
+        heading_path=["H1"],
+        stable_key="sec1-key",
+        content_hash="hash1_v2",
+        blocks=[
+            CanonicalBlock(
+                id="b1", kind=BlockKind.PARAGRAPH, text="changed text1", source=dummy_source
+            )
+        ],
+        source=dummy_source,
+        access=scope,
+    )
 
-    # Simulate re-chunking identically
-    new_chunks = chunker.chunk(doc, "published")
-    new_ids = {c.id for c in new_chunks}
-
-    assert old_ids == new_ids
-
-    # Simulate content change: remove sec2, add sec3
     doc2 = CanonicalSOP(
         id="doc1",
         organization_id="tenant-1",
         policy_id="pol1",
         version_id="v1",
         source_document_ids=["doc1"],
-        title="Test Doc",
-        sections=[
-            CanonicalSection(
-                id="sec1",
-                heading="H1",
-                heading_level=1,
-                heading_path=["H1"],
-                stable_key="sec1-key",
-                content_hash="sec1-hash-changed",
-                blocks=[
-                    CanonicalBlock(
-                        id="b1",
-                        kind=BlockKind.PARAGRAPH,
-                        text="This is the new text.",
-                        source=dummy_source,
-                    )
-                ],
-                source=dummy_source,
-                access=AccessScope(
-                    departments=AccessDimension(mode="all", values=frozenset()),
-                    locations=AccessDimension(mode="all", values=frozenset()),
-                    roles=AccessDimension(mode="all", values=frozenset()),
-                ),
-            ),
-            CanonicalSection(
-                id="sec3",
-                heading="H3",
-                heading_level=1,
-                heading_path=["H3"],
-                stable_key="sec3-key",
-                content_hash="sec3-hash",
-                blocks=[
-                    CanonicalBlock(
-                        id="b3",
-                        kind=BlockKind.PARAGRAPH,
-                        text="A new section.",
-                        source=dummy_source,
-                    )
-                ],
-                source=dummy_source,
-                access=AccessScope(
-                    departments=AccessDimension(mode="all", values=frozenset()),
-                    locations=AccessDimension(mode="all", values=frozenset()),
-                    roles=AccessDimension(mode="all", values=frozenset()),
-                ),
-            ),
-        ],
+        title="Doc",
+        sections=[sec1_changed, sec2, sec3],
     )
 
-    newer_chunks = chunker.chunk(doc2, "published")
-    newer_ids = {c.id for c in newer_chunks}
+    old_chunks = chunker.chunk(doc1, "published")
+    new_chunks = chunker.chunk(doc2, "published")
 
-    assert old_ids != newer_ids
-    # Prove diff computation is possible without Pinecone calls
-    to_delete = old_ids - newer_ids
-    to_upsert = newer_ids - old_ids
-    assert len(to_delete) > 0
-    assert len(to_upsert) > 0
+    {c.id for c in old_chunks}
+    {c.id for c in new_chunks}
+
+    old_sec2_3 = {c.id for c in old_chunks if c.section_id in ("sec2", "sec3")}
+    new_sec2_3 = {c.id for c in new_chunks if c.section_id in ("sec2", "sec3")}
+
+    assert old_sec2_3 == new_sec2_3
+
+    old_sec1 = {c.id for c in old_chunks if c.section_id == "sec1"}
+    new_sec1 = {c.id for c in new_chunks if c.section_id == "sec1_v2"}
+
+    assert len(old_sec1) > 0
+    assert len(new_sec1) > 0
+    assert old_sec1.isdisjoint(new_sec1)
