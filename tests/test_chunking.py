@@ -336,11 +336,11 @@ def test_late_chunk_answer_retrieval():
 def test_safe_index_rebuild_diff_computation():
     from packages.contracts.access import AccessDimension, AccessScope
     from packages.contracts.canonical import (
+        BlockKind,
+        CanonicalBlock,
         CanonicalSection,
         CanonicalSOP,
         SourceLocator,
-        CanonicalBlock,
-        BlockKind
     )
     from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 
@@ -363,7 +363,10 @@ def test_safe_index_rebuild_diff_computation():
                 content_hash="sec1-hash",
                 blocks=[
                     CanonicalBlock(
-                        id="b1", kind=BlockKind.PARAGRAPH, text="This is the original text.", source=dummy_source
+                        id="b1",
+                        kind=BlockKind.PARAGRAPH,
+                        text="This is the original text.",
+                        source=dummy_source,
                     )
                 ],
                 source=dummy_source,
@@ -382,7 +385,10 @@ def test_safe_index_rebuild_diff_computation():
                 content_hash="sec2-hash",
                 blocks=[
                     CanonicalBlock(
-                        id="b2", kind=BlockKind.PARAGRAPH, text="Section to be deleted.", source=dummy_source
+                        id="b2",
+                        kind=BlockKind.PARAGRAPH,
+                        text="Section to be deleted.",
+                        source=dummy_source,
                     )
                 ],
                 source=dummy_source,
@@ -391,7 +397,7 @@ def test_safe_index_rebuild_diff_computation():
                     locations=AccessDimension(mode="all", values=frozenset()),
                     roles=AccessDimension(mode="all", values=frozenset()),
                 ),
-            )
+            ),
         ],
     )
 
@@ -422,7 +428,10 @@ def test_safe_index_rebuild_diff_computation():
                 content_hash="sec1-hash-changed",
                 blocks=[
                     CanonicalBlock(
-                        id="b1", kind=BlockKind.PARAGRAPH, text="This is the new text.", source=dummy_source
+                        id="b1",
+                        kind=BlockKind.PARAGRAPH,
+                        text="This is the new text.",
+                        source=dummy_source,
                     )
                 ],
                 source=dummy_source,
@@ -441,7 +450,10 @@ def test_safe_index_rebuild_diff_computation():
                 content_hash="sec3-hash",
                 blocks=[
                     CanonicalBlock(
-                        id="b3", kind=BlockKind.PARAGRAPH, text="A new section.", source=dummy_source
+                        id="b3",
+                        kind=BlockKind.PARAGRAPH,
+                        text="A new section.",
+                        source=dummy_source,
                     )
                 ],
                 source=dummy_source,
@@ -450,17 +462,16 @@ def test_safe_index_rebuild_diff_computation():
                     locations=AccessDimension(mode="all", values=frozenset()),
                     roles=AccessDimension(mode="all", values=frozenset()),
                 ),
-            )
+            ),
         ],
     )
 
     newer_chunks = chunker.chunk(doc2, "published")
     newer_ids = {c.id for c in newer_chunks}
-    
+
     assert old_ids != newer_ids
     # Prove diff computation is possible without Pinecone calls
     to_delete = old_ids - newer_ids
     to_upsert = newer_ids - old_ids
     assert len(to_delete) > 0
     assert len(to_upsert) > 0
-

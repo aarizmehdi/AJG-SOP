@@ -339,7 +339,7 @@ def test_lexical_heading_vs_body_match():
     )
 
     assert len(candidates) == 2
-       # Body match ranks first: it has the exact phrase and repeated terms.
+    # Body match ranks first: it has the exact phrase and repeated terms.
     assert candidates[0].chunk_id == "chunk-body"
     assert candidates[1].chunk_id == "chunk-heading"
 
@@ -641,18 +641,18 @@ async def test_table_row_value_retrieval():
 
 
 async def test_nested_list_retrieval():
+    from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
     from apps.api.app.services.foundation_store import FoundationStore
     from packages.contracts.access import AccessDimension, AccessMode, AccessScope
-    from packages.contracts.canonical import SourceLocator, RetrievalChunk
-    from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
-    from packages.contracts.policy import SOPPolicy, PolicyStatus, SOPVersion, VersionStatus
+    from packages.contracts.canonical import RetrievalChunk, SourceLocator
+    from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
     from services.ingestion.embeddings.base import FixtureEmbeddingProvider
+    from services.retrieval.authorization_filter import AuthorizationFilter
+    from services.retrieval.fusion import ReciprocalRankFusion
+    from services.retrieval.lexical_search import FixtureLexicalRetriever
     from services.retrieval.reranker import LexicalHeuristicReranker
     from services.retrieval.retriever import RetrievalService
     from services.retrieval.semantic_search import FixtureSemanticRetriever
-    from services.retrieval.fusion import ReciprocalRankFusion
-    from services.retrieval.lexical_search import FixtureLexicalRetriever
-    from services.retrieval.authorization_filter import AuthorizationFilter
 
     scope = AccessScope(
         departments=AccessDimension(mode=AccessMode.ALL),
@@ -697,7 +697,7 @@ async def test_nested_list_retrieval():
                 access=scope,
             )
         },
-        chunks={"v1": [chunk]}
+        chunks={"v1": [chunk]},
     )
 
     profile = EmployeeProfile(
@@ -724,15 +724,15 @@ async def test_nested_list_retrieval():
 
 
 async def test_retrieval_abstains_when_no_evidence_matches():
-    from apps.api.app.services.foundation_store import FoundationStore
     from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
+    from apps.api.app.services.foundation_store import FoundationStore
     from services.ingestion.embeddings.base import FixtureEmbeddingProvider
+    from services.retrieval.authorization_filter import AuthorizationFilter
+    from services.retrieval.fusion import ReciprocalRankFusion
+    from services.retrieval.lexical_search import FixtureLexicalRetriever
     from services.retrieval.reranker import LexicalHeuristicReranker
     from services.retrieval.retriever import RetrievalService
     from services.retrieval.semantic_search import FixtureSemanticRetriever
-    from services.retrieval.fusion import ReciprocalRankFusion
-    from services.retrieval.lexical_search import FixtureLexicalRetriever
-    from services.retrieval.authorization_filter import AuthorizationFilter
 
     store = FoundationStore(policies={}, versions={}, chunks={})
     profile = EmployeeProfile(
@@ -755,4 +755,3 @@ async def test_retrieval_abstains_when_no_evidence_matches():
 
     results = await service.retrieve(profile, "Completely random nonsense", limit=5)
     assert len(results) == 0
-
