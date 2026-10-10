@@ -8,6 +8,7 @@ from pinecone import Pinecone
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 from services.ingestion.embeddings.base import EmbeddingProvider
+from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
 
 
 class SemanticCandidateRetriever(ABC):
@@ -76,7 +77,7 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         *,
         index: Any | None = None,
     ) -> None:
-        if embeddings.__class__.__name__ == "BGEM3EmbeddingProvider":
+        if isinstance(embeddings, BGEM3EmbeddingProvider):
             raise ValueError("incompatible with the existing E5 Pinecone index")
         self._index: Any = index or Pinecone(api_key=api_key).Index(index_name)
         self._namespace_prefix = namespace_prefix
@@ -110,7 +111,6 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
                 namespace=namespace,
                 vector=vector,
                 top_k=limit,
-                include_metadata=True,
                 filter=filter_expr,
             )
         )
@@ -123,17 +123,6 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
                 channel=CandidateChannel.SEMANTIC,
                 score=float(match.score),
                 rank=rank,
-                text=match.metadata.get("text") if match.metadata else None,
-                policy_number=match.metadata.get("policy_number") if match.metadata else None,
-                heading_path=tuple(match.metadata.get("heading_path", []))
-                if match.metadata
-                else None,  # noqa: E501
-                allowed_roles=match.metadata.get("roles", []) if match.metadata else [],
-                department=match.metadata.get("department") if match.metadata else None,
-                location=match.metadata.get("location") if match.metadata else None,
-                publication_state=match.metadata.get("publication_status", "published")
-                if match.metadata
-                else "published",  # noqa: E501
             )
             for rank, match in enumerate(matches, start=1)
             if str(match.id) in eligible_ids
