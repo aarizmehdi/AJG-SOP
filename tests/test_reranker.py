@@ -1,16 +1,13 @@
+import pytest
+
+from packages.contracts.access import AccessDimension, AccessMode, AccessScope
+from packages.contracts.canonical import RetrievalChunk, SourceLocator
 from services.retrieval.reranker import LexicalHeuristicReranker
 
 
 def test_heuristic_reranker_preserves_count():
     reranker = LexicalHeuristicReranker()
-    # Just a placeholder instantiation check to avoid ImportError
     assert reranker is not None
-
-
-import pytest
-
-from packages.contracts.access import AccessDimension, AccessMode, AccessScope
-from packages.contracts.canonical import RetrievalChunk, SourceLocator
 
 
 @pytest.mark.asyncio
@@ -63,7 +60,10 @@ async def test_heuristic_reranker_ranks_higher_overlap_first():
     reranked = await reranker.rerank(query, fused, chunks)
 
     assert len(reranked) == 2
-    # Candidate A has 3 matching query keywords: match, one, two, three (4 matches? "match", "one", "two", "three". wait, text has "match one match two match three". unique text terms: "match", "one", "two", "three". 4 matches. 4 * 0.5 = 2.0. Base 0.5 + 2.0 = 2.5.)
-    # Candidate B has 0 matches. Base 1.0 + 0 = 1.0.
-    # Therefore Candidate A > Candidate B.
-    assert reranked[0][0] == "chunk-a"
+
+    # Candidate A calculation: query terms ["match", "one", "two", "three"]
+    # Chunk A text has all 4 terms. Score = 0.5 (base) + (4 * 0.5) = 2.5
+    # Chunk B text has 0 terms. Score = 1.0 (base) + 0 = 1.0
+    # Expected order: chunk-a (2.5), chunk-b (1.0)
+    assert reranked[0] == ("chunk-a", 2.5)
+    assert reranked[1] == ("chunk-b", 1.0)

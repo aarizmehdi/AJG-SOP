@@ -4,6 +4,13 @@ from services.ingestion.embeddings.base import EmbeddingProvider
 
 
 class BGEM3EmbeddingProvider(EmbeddingProvider):
+    """
+    BGE-M3 embedding provider, primarily used for isolated evaluation/benchmarking.
+    Note: BGE-M3 vectors cannot be written to or read from the existing Pinecone index
+    because the embedding spaces differ completely (both are 1024-dimensional, but they
+    represent completely distinct spaces).
+    """
+
     def __init__(self, use_fake_model: bool = False):
         self.use_fake_model = use_fake_model
         if self.use_fake_model:

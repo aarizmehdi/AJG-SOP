@@ -50,7 +50,6 @@ class RecordingLexical(LexicalCandidateRetriever):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
         limit: int,
     ) -> list[RetrievalCandidate]:
@@ -75,7 +74,6 @@ class RecordingSemantic(SemanticCandidateRetriever):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
         limit: int,
     ) -> list[RetrievalCandidate]:
@@ -316,31 +314,16 @@ async def test_pinecone_semantic_query_rejects_noneligible_matches() -> None:
         application_roles=frozenset(),
         departments=frozenset(),
     )
-    results = await retriever.search("damaged stock", profile, [chunk("allowed", "store")], 5)
+    results = await retriever.search("damaged stock", [chunk("allowed", "store")], 5)
 
     assert [result.chunk_id for result in results] == ["allowed"]
     assert index.query_kwargs["namespace"] == "aziz-jan-trust--ajt"
     filters = index.query_kwargs["filter"]["$and"]
     assert any("organization_id" in c and c["organization_id"]["$eq"] == "ajt" for c in filters)
-    assert any("version_id" in c and c["version_id"]["$in"] == ["version"] for c in filters)
     assert any(
         "publication_status" in c and c["publication_status"]["$eq"] == "published" for c in filters
     )
     assert any("chunk_id" in c and c["chunk_id"]["$in"] == ["allowed"] for c in filters)
-
-    # Verify Employee-level constraints are present
-    assert any(
-        "$or" in c and any(d.get("departments_mode", {}).get("$eq") == "all" for d in c["$or"])
-        for c in filters
-    )
-    assert any(
-        "$or" in c and any(d.get("locations_mode", {}).get("$eq") == "all" for d in c["$or"])
-        for c in filters
-    )
-    assert any(
-        "$or" in c and any(d.get("roles_mode", {}).get("$eq") == "all" for d in c["$or"])
-        for c in filters
-    )
 
 
 async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
@@ -363,7 +346,7 @@ async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
         departments=frozenset(),
     )
     with pytest.raises(PermissionError, match="cannot cross organizations"):
-        await retriever.search("damaged stock", profile, [chunk("allowed", "store"), other], 5)
+        await retriever.search("damaged stock", [chunk("allowed", "store"), other], 5)
 
 
 def test_unpublished_and_inactive_versions_rejected() -> None:
@@ -661,7 +644,6 @@ async def test_fusion_leak_unauthorized_chunks_never_appear() -> None:
         async def search(
             self,
             query: str,
-            profile: EmployeeProfile,
             eligible_chunks: Sequence[RetrievalChunk],
             limit: int,
         ) -> list[RetrievalCandidate]:

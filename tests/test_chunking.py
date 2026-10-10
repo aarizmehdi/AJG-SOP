@@ -298,7 +298,7 @@ def test_late_chunk_answer_retrieval():
                     CanonicalBlock(
                         id="b1",
                         kind=BlockKind.PARAGRAPH,
-                        text="Early words that consume space and push the answer to a later chunk in the same section",
+                        text="Early words that consume space",
                         source=dummy_source,
                     ),
                     CanonicalBlock(

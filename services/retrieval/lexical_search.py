@@ -12,9 +12,8 @@ class LexicalCandidateRetriever(ABC):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
-        limit: int,  # noqa: E501
+        limit: int,
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
@@ -36,16 +35,12 @@ ROMAN_URDU_MAP = {
 }
 
 
-# Note: FixtureLexicalRetriever is the ACTUAL production lexical channel
-# used in live mode. It executes an in-memory keyword search over the fully
-# authorized eligible_chunks from the FoundationStore.
 class FixtureLexicalRetriever(LexicalCandidateRetriever):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
-        limit: int,  # noqa: E501
+        limit: int,
     ) -> list[RetrievalCandidate]:
         normalized_query = self._normalize_urdu(query)
         terms = self._terms(normalized_query)

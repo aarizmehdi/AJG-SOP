@@ -72,14 +72,13 @@ class _LexicalChannel(LexicalCandidateRetriever):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
         limit: int,
     ) -> list[RetrievalCandidate]:
         if not self._enabled:
             return []
         return await self._inner.search(
-            query, profile, eligible_chunks, min(limit, self._pool) if self._pool else limit
+            query, eligible_chunks, min(limit, self._pool) if self._pool else limit
         )
 
 
@@ -94,14 +93,13 @@ class _SemanticChannel(SemanticCandidateRetriever):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
         limit: int,
     ) -> list[RetrievalCandidate]:
         if not self._enabled:
             return []
         return await self._inner.search(
-            query, profile, eligible_chunks, min(limit, self._pool) if self._pool else limit
+            query, eligible_chunks, min(limit, self._pool) if self._pool else limit
         )
 
 

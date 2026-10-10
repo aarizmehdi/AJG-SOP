@@ -61,7 +61,7 @@ from services.assistant.grounding import GroundingVerifier
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
 from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
-from services.ingestion.embeddings.e5_provider import E5EmbeddingProvider
+from services.ingestion.embeddings.pinecone_e5 import PineconeE5EmbeddingProvider
 from services.ingestion.extractors.azure_document_intelligence import (
     AzureDocumentIntelligenceParser,
 )
@@ -164,7 +164,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             raise ValueError("Pinecone API key is required in live mode")
         app.state.retrieval_index = PineconeRetrievalIndex(
             settings.pinecone_api_key.get_secret_value(),
-            settings.pinecone_index_name,
+            settings.pinecone_index,
             settings.pinecone_namespace_prefix,
         )
 
@@ -176,10 +176,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         else:
             publication_embeddings = FixtureEmbeddingProvider()
     else:
-        publication_embeddings = E5EmbeddingProvider(
+        publication_embeddings = PineconeE5EmbeddingProvider(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
-            settings.pinecone_index_name,
-            settings.e5_model_name,
+            settings.pinecone_index,
+            settings.embedding_model,
         )
 
     app.state.audit_service = AuditService(app.state.foundation_store)
@@ -213,17 +213,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             semantic = FixtureSemanticRetriever(FixtureEmbeddingProvider())
     else:
         if settings.embedding_provider == "bge_m3":
-            raise ValueError(
-                "BGE-M3 is fundamentally incompatible with the existing E5 Pinecone index due to distinct vector spaces. Cannot route BGE-M3 to Pinecone."
-            )
+            raise ValueError("BGE-M3 is incompatible with E5 index. Cannot route to Pinecone.")
         semantic = PineconeSemanticRetriever(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
-            settings.pinecone_index_name,
+            settings.pinecone_index,
             settings.pinecone_namespace_prefix,
             publication_embeddings,
         )
-    # Note: FixtureLexicalRetriever is in fact the REAL production lexical channel
-    # over the authorized foundation store; it is just poorly named.
+
+    # FixtureLexicalRetriever is the lexical retriever used in live mode too: it performs
+    # in-memory term matching over authorized chunks despite its fixture-style name.
+    # FixtureReranker is the default reranker in all modes.
+    # Neither is a production semantic/cross-encoder reranker.
 
     from services.retrieval.reranker import Reranker
 
@@ -231,7 +232,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.retrieval_reranker == "lexical_heuristic":
         reranker = LexicalHeuristicReranker()
     else:
-        # FixtureReranker is the current default production reranker in both modes.
         reranker = FixtureReranker()
 
     app.state.retrieval_service = RetrievalService(

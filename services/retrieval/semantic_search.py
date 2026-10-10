@@ -16,9 +16,8 @@ class SemanticCandidateRetriever(ABC):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
-        limit: int,  # noqa: E501
+        limit: int,
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
@@ -30,9 +29,8 @@ class FixtureSemanticRetriever(SemanticCandidateRetriever):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
-        limit: int,  # noqa: E501
+        limit: int,
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
@@ -88,34 +86,25 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
     async def search(
         self,
         query: str,
-        profile: EmployeeProfile,
         eligible_chunks: Sequence[RetrievalChunk],
-        limit: int,  # noqa: E501
+        limit: int,
     ) -> list[RetrievalCandidate]:
         if not eligible_chunks:
             return []
 
-        organization_id = profile.organization_id
+        organization_id = eligible_chunks[0].organization_id
         if any(chunk.organization_id != organization_id for chunk in eligible_chunks):
-            raise PermissionError("Eligible chunks cannot cross organizations")
-
+            raise PermissionError("Semantic corpus cannot cross organizations")
         vector = await self._embeddings.embed_query(query)
-        active_version_ids = list({chunk.version_id for chunk in eligible_chunks})
-        chunk_ids = [chunk.id for chunk in eligible_chunks]
+        eligible_ids = [chunk.id for chunk in eligible_chunks]
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
-
-        from services.retrieval.authorization_filter import AuthorizationFilter
-
-        is_admin = AuthorizationFilter.is_organization_wide_reader(profile)
-        filter_expr = pinecone_authorization_filter(
-            organization_id=organization_id,
-            active_version_ids=active_version_ids,
-            chunk_ids=chunk_ids,
-            departments=list(profile.departments) if profile.departments else [],
-            locations=list(profile.locations) if profile.locations else [],
-            roles=list(profile.organizational_roles) if profile.organizational_roles else [],
-            is_organization_wide_reader=is_admin,
-        )
+        filter_expr = {
+            "$and": [
+                {"organization_id": {"$eq": organization_id}},
+                {"publication_status": {"$eq": "published"}},
+                {"chunk_id": {"$in": eligible_ids}},
+            ]
+        }
 
         response = await anyio.to_thread.run_sync(
             lambda: self._index.query(
@@ -148,7 +137,7 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
                 else "published",  # noqa: E501
             )
             for rank, match in enumerate(matches, start=1)
-            if str(match.id) in chunk_ids
+            if str(match.id) in eligible_ids
         ]
 
     @staticmethod

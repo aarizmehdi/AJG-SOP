@@ -16,7 +16,6 @@ from services.assistant.grounding import GroundingVerifier
 
 def evidence() -> SearchEvidence:
     return SearchEvidence(
-        tenant_id="ajt",
         organization_id="ajt",
         chunk_id="allowed-chunk",
         policy_id="policy",

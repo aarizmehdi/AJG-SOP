@@ -163,7 +163,7 @@ def test_live_mode_fails_fast_missing_keys() -> None:
 
 
 def test_embedding_provider_e5_and_pinecone_e5_aliases() -> None:
-    # Assert both embedding_provider="e5" and embedding_provider="pinecone_e5" initialize Settings without validation errors.
+    # Assert aliases work.
     valid_e5 = Settings(
         app_mode="live",
         web_origin="https://app.example.com",
@@ -193,7 +193,7 @@ def test_embedding_provider_e5_and_pinecone_e5_aliases() -> None:
 
 
 def test_live_mode_prohibits_fixture_llm_and_retriever() -> None:
-    # Assert that when app_mode="live", attempting to set llm_provider="fixture" raises a fail-fast ValueError.
+    # Assert fixture llm raises.
     with pytest.raises((ValueError, ValidationError)):
         Settings(
             app_mode="live",

@@ -39,7 +39,6 @@ TEXT = (
 
 def evidence() -> SearchEvidence:
     return SearchEvidence(
-        tenant_id="ajt",
         organization_id="ajt",
         chunk_id="chunk-yarn",
         policy_id="policy-yarn",

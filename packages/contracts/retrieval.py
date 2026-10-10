@@ -8,7 +8,7 @@ from packages.contracts.common import Language, OrganizationOwned
 
 
 class AccessControlled(OrganizationOwned):
-    tenant_id: str
+    tenant_id: str | None = None
     allowed_roles: list[str] = Field(default_factory=list)
     department: str | None = None
     location: str | None = None

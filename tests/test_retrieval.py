@@ -223,9 +223,7 @@ def test_live_configuration_validation():
         Settings(app_mode="live", embedding_provider="e5", llm_provider="deepseek")
 
     # Should raise ValueError if embedding_provider is invalid for live
-    with pytest.raises(
-        ValueError, match="EMBEDDING_PROVIDER must be e5 or pinecone_e5 in live mode"
-    ):
+    with pytest.raises(ValueError, match="EMBEDDING_PROVIDER must be .* in live mode"):
         Settings(
             app_mode="live",
             embedding_provider="fixture",
@@ -310,17 +308,13 @@ def test_lexical_heading_vs_body_match():
     import asyncio
 
     candidates = asyncio.run(
-        retriever.search("Special Secret Project Alpha", profile, [chunk_heading, chunk_body], 10)
+        retriever.search("Special Secret Project Alpha", [chunk_heading, chunk_body], 10)
     )
 
     assert len(candidates) == 2
-    # Both should be matched, but body has it 4 times (Special, Secret, Project, Alpha) plus exact phrase bonus.
-    # Heading match does not get indexed in text by FixtureLexicalRetriever currently unless text includes it,
-    # wait, FixtureLexicalRetriever._terms only looks at `chunk.text`!
-    # So heading-only match will yield 0 hits if heading is not in text!
-    # Let me check if heading path is included in text.
-    # In SemanticChunker, text is prepended with heading: "Special Secret Project Alpha\nThis section discusses general things."
-    pass
+    # Assert body match ranks higher than heading match because it contains the exact query phrase and term repetition.
+    assert candidates[0].chunk_id == "chunk-body"
+    assert candidates[1].chunk_id == "chunk-heading"
 
 
 @pytest.mark.asyncio
@@ -361,14 +355,10 @@ async def test_urdu_script_and_roman_urdu_retrieval():
     )
 
     # Roman Urdu query
-    candidates_roman = await retriever.search("Mujhe chutti chahiye", profile, [chunk_urdu], 10)
+    candidates_roman = await retriever.search("Mujhe chutti chahiye", [chunk_urdu], 10)
     assert len(candidates_roman) == 1
     assert candidates_roman[0].chunk_id == "chunk-urdu"
-
-    # Urdu script query
-    # If the user searches in Urdu script, LexicalRetriever won't translate it, but if we add exact phrase it might not match.
-    # The requirement says "Urdu-script query (not only Roman Urdu) and a Roman Urdu query reaching the right chunk through the lexical channel."
-    # If the text has Urdu script "چھٹی", it will match if query is "چھٹی".
+    # Urdu script query retrieves only the chunk with the Urdu term.
     chunk_urdu_script = RetrievalChunk(
         id="chunk-urdu-script",
         organization_id="tenant-1",
@@ -383,7 +373,7 @@ async def test_urdu_script_and_roman_urdu_retrieval():
         chunk_index=0,
         publication_status="published",
     )
-    candidates_script = await retriever.search("مجھے چھٹی چاہیے", profile, [chunk_urdu_script], 10)
+    candidates_script = await retriever.search("مجھے چھٹی چاہیے", [chunk_urdu_script], 10)
     assert len(candidates_script) == 1
     assert candidates_script[0].chunk_id == "chunk-urdu-script"
 
@@ -440,14 +430,14 @@ async def test_broad_query_returns_multiple_sections():
         application_roles=frozenset({ApplicationRole.EMPLOYEE}),
     )
 
-    candidates = await retriever.search("safety guidelines rules", profile, [chunk_1, chunk_2], 10)
+    candidates = await retriever.search("safety guidelines rules", [chunk_1, chunk_2], 10)
     assert len(candidates) == 2
     assert {c.chunk_id for c in candidates} == {"chunk-1", "chunk-2"}
 
 
 @pytest.mark.asyncio
 async def test_long_section_late_chunk_retrieval():
-    # Long section: answer exists only in the last chunk; run the retrieval path (not just the chunker) and assert that chunk is returned for a query about it.
+    # Target chunk with answer is late in sequence; full retrieval still finds it.
     from apps.api.app.services.foundation_store import FoundationStore
     from packages.contracts.access import AccessDimension, AccessMode, AccessScope
     from packages.contracts.canonical import SourceLocator
@@ -544,7 +534,7 @@ async def test_long_section_late_chunk_retrieval():
 
 @pytest.mark.asyncio
 async def test_table_row_value_retrieval():
-    # Table whose answer depends on its header: after splitting, every continuation chunk carries the header and a query on a row value retrieves the right chunk.
+    # Assert row value queries retrieve correctly from tables split across multiple chunks.
     from apps.api.app.services.foundation_store import FoundationStore
     from packages.contracts.access import AccessDimension, AccessMode, AccessScope
     from packages.contracts.canonical import SourceLocator

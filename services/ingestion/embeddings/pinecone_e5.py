@@ -15,8 +15,8 @@ class EmbeddingDimensionError(RuntimeError):
     pass
 
 
-class E5EmbeddingProvider(EmbeddingProvider):
-    """E5 embeddings with explicit passage/query prefix semantics."""
+class PineconeE5EmbeddingProvider(EmbeddingProvider):
+    """Pinecone-hosted multilingual E5 with distinct passage/query semantics."""
 
     def __init__(
         self,
@@ -88,6 +88,3 @@ class E5EmbeddingProvider(EmbeddingProvider):
         if isinstance(item, Mapping):
             return item.get(key)
         return getattr(item, key, None)
-
-
-PineconeE5EmbeddingProvider = E5EmbeddingProvider
