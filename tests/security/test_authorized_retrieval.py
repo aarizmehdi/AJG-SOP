@@ -305,15 +305,6 @@ async def test_pinecone_semantic_query_rejects_noneligible_matches() -> None:
         index=index,
     )
 
-    profile = EmployeeProfile(
-        id="test",
-        organization_id="ajt",
-        identity_subject="test",
-        display_name="test",
-        email="test@example.com",
-        application_roles=frozenset(),
-        departments=frozenset(),
-    )
     results = await retriever.search("damaged stock", [chunk("allowed", "store")], 5)
 
     assert [result.chunk_id for result in results] == ["allowed"]
@@ -336,15 +327,6 @@ async def test_pinecone_semantic_query_rejects_cross_tenant_corpus() -> None:
         index=RecordingPineconeIndex(),
     )
 
-    profile = EmployeeProfile(
-        id="test",
-        organization_id="ajt",
-        identity_subject="test",
-        display_name="test",
-        email="test@example.com",
-        application_roles=frozenset(),
-        departments=frozenset(),
-    )
     with pytest.raises(PermissionError, match="cannot cross organizations"):
         await retriever.search("damaged stock", [chunk("allowed", "store"), other], 5)
 

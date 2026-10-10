@@ -296,14 +296,6 @@ def test_lexical_heading_vs_body_match():
     )
 
     retriever = FixtureLexicalRetriever()
-    profile = EmployeeProfile(
-        id="emp",
-        organization_id="tenant-1",
-        identity_subject="sub",
-        display_name="Emp",
-        email="a@b.com",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
-    )
 
     import asyncio
 
@@ -345,14 +337,6 @@ async def test_urdu_script_and_roman_urdu_retrieval():
     )
 
     retriever = FixtureLexicalRetriever()
-    profile = EmployeeProfile(
-        id="emp",
-        organization_id="tenant-1",
-        identity_subject="sub",
-        display_name="Emp",
-        email="a@b.com",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
-    )
 
     # Roman Urdu query
     candidates_roman = await retriever.search("Mujhe chutti chahiye", [chunk_urdu], 10)
@@ -421,14 +405,6 @@ async def test_broad_query_returns_multiple_sections():
     )
 
     retriever = FixtureLexicalRetriever()
-    profile = EmployeeProfile(
-        id="emp",
-        organization_id="tenant-1",
-        identity_subject="sub",
-        display_name="Emp",
-        email="a@b.com",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
-    )
 
     candidates = await retriever.search("safety guidelines rules", [chunk_1, chunk_2], 10)
     assert len(candidates) == 2
