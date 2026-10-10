@@ -312,7 +312,7 @@ def test_lexical_heading_vs_body_match():
     )
 
     assert len(candidates) == 2
-    # Assert body match ranks higher than heading match because it contains the exact query phrase and term repetition.
+       # Body match ranks first: it has the exact phrase and repeated terms.
     assert candidates[0].chunk_id == "chunk-body"
     assert candidates[1].chunk_id == "chunk-heading"
 
