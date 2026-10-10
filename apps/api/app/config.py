@@ -53,11 +53,11 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-flash"
     deepseek_temperature: float = Field(default=0.2, ge=0, le=1)
 
-    embedding_provider: Literal["fixture", "e5", "pinecone_e5"] = "e5"
+    embedding_provider: Literal["fixture", "e5", "pinecone_e5", "bge_m3"] = "e5"
     e5_model_name: str = "multilingual-e5-large"
     e5_passage_prefix: str = "passage: "
     e5_query_prefix: str = "query: "
-    reranker_provider: str = "fixture"
+    retrieval_reranker: Literal["fixture", "lexical_heuristic"] = "fixture"
     document_parser_provider: Literal["fixture", "azure", "docling", "auto"] = "fixture"
     speech_provider: Literal["disabled"] = "disabled"
 
@@ -97,6 +97,7 @@ class Settings(BaseSettings):
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
             if self.embedding_provider not in {"e5", "pinecone_e5"}:
                 raise ValueError("EMBEDDING_PROVIDER must be e5 or pinecone_e5 in live mode")
+            # Retrieval reranker fixture is allowed in live mode because it's the current production default.
             if self.llm_provider != "deepseek":
                 raise ValueError("LLM_PROVIDER must be deepseek in live mode")
             if "localhost" in self.web_origin:

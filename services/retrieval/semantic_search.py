@@ -79,6 +79,8 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         *,
         index: Any | None = None,
     ) -> None:
+        if embeddings.__class__.__name__ == "BGEM3EmbeddingProvider":
+            raise ValueError("incompatible with the existing E5 Pinecone index")
         self._index: Any = index or Pinecone(api_key=api_key).Index(index_name)
         self._namespace_prefix = namespace_prefix
         self._embeddings = embeddings

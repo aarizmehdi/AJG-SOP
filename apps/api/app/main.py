@@ -60,6 +60,7 @@ from services.assistant.citations import CitationValidator
 from services.assistant.grounding import GroundingVerifier
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
+from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
 from services.ingestion.embeddings.e5_provider import E5EmbeddingProvider
 from services.ingestion.extractors.azure_document_intelligence import (
     AzureDocumentIntelligenceParser,
@@ -77,7 +78,7 @@ from services.ingestion.structure.canonical_document import Canonicalizer
 from services.retrieval.authorization_filter import AuthorizationFilter
 from services.retrieval.fusion import ReciprocalRankFusion
 from services.retrieval.lexical_search import FixtureLexicalRetriever
-from services.retrieval.reranker import FixtureReranker
+from services.retrieval.reranker import FixtureReranker, LexicalHeuristicReranker
 from services.retrieval.retriever import RetrievalService
 from services.retrieval.semantic_search import (
     FixtureSemanticRetriever,
@@ -170,7 +171,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # --- Publication pipeline providers ---
     publication_embeddings: EmbeddingProvider
     if settings.app_mode == "fixture":
-        publication_embeddings = FixtureEmbeddingProvider()
+        if settings.embedding_provider == "bge_m3":
+            publication_embeddings = BGEM3EmbeddingProvider(use_fake_model=True)
+        else:
+            publication_embeddings = FixtureEmbeddingProvider()
     else:
         publication_embeddings = E5EmbeddingProvider(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
@@ -203,21 +207,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     authorization = AuthorizationFilter(app.state.foundation_store)
     semantic: SemanticCandidateRetriever
     if settings.app_mode == "fixture":
-        semantic = FixtureSemanticRetriever(FixtureEmbeddingProvider())
+        if settings.embedding_provider == "bge_m3":
+            semantic = FixtureSemanticRetriever(BGEM3EmbeddingProvider(use_fake_model=True))
+        else:
+            semantic = FixtureSemanticRetriever(FixtureEmbeddingProvider())
     else:
+        if settings.embedding_provider == "bge_m3":
+            raise ValueError(
+                "BGE-M3 is fundamentally incompatible with the existing E5 Pinecone index due to distinct vector spaces. Cannot route BGE-M3 to Pinecone."
+            )
         semantic = PineconeSemanticRetriever(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
             settings.pinecone_index_name,
             settings.pinecone_namespace_prefix,
             publication_embeddings,
         )
+    # Note: FixtureLexicalRetriever is in fact the REAL production lexical channel
+    # over the authorized foundation store; it is just poorly named.
+
+    from services.retrieval.reranker import Reranker
+
+    reranker: Reranker
+    if settings.retrieval_reranker == "lexical_heuristic":
+        reranker = LexicalHeuristicReranker()
+    else:
+        # FixtureReranker is the current default production reranker in both modes.
+        reranker = FixtureReranker()
+
     app.state.retrieval_service = RetrievalService(
         app.state.foundation_store,
         authorization,
         FixtureLexicalRetriever(),
         semantic,
         ReciprocalRankFusion(),
-        FixtureReranker(),
+        reranker,
         app.state.metrics,
         app.state.purge_repository.synchronize_cache,
     )

@@ -199,6 +199,10 @@ def test_long_section_chunking():
     assert "Line 1" in chunks[0].text
     assert "Line 3" in chunks[-1].text
 
+    concatenated = " ".join(c.text for c in chunks)
+    for word in long_line.split():
+        assert word in concatenated
+
 
 def test_chunk_metadata_and_id_stability():
     chunker = SemanticChunker()

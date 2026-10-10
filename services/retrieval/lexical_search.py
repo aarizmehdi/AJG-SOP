@@ -36,6 +36,9 @@ ROMAN_URDU_MAP = {
 }
 
 
+# Note: FixtureLexicalRetriever is the ACTUAL production lexical channel
+# used in live mode. It executes an in-memory keyword search over the fully
+# authorized eligible_chunks from the FoundationStore.
 class FixtureLexicalRetriever(LexicalCandidateRetriever):
     async def search(
         self,

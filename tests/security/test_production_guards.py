@@ -207,3 +207,14 @@ def test_live_mode_prohibits_fixture_llm_and_retriever() -> None:
             s3_secret_access_key="test-secret",
             llm_provider="fixture",
         )
+
+
+def test_bge_m3_prohibited_from_pinecone_index() -> None:
+    # BGE-M3 produces 1024d vectors like E5, but the embedding space is completely different.
+    # We must explicitly prevent writing to or querying from the existing E5 index.
+    from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
+    from services.retrieval.semantic_search import PineconeSemanticRetriever
+
+    provider = BGEM3EmbeddingProvider(use_fake_model=True)
+    with pytest.raises(ValueError, match="incompatible with the existing E5 Pinecone index"):
+        PineconeSemanticRetriever("test-key", "aziz-jan-sop", "ns", provider)
