@@ -9,7 +9,7 @@ def test_system_admin_api_role_and_tenant_boundaries() -> None:
     with TestClient(app) as client:
         system_headers = {"Authorization": "Fixture system-admin"}
         assert client.get("/openapi.json").json()["info"]["title"] == (
-            "Aziz Jan Trust SOP Knowledge System"
+            "Aziz Jan Group SOP Knowledge System"
         )
         assert client.get("/api/v1/admin/users").status_code == 401
         assert (

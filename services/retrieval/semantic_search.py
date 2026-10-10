@@ -5,7 +5,6 @@ from typing import Any
 import anyio
 from pinecone import Pinecone
 
-from apps.api.app.models.organization import EmployeeProfile
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 from services.ingestion.embeddings.base import EmbeddingProvider

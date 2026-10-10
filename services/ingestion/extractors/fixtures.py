@@ -98,7 +98,9 @@ class FixtureDocumentParser(DocumentParser):
         metadata, content_start, warnings = cls._front_matter(lines)
         title = metadata.get("title", "").strip() or None
         policy_number = (
-            metadata.get("policy_number") or metadata.get("sop_number") or metadata.get("policy")
+            metadata.get("policy_number")
+            or metadata.get("sop_number")
+            or metadata.get("policy")
         )
         policy_number = policy_number.strip() if policy_number else None
         date_value = metadata.get("effective_date") or metadata.get("issue_date")
@@ -269,7 +271,8 @@ class FixtureDocumentParser(DocumentParser):
                 text=row[column_index] if column_index < len(row) else "",
                 is_header=row_index == 0,
                 cell_reference=(
-                    f"L{start + 1 + (0 if row_index == 0 else row_index + 1)}C{column_index + 1}"
+                    f"L{start + 1 + (0 if row_index == 0 else row_index + 1)}"
+                    f"C{column_index + 1}"
                 ),
             )
             for row_index, row in enumerate(rows)

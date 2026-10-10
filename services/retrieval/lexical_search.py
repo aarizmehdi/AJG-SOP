@@ -2,7 +2,6 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
-from apps.api.app.models.organization import EmployeeProfile
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 

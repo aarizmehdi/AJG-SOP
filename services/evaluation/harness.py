@@ -70,10 +70,7 @@ class _LexicalChannel(LexicalCandidateRetriever):
         self._pool = pool
 
     async def search(
-        self,
-        query: str,
-        eligible_chunks: Sequence[RetrievalChunk],
-        limit: int,
+        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
     ) -> list[RetrievalCandidate]:
         if not self._enabled:
             return []
@@ -91,10 +88,7 @@ class _SemanticChannel(SemanticCandidateRetriever):
         self._pool = pool
 
     async def search(
-        self,
-        query: str,
-        eligible_chunks: Sequence[RetrievalChunk],
-        limit: int,
+        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
     ) -> list[RetrievalCandidate]:
         if not self._enabled:
             return []
