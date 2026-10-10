@@ -638,3 +638,121 @@ async def test_table_row_value_retrieval():
     assert len(results) > 0
     # Must retrieve the chunk that has the row value
     assert any(ev.chunk_id == "chunk-t2" for ev in results)
+
+
+async def test_nested_list_retrieval():
+    from apps.api.app.services.foundation_store import FoundationStore
+    from packages.contracts.access import AccessDimension, AccessMode, AccessScope
+    from packages.contracts.canonical import SourceLocator, RetrievalChunk
+    from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
+    from packages.contracts.policy import SOPPolicy, PolicyStatus, SOPVersion, VersionStatus
+    from services.ingestion.embeddings.base import FixtureEmbeddingProvider
+    from services.retrieval.reranker import LexicalHeuristicReranker
+    from services.retrieval.retriever import RetrievalService
+    from services.retrieval.semantic_search import FixtureSemanticRetriever
+    from services.retrieval.fusion import ReciprocalRankFusion
+    from services.retrieval.lexical_search import FixtureLexicalRetriever
+    from services.retrieval.authorization_filter import AuthorizationFilter
+
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    dummy_source = SourceLocator(source_document_id="doc1")
+
+    chunk = RetrievalChunk(
+        id="chunk-list-1",
+        organization_id="tenant-1",
+        policy_id="pol1",
+        version_id="v1",
+        source_document_id="doc1",
+        section_id="sec1",
+        heading_path=("List Section",),
+        text="* Parent Item\n  * Child Item A\n    * Deep Item B",
+        access=scope,
+        source=dummy_source,
+        chunk_index=0,
+        publication_status="published",
+    )
+
+    store = FoundationStore(
+        policies={
+            "pol1": SOPPolicy(
+                id="pol1",
+                organization_id="tenant-1",
+                title="Pol",
+                category="Ops",
+                status=PolicyStatus.ACTIVE,
+                active_version_id="v1",
+            )
+        },
+        versions={
+            "v1": SOPVersion(
+                id="v1",
+                organization_id="tenant-1",
+                policy_id="pol1",
+                version_label="1",
+                status=VersionStatus.PUBLISHED,
+                access=scope,
+            )
+        },
+        chunks={"v1": [chunk]}
+    )
+
+    profile = EmployeeProfile(
+        id="user1",
+        organization_id="tenant-1",
+        identity_subject="auth0|user1",
+        display_name="Emp",
+        email="a@b.com",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+    )
+
+    service = RetrievalService(
+        store=store,
+        authorization=AuthorizationFilter(store),
+        lexical=FixtureLexicalRetriever(),
+        semantic=FixtureSemanticRetriever(FixtureEmbeddingProvider()),
+        fusion=ReciprocalRankFusion(),
+        reranker=LexicalHeuristicReranker(),
+    )
+
+    results = await service.retrieve(profile, "Deep Item B", limit=5)
+    assert len(results) == 1
+    assert results[0].chunk_id == "chunk-list-1"
+
+
+async def test_retrieval_abstains_when_no_evidence_matches():
+    from apps.api.app.services.foundation_store import FoundationStore
+    from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
+    from services.ingestion.embeddings.base import FixtureEmbeddingProvider
+    from services.retrieval.reranker import LexicalHeuristicReranker
+    from services.retrieval.retriever import RetrievalService
+    from services.retrieval.semantic_search import FixtureSemanticRetriever
+    from services.retrieval.fusion import ReciprocalRankFusion
+    from services.retrieval.lexical_search import FixtureLexicalRetriever
+    from services.retrieval.authorization_filter import AuthorizationFilter
+
+    store = FoundationStore(policies={}, versions={}, chunks={})
+    profile = EmployeeProfile(
+        id="user1",
+        organization_id="tenant-1",
+        identity_subject="auth0|user1",
+        display_name="Emp",
+        email="a@b.com",
+        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
+    )
+
+    service = RetrievalService(
+        store=store,
+        authorization=AuthorizationFilter(store),
+        lexical=FixtureLexicalRetriever(),
+        semantic=FixtureSemanticRetriever(FixtureEmbeddingProvider()),
+        fusion=ReciprocalRankFusion(),
+        reranker=LexicalHeuristicReranker(),
+    )
+
+    results = await service.retrieve(profile, "Completely random nonsense", limit=5)
+    assert len(results) == 0
+
