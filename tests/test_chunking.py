@@ -1,10 +1,16 @@
+from packages.contracts.access import AccessDimension, AccessMode, AccessScope
 from packages.contracts.canonical import (
+    BlockKind,
+    CanonicalBlock,
     CanonicalListItem,
+    CanonicalSection,
+    CanonicalSOP,
     CanonicalTable,
     CanonicalTableCell,
     SourceLocator,
 )
 from services.ingestion.chunking.semantic_chunker import (
+    SectionAwareFixtureChunker,
     SemanticChunker,
     serialize_list,
     serialize_table,
@@ -446,3 +452,306 @@ def test_safe_index_rebuild_diff_computation():
     assert len(old_sec1) > 0
     assert len(new_sec1) > 0
     assert old_sec1.isdisjoint(new_sec1)
+
+
+def test_table_continuation_repeats_headers_and_data_rows_distinct() -> None:
+    chunker = SectionAwareFixtureChunker()
+    chunker.MAX_WORDS = 10  # Force multi-chunk split across data rows
+
+    dummy_source = SourceLocator(source_document_id="doc-tbl")
+    table = CanonicalTable(
+        caption="Inventory Audit",
+        cells=[
+            CanonicalTableCell(
+                row=0, column=0, text="Item Name", is_header=True, source=dummy_source
+            ),
+            CanonicalTableCell(
+                row=0, column=1, text="Quantity In Stock", is_header=True, source=dummy_source
+            ),
+            CanonicalTableCell(
+                row=1, column=0, text="Warehouse Item Alpha", is_header=False, source=dummy_source
+            ),
+            CanonicalTableCell(
+                row=1,
+                column=1,
+                text="100 Units Stored Safely",
+                is_header=False,
+                source=dummy_source,
+            ),
+            CanonicalTableCell(
+                row=2, column=0, text="Warehouse Item Beta", is_header=False, source=dummy_source
+            ),
+            CanonicalTableCell(
+                row=2,
+                column=1,
+                text="200 Units Stored Safely",
+                is_header=False,
+                source=dummy_source,
+            ),
+            CanonicalTableCell(
+                row=3, column=0, text="Warehouse Item Gamma", is_header=False, source=dummy_source
+            ),
+            CanonicalTableCell(
+                row=3,
+                column=1,
+                text="300 Units Stored Safely",
+                is_header=False,
+                source=dummy_source,
+            ),
+        ],
+        source=dummy_source,
+    )
+    doc = CanonicalSOP(
+        id="sop-table",
+        organization_id="org-ajt",
+        policy_id="pol-table",
+        version_id="ver-1",
+        source_document_ids=["doc-tbl"],
+        title="Inventory Policy",
+        sections=[
+            CanonicalSection(
+                id="sec-tbl",
+                heading="Inventory Levels",
+                heading_level=1,
+                heading_path=("Inventory Levels",),
+                stable_key="sec-tbl-key",
+                content_hash="sec-tbl-hash",
+                blocks=[
+                    CanonicalBlock(
+                        id="b-tbl",
+                        kind=BlockKind.TABLE,
+                        text=None,
+                        table=table,
+                        source=dummy_source,
+                    )
+                ],
+                source=dummy_source,
+                access=AccessScope(
+                    departments=AccessDimension(mode=AccessMode.ALL),
+                    locations=AccessDimension(mode=AccessMode.ALL),
+                    roles=AccessDimension(mode=AccessMode.ALL),
+                ),
+            )
+        ],
+    )
+    chunks = chunker.chunk(doc, "published")
+    assert len(chunks) >= 3
+
+    # Headers repeated on second and later chunks
+    for i in range(1, len(chunks)):
+        assert "**Inventory Audit**" in chunks[i].text
+        assert "| Item Name | Quantity In Stock |" in chunks[i].text
+
+    # Every data row appears in exactly one chunk
+    data_rows = [
+        "Warehouse Item Alpha",
+        "Warehouse Item Beta",
+        "Warehouse Item Gamma",
+    ]
+    for row in data_rows:
+        appearances = sum(row in c.text for c in chunks)
+        assert appearances == 1, f"Expected {row} in exactly 1 chunk, found in {appearances}"
+
+
+def test_nested_list_chunking_preserves_hierarchy() -> None:
+    chunker = SectionAwareFixtureChunker()
+    dummy_source = SourceLocator(source_document_id="doc-list")
+    items = [
+        CanonicalListItem(
+            text="Phase 1: Initiation",
+            children=[
+                CanonicalListItem(
+                    text="Step 1.1: Document Verification",
+                    children=[
+                        CanonicalListItem(
+                            text="Action 1.1.1: Verify Employee CNIC",
+                            children=[],
+                            source=dummy_source,
+                        )
+                    ],
+                    source=dummy_source,
+                )
+            ],
+            source=dummy_source,
+        )
+    ]
+    doc = CanonicalSOP(
+        id="sop-list",
+        organization_id="org-ajt",
+        policy_id="pol-list",
+        version_id="ver-1",
+        source_document_ids=["doc-list"],
+        title="Onboarding Policy",
+        sections=[
+            CanonicalSection(
+                id="sec-list",
+                heading="Employee Verification",
+                heading_level=1,
+                heading_path=("Onboarding", "Verification"),
+                stable_key="sec-list-key",
+                content_hash="sec-list-hash",
+                blocks=[
+                    CanonicalBlock(
+                        id="b-list",
+                        kind=BlockKind.ORDERED_LIST,
+                        text=None,
+                        list_items=items,
+                        source=dummy_source,
+                    )
+                ],
+                source=dummy_source,
+                access=AccessScope(
+                    departments=AccessDimension(mode=AccessMode.ALL),
+                    locations=AccessDimension(mode=AccessMode.ALL),
+                    roles=AccessDimension(mode=AccessMode.ALL),
+                ),
+            )
+        ],
+    )
+    chunks = chunker.chunk(doc, "published")
+    assert len(chunks) == 1
+    assert (
+        "Phase 1: Initiation > Step 1.1: Document Verification > Action 1.1.1: Verify Employee CNIC"
+        in chunks[0].text
+    )
+
+
+def test_chunk_deterministic_id_and_text_stability() -> None:
+    chunker = SectionAwareFixtureChunker()
+    dummy_source = SourceLocator(source_document_id="doc-stable")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"HR"})),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    doc = CanonicalSOP(
+        id="sop-stable",
+        organization_id="org-ajt",
+        policy_id="pol-stable",
+        version_id="ver-stable",
+        source_document_ids=["doc-stable"],
+        title="Leave Policy",
+        sections=[
+            CanonicalSection(
+                id="sec-1",
+                heading="Annual Leave",
+                heading_level=1,
+                heading_path=("Leave Policy", "Annual Leave"),
+                stable_key="sec-1-key",
+                content_hash="sec-1-hash",
+                policy_number="SOP-HR-01",
+                blocks=[
+                    CanonicalBlock(
+                        id="b-1",
+                        kind=BlockKind.PARAGRAPH,
+                        text="Annual leave entitlement is 20 working days.",
+                        source=dummy_source,
+                    )
+                ],
+                source=dummy_source,
+                access=scope,
+            ),
+            CanonicalSection(
+                id="sec-2",
+                heading="Sick Leave",
+                heading_level=1,
+                heading_path=("Leave Policy", "Sick Leave"),
+                stable_key="sec-2-key",
+                content_hash="sec-2-hash",
+                policy_number="SOP-HR-01",
+                blocks=[
+                    CanonicalBlock(
+                        id="b-2",
+                        kind=BlockKind.PARAGRAPH,
+                        text="Sick leave requires medical certificate after 2 days.",
+                        source=dummy_source,
+                    )
+                ],
+                source=dummy_source,
+                access=scope,
+            ),
+        ],
+    )
+    run1 = chunker.chunk(doc, "published")
+    run2 = chunker.chunk(doc, "published")
+
+    assert len(run1) == len(run2) == 2
+    assert [c.id for c in run1] == [c.id for c in run2]
+    assert [c.text for c in run1] == [c.text for c in run2]
+
+
+def test_every_chunk_preserves_organization_and_access_metadata() -> None:
+    chunker = SectionAwareFixtureChunker()
+    dummy_source = SourceLocator(source_document_id="doc-meta")
+    scope_a = AccessScope(
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"Operations"})),
+        locations=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"Lahore"})),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    scope_b = AccessScope(
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"Finance"})),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"Manager"})),
+    )
+    sec_a = CanonicalSection(
+        id="sec-a",
+        heading="Operations SOP",
+        heading_level=1,
+        heading_path=("Operations", "Handling"),
+        stable_key="sec-a-key",
+        content_hash="sec-a-hash",
+        policy_number="SOP-OPS-100",
+        blocks=[
+            CanonicalBlock(
+                id="b-a",
+                kind=BlockKind.PARAGRAPH,
+                text="Operations section text line",
+                source=dummy_source,
+            )
+        ],
+        source=dummy_source,
+        access=scope_a,
+    )
+    sec_b = CanonicalSection(
+        id="sec-b",
+        heading="Finance SOP",
+        heading_level=1,
+        heading_path=("Finance", "Invoicing"),
+        stable_key="sec-b-key",
+        content_hash="sec-b-hash",
+        policy_number="SOP-FIN-200",
+        blocks=[
+            CanonicalBlock(
+                id="b-b",
+                kind=BlockKind.PARAGRAPH,
+                text="Finance section text line",
+                source=dummy_source,
+            )
+        ],
+        source=dummy_source,
+        access=scope_b,
+    )
+    doc = CanonicalSOP(
+        id="sop-multi-meta",
+        organization_id="tenant-ajg",
+        policy_id="pol-multi",
+        version_id="ver-multi",
+        source_document_ids=["doc-meta"],
+        title="Multi Domain SOP",
+        sections=[sec_a, sec_b],
+    )
+    chunks = chunker.chunk(doc, "published")
+    assert len(chunks) == 2
+
+    chunk_a = next(c for c in chunks if c.section_id == "sec-a")
+    assert chunk_a.organization_id == "tenant-ajg"
+    assert chunk_a.access == scope_a
+    assert chunk_a.heading_path == ("Operations", "Handling")
+    assert chunk_a.policy_number == "SOP-OPS-100"
+
+    chunk_b = next(c for c in chunks if c.section_id == "sec-b")
+    assert chunk_b.organization_id == "tenant-ajg"
+    assert chunk_b.access == scope_b
+    assert chunk_b.heading_path == ("Finance", "Invoicing")
+    assert chunk_b.policy_number == "SOP-FIN-200"
+
