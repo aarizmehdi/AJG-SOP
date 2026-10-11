@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-flash"
     deepseek_temperature: float = Field(default=0.2, ge=0, le=1)
 
-    embedding_provider: Literal["fixture", "pinecone_e5", "e5", "bge_m3"] = "fixture"
+    embedding_provider: Literal["fixture", "pinecone_e5", "e5"] = "fixture"
     embedding_model: str = "multilingual-e5-large"
     reranker_provider: str = "fixture"
     retrieval_reranker: Literal["fixture", "lexical_heuristic"] = "fixture"

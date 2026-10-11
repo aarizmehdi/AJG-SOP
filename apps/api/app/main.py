@@ -60,7 +60,6 @@ from services.assistant.citations import CitationValidator
 from services.assistant.grounding import GroundingVerifier
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
-from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
 from services.ingestion.embeddings.pinecone_e5 import PineconeE5EmbeddingProvider
 from services.ingestion.extractors.azure_document_intelligence import (
     AzureDocumentIntelligenceParser,
@@ -171,10 +170,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # --- Publication pipeline providers ---
     publication_embeddings: EmbeddingProvider
     if settings.app_mode == "fixture":
-        if settings.embedding_provider == "bge_m3":
-            publication_embeddings = BGEM3EmbeddingProvider(use_fake_model=True)
-        else:
-            publication_embeddings = FixtureEmbeddingProvider()
+        publication_embeddings = FixtureEmbeddingProvider()
     else:
         publication_embeddings = PineconeE5EmbeddingProvider(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
@@ -207,13 +203,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     authorization = AuthorizationFilter(app.state.foundation_store)
     semantic: SemanticCandidateRetriever
     if settings.app_mode == "fixture":
-        if settings.embedding_provider == "bge_m3":
-            semantic = FixtureSemanticRetriever(BGEM3EmbeddingProvider(use_fake_model=True))
-        else:
-            semantic = FixtureSemanticRetriever(FixtureEmbeddingProvider())
+        semantic = FixtureSemanticRetriever(FixtureEmbeddingProvider())
     else:
-        if settings.embedding_provider == "bge_m3":
-            raise ValueError("BGE-M3 is incompatible with E5 index. Cannot route to Pinecone.")
         semantic = PineconeSemanticRetriever(
             settings.pinecone_api_key.get_secret_value() if settings.pinecone_api_key else "",
             settings.pinecone_index,

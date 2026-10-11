@@ -8,7 +8,6 @@ from pinecone import Pinecone
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 from services.ingestion.embeddings.base import EmbeddingProvider
-from services.ingestion.embeddings.bge_m3_provider import BGEM3EmbeddingProvider
 
 
 class SemanticCandidateRetriever(ABC):
@@ -77,8 +76,6 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         *,
         index: Any | None = None,
     ) -> None:
-        if isinstance(embeddings, BGEM3EmbeddingProvider):
-            raise ValueError("incompatible with the existing E5 Pinecone index")
         self._index: Any = index or Pinecone(api_key=api_key).Index(index_name)
         self._namespace_prefix = namespace_prefix
         self._embeddings = embeddings
