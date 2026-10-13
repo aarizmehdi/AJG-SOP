@@ -16,7 +16,12 @@ class Reranker(ABC):
 
 
 class FixtureReranker(Reranker):
-    """Deterministic test reranker; provider/model selection remains provisional."""
+    """Deterministic baseline reranker used as the default in both fixture and live modes.
+
+    Applies a slight token-overlap tie-breaking adjustment (+0.001 per matching query term)
+    to fused candidates over authorized chunks. It only processes chunks present in the
+    authorized eligible map, preserving RRF ordering while remaining fully deterministic.
+    """
 
     async def rerank(
         self,

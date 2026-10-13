@@ -35,6 +35,14 @@ ROMAN_URDU_MAP = {
 
 
 class FixtureLexicalRetriever(LexicalCandidateRetriever):
+    """In-memory lexical candidate retriever used across both fixture and live modes.
+
+    Despite its fixture-prefixed name, this component is the active lexical retrieval channel
+    in production wiring. It operates strictly over pre-filtered, authorized eligible chunks,
+    applying Roman Urdu normalization, exact SOP code matching bonuses (+10.0), exact phrase
+    matching bonuses (+4.0), and term frequency scoring. All candidate rankings are deterministic.
+    """
+
     async def search(
         self,
         query: str,

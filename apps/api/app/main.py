@@ -213,9 +213,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     # FixtureLexicalRetriever is the lexical retriever used in live mode too: it performs
-    # in-memory term matching over authorized chunks despite its fixture-style name.
-    # FixtureReranker is the default reranker in all modes.
-    # Neither is a production semantic/cross-encoder reranker.
+    # in-memory term matching and transliteration bonus over authorized chunks despite its
+    # fixture-style prefix. FixtureReranker is the default reranker in all modes, providing
+    # a deterministic token-overlap baseline. Neither is a cross-encoder or neural reranker.
 
     from services.retrieval.reranker import Reranker
 
