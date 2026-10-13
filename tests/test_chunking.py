@@ -851,7 +851,7 @@ def test_golden_table_that_fits() -> None:
 
 def test_golden_table_split_at_row_boundaries() -> None:
     chunker = SemanticChunker()
-    chunker.MAX_WORDS = 25
+    chunker.MAX_WORDS = 15
     dummy = SourceLocator(source_document_id="doc1")
     scope = AccessScope(
         departments=AccessDimension(mode=AccessMode.ALL),
@@ -865,11 +865,19 @@ def test_golden_table_split_at_row_boundaries() -> None:
             CanonicalTableCell(row=0, column=1, text="H B", is_header=True, source=dummy),
             CanonicalTableCell(row=1, column=0, text="Row 1 A", is_header=False, source=dummy),
             CanonicalTableCell(
-                row=1, column=1, text="Row 1 B word " * 8, is_header=False, source=dummy
+                row=1,
+                column=1,
+                text="Row 1 B data words here for testing",
+                is_header=False,
+                source=dummy,
             ),
             CanonicalTableCell(row=2, column=0, text="Row 2 A", is_header=False, source=dummy),
             CanonicalTableCell(
-                row=2, column=1, text="Row 2 B word " * 8, is_header=False, source=dummy
+                row=2,
+                column=1,
+                text="Row 2 B data words here for testing",
+                is_header=False,
+                source=dummy,
             ),
         ],
         source=dummy,
@@ -907,13 +915,11 @@ def test_golden_table_split_at_row_boundaries() -> None:
     assert chunks[1].id == "v1:sec3:1"
     expected_chunk0 = (
         "Audit\n**Audit**\n| H A | H B |\n|---|---|\n"
-        "| Row 1 A | Row 1 B word Row 1 B word Row 1 B word Row 1 B word "
-        "Row 1 B word Row 1 B word Row 1 B word Row 1 B word  |"
+        "| Row 1 A | Row 1 B data words here for testing |"
     )
     expected_chunk1 = (
         "Audit\n**Audit**\n| H A | H B |\n|---|---|\n"
-        "| Row 2 A | Row 2 B word Row 2 B word Row 2 B word Row 2 B word "
-        "Row 2 B word Row 2 B word Row 2 B word Row 2 B word  |"
+        "| Row 2 A | Row 2 B data words here for testing |"
     )
     assert chunks[0].text == expected_chunk0
     assert chunks[1].text == expected_chunk1
@@ -1014,3 +1020,258 @@ def test_golden_long_paragraph_over_max_words() -> None:
     assert chunks[1].text == "Long\n" + " ".join(words[20:40])
     assert chunks[2].text == "Long\n" + " ".join(words[40:50])
 
+
+def test_oversized_table_row_splits_at_cell_boundaries_with_header_repeat() -> None:
+    chunker = SemanticChunker()
+    chunker.MAX_WORDS = 15
+    dummy = SourceLocator(source_document_id="doc-ovr")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"Warehouse"})),
+        locations=AccessDimension(mode=AccessMode.SELECTED, values=frozenset({"Mill-1"})),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    table = CanonicalTable(
+        caption="Godown Capacity Audit",
+        cells=[
+            CanonicalTableCell(row=0, column=0, text="Godown", is_header=True, source=dummy),
+            CanonicalTableCell(row=0, column=1, text="Material", is_header=True, source=dummy),
+            CanonicalTableCell(row=0, column=2, text="Capacity", is_header=True, source=dummy),
+            CanonicalTableCell(row=0, column=3, text="Status", is_header=True, source=dummy),
+            CanonicalTableCell(row=1, column=0, text="Godown 9", is_header=False, source=dummy),
+            CanonicalTableCell(
+                row=1,
+                column=1,
+                text="Raw Cotton Grade A with long description of packaging",
+                is_header=False,
+                source=dummy,
+            ),
+            CanonicalTableCell(
+                row=1,
+                column=2,
+                text="Capacity 4824 Metric Tonnes stored safely in warehouse shelf",
+                is_header=False,
+                source=dummy,
+            ),
+            CanonicalTableCell(
+                row=1,
+                column=3,
+                text="Status Active and verified by supervisor",
+                is_header=False,
+                source=dummy,
+            ),
+        ],
+        source=dummy,
+    )
+    section = CanonicalSection(
+        id="sec-ovr",
+        heading="Storage",
+        heading_level=1,
+        heading_path=("Warehouse", "Inventory"),
+        policy_number="SOP-WH-001",
+        stable_key="sec-ovr-key",
+        content_hash="sec-ovr-hash",
+        blocks=[CanonicalBlock(id="b-ovr", kind=BlockKind.TABLE, table=table, source=dummy)],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-ovr",
+        organization_id="tenant-ajg",
+        policy_id="pol-wh",
+        version_id="ver-tbl",
+        source_document_ids=["doc-ovr"],
+        title="Warehouse Inventory SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 3
+
+    # Consecutive deterministic IDs
+    assert [c.id for c in chunks] == [
+        "ver-tbl:sec-ovr:0",
+        "ver-tbl:sec-ovr:1",
+        "ver-tbl:sec-ovr:2",
+    ]
+
+    # Every part repeats caption, table header, context cell, and preserves metadata
+    for c in chunks:
+        assert "**Godown Capacity Audit**" in c.text
+        assert "| Godown | Material | Capacity | Status |" in c.text
+        assert "Godown 9" in c.text
+        assert c.access == scope
+        assert c.organization_id == "tenant-ajg"
+        assert c.heading_path == ("Warehouse", "Inventory")
+        assert c.policy_number == "SOP-WH-001"
+
+    # Every data row cell appears in exactly one part
+    cell_texts = [
+        "Raw Cotton Grade A with long description of packaging",
+        "Capacity 4824 Metric Tonnes stored safely in warehouse shelf",
+        "Status Active and verified by supervisor",
+    ]
+    for cell_text in cell_texts:
+        appearances = sum(cell_text in c.text for c in chunks)
+        assert appearances == 1, f"Expected '{cell_text}' in 1 chunk, found in {appearances}"
+
+    # Stable and deterministic across runs
+    run2 = chunker.chunk(sop, "published")
+    assert [c.id for c in chunks] == [c.id for c in run2]
+    assert [c.text for c in chunks] == [c.text for c in run2]
+
+
+def test_oversized_single_cell_splits_at_word_boundaries_without_content_loss() -> None:
+    chunker = SemanticChunker()
+    chunker.MAX_WORDS = 20
+    dummy = SourceLocator(source_document_id="doc-cell")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    desc_words = [f"desc_token_{i}" for i in range(45)]
+    long_desc = " ".join(desc_words)
+
+    table = CanonicalTable(
+        caption="Chemical Safety",
+        cells=[
+            CanonicalTableCell(row=0, column=0, text="Chemical", is_header=True, source=dummy),
+            CanonicalTableCell(row=0, column=1, text="Safety Notes", is_header=True, source=dummy),
+            CanonicalTableCell(row=1, column=0, text="Solvent-X", is_header=False, source=dummy),
+            CanonicalTableCell(row=1, column=1, text=long_desc, is_header=False, source=dummy),
+        ],
+        source=dummy,
+    )
+    section = CanonicalSection(
+        id="sec-cell",
+        heading="Hazards",
+        heading_level=1,
+        heading_path=("Safety", "Hazards"),
+        policy_number="SOP-SAFE-01",
+        stable_key="sec-cell-key",
+        content_hash="sec-cell-hash",
+        blocks=[CanonicalBlock(id="b-cell", kind=BlockKind.TABLE, table=table, source=dummy)],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-cell",
+        organization_id="tenant-ajg",
+        policy_id="pol-safe",
+        version_id="ver-cell",
+        source_document_ids=["doc-cell"],
+        title="Safety SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 3
+
+    # All parts repeat header and context
+    for c in chunks:
+        assert "**Chemical Safety**" in c.text
+        assert "| Chemical | Safety Notes |" in c.text
+        assert "Solvent-X" in c.text
+
+    # Concatenation of split cell parts recovers all words with no loss
+    recovered_words: list[str] = []
+    for c in chunks:
+        for line in c.text.split("\n"):
+            if line.startswith("| Solvent-X |"):
+                cell_part = line.split("|")[2].strip()
+                recovered_words.extend(cell_part.split())
+
+    assert recovered_words == desc_words
+
+
+def test_header_only_table_does_not_crash() -> None:
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc-hdr")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    table = CanonicalTable(
+        caption="Empty Table Structure",
+        cells=[
+            CanonicalTableCell(row=0, column=0, text="Column Alpha", is_header=True, source=dummy),
+            CanonicalTableCell(row=0, column=1, text="Column Beta", is_header=True, source=dummy),
+        ],
+        source=dummy,
+    )
+    section = CanonicalSection(
+        id="sec-hdr",
+        heading="Definitions",
+        heading_level=1,
+        heading_path=("Appendix", "Definitions"),
+        policy_number="SOP-APP-01",
+        stable_key="sec-hdr-key",
+        content_hash="sec-hdr-hash",
+        blocks=[CanonicalBlock(id="b-hdr", kind=BlockKind.TABLE, table=table, source=dummy)],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-hdr",
+        organization_id="tenant-ajg",
+        policy_id="pol-hdr",
+        version_id="ver-hdr",
+        source_document_ids=["doc-hdr"],
+        title="Appendix SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 1
+    assert "**Empty Table Structure**" in chunks[0].text
+    assert "| Column Alpha | Column Beta |" in chunks[0].text
+
+
+def test_oversized_table_row_edge_case_header_context_exceeds_budget() -> None:
+    chunker = SemanticChunker()
+    chunker.MAX_WORDS = 5  # Artificially low budget where header + context exceeds budget
+    dummy = SourceLocator(source_document_id="doc-edge")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    table = CanonicalTable(
+        caption="Large Header Edge Case",
+        cells=[
+            CanonicalTableCell(row=0, column=0, text="Godown Header", is_header=True, source=dummy),
+            CanonicalTableCell(
+                row=0, column=1, text="Capacity Header", is_header=True, source=dummy
+            ),
+            CanonicalTableCell(
+                row=1, column=0, text="Godown Nine Alpha", is_header=False, source=dummy
+            ),
+            CanonicalTableCell(
+                row=1, column=1, text="One Hundred Tons", is_header=False, source=dummy
+            ),
+        ],
+        source=dummy,
+    )
+    section = CanonicalSection(
+        id="sec-edge",
+        heading="Edge Heading",
+        heading_level=1,
+        heading_path=("Edge", "Section"),
+        policy_number="SOP-EDGE-01",
+        stable_key="sec-edge-key",
+        content_hash="sec-edge-hash",
+        blocks=[CanonicalBlock(id="b-edge", kind=BlockKind.TABLE, table=table, source=dummy)],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-edge",
+        organization_id="tenant-ajg",
+        policy_id="pol-edge",
+        version_id="ver-edge",
+        source_document_ids=["doc-edge"],
+        title="Edge SOP",
+        sections=[section],
+    )
+    # Does not crash or drop content
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) >= 1
+    assert any("One Hundred Tons" in c.text for c in chunks)

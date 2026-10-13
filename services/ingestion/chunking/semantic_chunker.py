@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 
+import structlog
+
 from packages.contracts.canonical import (
     BlockKind,
     CanonicalBlock,
@@ -21,7 +23,7 @@ def serialize_list(items: list[CanonicalListItem], parent_text: str = "") -> lis
     return result
 
 
-def serialize_table(table: CanonicalTable) -> list[str]:
+def _build_table_grid(table: CanonicalTable) -> list[list[str]]:
     if not table.cells:
         return []
 
@@ -33,6 +35,13 @@ def serialize_table(table: CanonicalTable) -> list[str]:
         for r in range(cell.row, cell.row + cell.row_span):
             for c in range(cell.column, cell.column + cell.column_span):
                 grid[r][c] = cell.text.replace("\n", " ").replace("|", "\\|")
+    return grid
+
+
+def serialize_table(table: CanonicalTable) -> list[str]:
+    grid = _build_table_grid(table)
+    if not grid:
+        return []
 
     lines = []
     if table.caption:
@@ -41,7 +50,7 @@ def serialize_table(table: CanonicalTable) -> list[str]:
     for i, row in enumerate(grid):
         lines.append("| " + " | ".join(row) + " |")
         if i == 0:
-            lines.append("|" + "|".join(["---"] * (max_col + 1)) + "|")
+            lines.append("|" + "|".join(["---"] * len(row)) + "|")
 
     return lines
 
@@ -62,6 +71,84 @@ class SemanticChunker(Chunker):
         for section in document.sections:
             chunks.extend(self._chunk_section(document, section, publication_status))
         return chunks
+
+    def _split_oversized_table_row(
+        self,
+        headers: list[str],
+        row_cells: list[str],
+        caption: str | None,
+        heading: str,
+    ) -> list[list[str]]:
+        num_cols = len(headers)
+        context_cell = row_cells[0] if num_cols > 0 else ""
+
+        header_lines: list[str] = []
+        if caption:
+            header_lines.append(f"**{caption}**")
+        header_lines.append("| " + " | ".join(headers) + " |")
+        header_lines.append("|" + "|".join(["---"] * num_cols) + "|")
+
+        parts: list[list[str]] = []
+
+        if num_cols <= 1:
+            words = context_cell.split()
+            for i in range(0, len(words), self.MAX_WORDS):
+                seg = " ".join(words[i : i + self.MAX_WORDS])
+                parts.append([*header_lines, f"| {seg} |"])
+            return parts
+
+        if len(context_cell.split()) > self.MAX_WORDS:
+            structlog.get_logger().warning(
+                "oversized_table_row_header_context_exceeds_limit",
+                heading=heading,
+                caption=caption,
+                context_words=len(context_cell.split()),
+                limit=self.MAX_WORDS,
+            )
+
+        def row_line_for(col_dict: dict[int, str]) -> str:
+            cells = [context_cell]
+            for c in range(1, num_cols):
+                cells.append(col_dict.get(c, ""))
+            return "| " + " | ".join(cells) + " |"
+
+        def row_words(col_dict: dict[int, str]) -> int:
+            return len(row_line_for(col_dict).split())
+
+        current_cols: dict[int, str] = {}
+
+        for c in range(1, num_cols):
+            cell_text = row_cells[c]
+            if not cell_text:
+                continue
+
+            cell_words = len(cell_text.split())
+
+            if cell_words > self.MAX_WORDS:
+                if current_cols:
+                    parts.append([*header_lines, row_line_for(current_cols)])
+                    current_cols = {}
+
+                words = cell_text.split()
+                for i in range(0, len(words), self.MAX_WORDS):
+                    seg = " ".join(words[i : i + self.MAX_WORDS])
+                    parts.append([*header_lines, row_line_for({c: seg})])
+            else:
+                test_cols = dict(current_cols)
+                test_cols[c] = cell_text
+                if row_words(test_cols) <= self.MAX_WORDS or not current_cols:
+                    current_cols[c] = cell_text
+                else:
+                    parts.append([*header_lines, row_line_for(current_cols)])
+                    current_cols = {c: cell_text}
+
+        if current_cols:
+            parts.append([*header_lines, row_line_for(current_cols)])
+
+        if not parts:
+            parts.append([*header_lines, row_line_for({})])
+
+        return parts
 
     def _chunk_section(
         self, document: CanonicalSOP, section: CanonicalSection, publication_status: str
@@ -105,17 +192,56 @@ class SemanticChunker(Chunker):
             is_table = block.kind is BlockKind.TABLE and block.table is not None
 
             if is_table:
-                table_lines = serialize_table(block.table)  # type: ignore
-                header_count = 3 if block.table and block.table.caption else 2
-                header_lines = table_lines[:header_count]
-                data_lines = table_lines[header_count:]
+                grid = _build_table_grid(block.table)  # type: ignore
+                if not grid:
+                    continue
 
-                # Start with headers if we process data lines
-                table_words_so_far = 0
+                caption = block.table.caption if block.table else None
+                grid_headers = grid[0]
+
+                header_lines: list[str] = []
+                if caption:
+                    header_lines.append(f"**{caption}**")
+                header_lines.append("| " + " | ".join(grid_headers) + " |")
+                header_lines.append("|" + "|".join(["---"] * len(grid_headers)) + "|")
+
+                data_rows = grid[1:]
+                if not data_rows:
+                    current_text.extend(header_lines)
+                    current_words += sum(len(line.split()) for line in header_lines)
+                    continue
+
                 temp_table_lines = list(header_lines)
+                table_words_so_far = 0
 
-                for line in data_lines:
+                for row_cells in data_rows:
+                    line = "| " + " | ".join(row_cells) + " |"
                     line_words = len(line.split())
+
+                    if line_words > self.MAX_WORDS:
+                        if table_words_so_far > 0:
+                            current_text.extend(temp_table_lines)
+                            current_words += table_words_so_far
+                        if current_text:
+                            flush()
+                        temp_table_lines = list(header_lines)
+                        table_words_so_far = 0
+
+                        part_lines_list = self._split_oversized_table_row(
+                            grid_headers,
+                            row_cells,
+                            caption=caption,
+                            heading=heading,
+                        )
+                        for part_lines in part_lines_list:
+                            current_text = list(part_lines)
+                            current_words = sum(len(pl.split()) for pl in part_lines)
+                            flush()
+
+                        temp_table_lines = list(header_lines)
+                        table_words_so_far = 0
+                        continue
+
                     if current_words + table_words_so_far + line_words > self.MAX_WORDS and (
                         current_words > 0 or table_words_so_far > 0
                     ):
