@@ -755,3 +755,262 @@ def test_every_chunk_preserves_organization_and_access_metadata() -> None:
     assert chunk_b.heading_path == ("Finance", "Invoicing")
     assert chunk_b.policy_number == "SOP-FIN-200"
 
+
+def test_golden_small_single_chunk_section() -> None:
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc1")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    section = CanonicalSection(
+        id="sec1",
+        heading="Login",
+        heading_level=1,
+        heading_path=("Security", "Login"),
+        stable_key="k1",
+        content_hash="h1",
+        blocks=[
+            CanonicalBlock(
+                id="b1",
+                kind=BlockKind.PARAGRAPH,
+                text="Simple login text.",
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop1",
+        organization_id="org1",
+        policy_id="pol1",
+        version_id="v1",
+        source_document_ids=["doc1"],
+        title="SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 1
+    assert chunks[0].id == "v1:sec1:0"
+    assert chunks[0].text == "Security > Login\nSimple login text."
+
+
+def test_golden_table_that_fits() -> None:
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc1")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    table = CanonicalTable(
+        caption="Roles",
+        cells=[
+            CanonicalTableCell(row=0, column=0, text="Role", is_header=True, source=dummy),
+            CanonicalTableCell(row=0, column=1, text="Level", is_header=True, source=dummy),
+            CanonicalTableCell(row=1, column=0, text="Admin", is_header=False, source=dummy),
+            CanonicalTableCell(row=1, column=1, text="Tier 1", is_header=False, source=dummy),
+        ],
+        source=dummy,
+    )
+    section = CanonicalSection(
+        id="sec2",
+        heading="Roles",
+        heading_level=1,
+        heading_path=("Roles",),
+        stable_key="k2",
+        content_hash="h2",
+        blocks=[
+            CanonicalBlock(
+                id="b2",
+                kind=BlockKind.TABLE,
+                table=table,
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop2",
+        organization_id="org1",
+        policy_id="pol1",
+        version_id="v1",
+        source_document_ids=["doc1"],
+        title="SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 1
+    assert chunks[0].id == "v1:sec2:0"
+    expected_text = "Roles\n**Roles**\n| Role | Level |\n|---|---|\n| Admin | Tier 1 |"
+    assert chunks[0].text == expected_text
+
+
+def test_golden_table_split_at_row_boundaries() -> None:
+    chunker = SemanticChunker()
+    chunker.MAX_WORDS = 25
+    dummy = SourceLocator(source_document_id="doc1")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    table = CanonicalTable(
+        caption="Audit",
+        cells=[
+            CanonicalTableCell(row=0, column=0, text="H A", is_header=True, source=dummy),
+            CanonicalTableCell(row=0, column=1, text="H B", is_header=True, source=dummy),
+            CanonicalTableCell(row=1, column=0, text="Row 1 A", is_header=False, source=dummy),
+            CanonicalTableCell(
+                row=1, column=1, text="Row 1 B word " * 8, is_header=False, source=dummy
+            ),
+            CanonicalTableCell(row=2, column=0, text="Row 2 A", is_header=False, source=dummy),
+            CanonicalTableCell(
+                row=2, column=1, text="Row 2 B word " * 8, is_header=False, source=dummy
+            ),
+        ],
+        source=dummy,
+    )
+    section = CanonicalSection(
+        id="sec3",
+        heading="Audit",
+        heading_level=1,
+        heading_path=("Audit",),
+        stable_key="k3",
+        content_hash="h3",
+        blocks=[
+            CanonicalBlock(
+                id="b3",
+                kind=BlockKind.TABLE,
+                table=table,
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop3",
+        organization_id="org1",
+        policy_id="pol1",
+        version_id="v1",
+        source_document_ids=["doc1"],
+        title="SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 2
+    assert chunks[0].id == "v1:sec3:0"
+    assert chunks[1].id == "v1:sec3:1"
+    expected_chunk0 = (
+        "Audit\n**Audit**\n| H A | H B |\n|---|---|\n"
+        "| Row 1 A | Row 1 B word Row 1 B word Row 1 B word Row 1 B word "
+        "Row 1 B word Row 1 B word Row 1 B word Row 1 B word  |"
+    )
+    expected_chunk1 = (
+        "Audit\n**Audit**\n| H A | H B |\n|---|---|\n"
+        "| Row 2 A | Row 2 B word Row 2 B word Row 2 B word Row 2 B word "
+        "Row 2 B word Row 2 B word Row 2 B word Row 2 B word  |"
+    )
+    assert chunks[0].text == expected_chunk0
+    assert chunks[1].text == expected_chunk1
+
+
+def test_golden_nested_list() -> None:
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc1")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    items = [
+        CanonicalListItem(
+            text="Top Level",
+            children=[CanonicalListItem(text="Child Item", children=[], source=dummy)],
+            source=dummy,
+        )
+    ]
+    section = CanonicalSection(
+        id="sec4",
+        heading="Hierarchy",
+        heading_level=1,
+        heading_path=("Hierarchy",),
+        stable_key="k4",
+        content_hash="h4",
+        blocks=[
+            CanonicalBlock(
+                id="b4",
+                kind=BlockKind.ORDERED_LIST,
+                list_items=items,
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop4",
+        organization_id="org1",
+        policy_id="pol1",
+        version_id="v1",
+        source_document_ids=["doc1"],
+        title="SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 1
+    assert chunks[0].id == "v1:sec4:0"
+    assert chunks[0].text == "Hierarchy\nTop Level\nTop Level > Child Item"
+
+
+def test_golden_long_paragraph_over_max_words() -> None:
+    chunker = SemanticChunker()
+    chunker.MAX_WORDS = 20
+    dummy = SourceLocator(source_document_id="doc1")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    words = [f"word{i}" for i in range(50)]
+    para_text = " ".join(words)
+    section = CanonicalSection(
+        id="sec5",
+        heading="Long",
+        heading_level=1,
+        heading_path=("Long",),
+        stable_key="k5",
+        content_hash="h5",
+        blocks=[
+            CanonicalBlock(
+                id="b5",
+                kind=BlockKind.PARAGRAPH,
+                text=para_text,
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop5",
+        organization_id="org1",
+        policy_id="pol1",
+        version_id="v1",
+        source_document_ids=["doc1"],
+        title="SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 3
+    assert chunks[0].id == "v1:sec5:0"
+    assert chunks[1].id == "v1:sec5:1"
+    assert chunks[2].id == "v1:sec5:2"
+    assert chunks[0].text == "Long\n" + " ".join(words[:20])
+    assert chunks[1].text == "Long\n" + " ".join(words[20:40])
+    assert chunks[2].text == "Long\n" + " ".join(words[40:50])
+
