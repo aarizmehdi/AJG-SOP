@@ -107,18 +107,6 @@ def test_employee_restricted_pinecone_filter():
 
 
 def test_fusion_preserves_same_section_distinct_chunks():
-    profile = EmployeeProfile(
-        id="emp-1",
-        organization_id="tenant-1",
-        identity_subject="auth0|456",
-        display_name="Emp",
-        email="emp@test.com",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
-        departments=frozenset(),
-        locations=frozenset(),
-        organizational_roles=frozenset(),
-    )
-
     # Two chunks from the same section (e.g. preamble and table)
     lexical = [
         RetrievalCandidate(
@@ -152,7 +140,7 @@ def test_fusion_preserves_same_section_distinct_chunks():
     ]
 
     fusion = ReciprocalRankFusion()
-    fused = fusion.fuse(lexical, semantic, profile)
+    fused = fusion.fuse(lexical, semantic)
 
     # Both unique chunks must survive
     assert len(fused) == 2
@@ -162,18 +150,6 @@ def test_fusion_preserves_same_section_distinct_chunks():
 
 
 def test_fusion_same_channel_distinct_chunks_both_survive():
-    profile = EmployeeProfile(
-        id="emp-1",
-        organization_id="tenant-1",
-        identity_subject="auth0|456",
-        display_name="Emp",
-        email="emp@test.com",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
-        departments=frozenset(),
-        locations=frozenset(),
-        organizational_roles=frozenset(),
-    )
-
     def lexical_candidate(chunk_id: str, rank: int) -> RetrievalCandidate:
         return RetrievalCandidate(
             tenant_id="tenant-1",
@@ -191,24 +167,12 @@ def test_fusion_same_channel_distinct_chunks_both_survive():
 
     lexical = [lexical_candidate("v1:sec1:0", 1), lexical_candidate("v1:sec1:1", 2)]
 
-    fused = ReciprocalRankFusion().fuse(lexical, [], profile)
+    fused = ReciprocalRankFusion().fuse(lexical, [])
 
     assert [item[0] for item in fused] == ["v1:sec1:0", "v1:sec1:1"]
 
 
 def test_fusion_exact_same_chunk_merges_and_scores():
-    profile = EmployeeProfile(
-        id="emp-1",
-        organization_id="tenant-1",
-        identity_subject="auth0|456",
-        display_name="Emp",
-        email="emp@test.com",
-        application_roles=frozenset({ApplicationRole.EMPLOYEE}),
-        departments=frozenset(),
-        locations=frozenset(),
-        organizational_roles=frozenset(),
-    )
-
     lexical = [
         RetrievalCandidate(
             tenant_id="tenant-1",
@@ -241,7 +205,7 @@ def test_fusion_exact_same_chunk_merges_and_scores():
     ]
 
     fusion = ReciprocalRankFusion(rank_constant=60)
-    fused = fusion.fuse(lexical, semantic, profile)
+    fused = fusion.fuse(lexical, semantic)
 
     # Must be merged into a single candidate
     assert len(fused) == 1

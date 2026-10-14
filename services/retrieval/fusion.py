@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-from apps.api.app.models.organization import EmployeeProfile
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 
 
@@ -10,7 +9,6 @@ class CandidateFusion(ABC):
         self,
         lexical: list[RetrievalCandidate],
         semantic: list[RetrievalCandidate],
-        profile: EmployeeProfile,
     ) -> list[tuple[str, float]]:
         raise NotImplementedError
 
@@ -29,7 +27,6 @@ class ReciprocalRankFusion(CandidateFusion):
         self,
         lexical: list[RetrievalCandidate],
         semantic: list[RetrievalCandidate],
-        profile: EmployeeProfile,
     ) -> list[tuple[str, float]]:
         scores: dict[str, float] = {}
         seen: set[tuple[str, CandidateChannel]] = set()
