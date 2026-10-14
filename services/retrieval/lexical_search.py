@@ -17,6 +17,7 @@ class LexicalCandidateRetriever(ABC):
         raise NotImplementedError
 
 
+# Out of scope per lead, code retained, no claims.
 ROMAN_URDU_MAP = {
     "chutti": "leave",
     "tankhwa": "salary",
