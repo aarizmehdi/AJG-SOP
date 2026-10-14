@@ -7,6 +7,7 @@ from packages.contracts.canonical import (
     CanonicalSOP,
     CanonicalTable,
     CanonicalTableCell,
+    RetrievalChunk,
     SourceLocator,
 )
 from services.ingestion.chunking.semantic_chunker import (
@@ -1275,3 +1276,326 @@ def test_oversized_table_row_edge_case_header_context_exceeds_budget() -> None:
     chunks = chunker.chunk(sop, "published")
     assert len(chunks) >= 1
     assert any("One Hundred Tons" in c.text for c in chunks)
+
+
+def test_table_with_many_short_numeric_cells() -> None:
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc-num")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    headers = ["Item", "Bin", "Qty", "Min", "Max"]
+    cells = [
+        CanonicalTableCell(row=0, column=i, text=h, is_header=True, source=dummy)
+        for i, h in enumerate(headers)
+    ]
+    expected_skus: list[str] = []
+    for r in range(1, 35):
+        sku = f"SKU-{1000 + r}"
+        expected_skus.append(sku)
+        cells.extend(
+            [
+                CanonicalTableCell(row=r, column=0, text=sku, is_header=False, source=dummy),
+                CanonicalTableCell(
+                    row=r, column=1, text=f"B-{r:02d}", is_header=False, source=dummy
+                ),
+                CanonicalTableCell(
+                    row=r, column=2, text=str(r * 25), is_header=False, source=dummy
+                ),
+                CanonicalTableCell(row=r, column=3, text="50", is_header=False, source=dummy),
+                CanonicalTableCell(row=r, column=4, text="1000", is_header=False, source=dummy),
+            ]
+        )
+
+    table = CanonicalTable(
+        caption="Spare Parts Inventory Levels",
+        cells=cells,
+        source=dummy,
+    )
+    section = CanonicalSection(
+        id="sec-num",
+        heading="Parts Inventory",
+        heading_level=1,
+        heading_path=("Maintenance", "Parts Inventory"),
+        policy_number="SOP-MAINT-42",
+        stable_key="sec-num-key",
+        content_hash="sec-num-hash",
+        blocks=[CanonicalBlock(id="b-num", kind=BlockKind.TABLE, table=table, source=dummy)],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-num",
+        organization_id="ajt",
+        policy_id="pol-maint",
+        version_id="ver-num-v1",
+        source_document_ids=["doc-num"],
+        title="Maintenance Inventory SOP",
+        sections=[section],
+    )
+
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) >= 1
+
+    # Every chunk repeats caption, header, and separator
+    for c in chunks:
+        assert "**Spare Parts Inventory Levels**" in c.text
+        assert "| Item | Bin | Qty | Min | Max |" in c.text
+        assert "|---|---|---|---|---|" in c.text
+        assert c.policy_number == "SOP-MAINT-42"
+        assert c.organization_id == "ajt"
+
+    # All SKUs are present across chunks with no loss and no unintended duplication
+    found_skus: list[str] = []
+    for c in chunks:
+        for line in c.text.splitlines():
+            for sku in expected_skus:
+                if f"| {sku} |" in line:
+                    found_skus.append(sku)
+
+    assert sorted(found_skus) == sorted(expected_skus)
+    assert len(found_skus) == len(expected_skus)
+
+
+def test_headings_with_deep_heading_paths() -> None:
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc-deep")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    deep_path = (
+        "Aziz Jan Group",
+        "Manufacturing Operations",
+        "Textile Division",
+        "Weaving Unit 3",
+        "Safety Guidelines",
+        "Emergency Shutdown Protocols",
+    )
+    long_words = [f"emergency_step_{i}" for i in range(500)]
+    section = CanonicalSection(
+        id="sec-deep",
+        heading="Emergency Shutdown Protocols",
+        heading_level=6,
+        heading_path=deep_path,
+        policy_number="SOP-WEAVE-SEC-99",
+        stable_key="sec-deep-key",
+        content_hash="sec-deep-hash",
+        blocks=[
+            CanonicalBlock(
+                id="b-deep",
+                kind=BlockKind.PARAGRAPH,
+                text=" ".join(long_words),
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-deep",
+        organization_id="ajt",
+        policy_id="pol-weave",
+        version_id="ver-deep-v1",
+        source_document_ids=["doc-deep"],
+        title="Weaving Safety SOP",
+        sections=[section],
+    )
+
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 2
+    expected_header_prefix = " > ".join(deep_path)
+
+    for idx, c in enumerate(chunks):
+        assert c.id == f"ver-deep-v1:sec-deep:{idx}"
+        assert c.heading_path == deep_path
+        assert c.policy_number == "SOP-WEAVE-SEC-99"
+        assert c.organization_id == "ajt"
+        assert c.text.startswith(expected_header_prefix)
+        assert c.chunk_index == idx
+
+
+def test_deterministic_generated_input_budget_and_no_loss() -> None:
+    import random
+
+    rng = random.Random(42)
+    dummy = SourceLocator(source_document_id="doc-gen")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+
+    english_words = [
+        "standard",
+        "operating",
+        "procedure",
+        "warehouse",
+        "inventory",
+        "control",
+        "safety",
+        "audit",
+        "management",
+        "dispatch",
+        "material",
+        "inspection",
+        "calibration",
+        "compliance",
+        "verification",
+        "authorization",
+        "supervisor",
+        "temperature",
+        "humidity",
+        "storage",
+        "tolerance",
+        "threshold",
+        "critical",
+    ]
+
+    sections: list[CanonicalSection] = []
+    all_source_words: list[str] = []
+
+    for s_idx in range(12):
+        sec_id = f"sec-gen-{s_idx}"
+        heading_len = rng.randint(2, 4)
+        h_words = [rng.choice(english_words) for _ in range(heading_len)]
+        h_path = tuple(h_words)
+
+        blocks: list[CanonicalBlock] = []
+        kind_choice = s_idx % 3
+
+        if kind_choice == 0:
+            # Paragraph
+            word_count = rng.randint(50, 420)
+            p_words = [f"{rng.choice(english_words)}_{w}" for w in range(word_count)]
+            all_source_words.extend(p_words)
+            blocks.append(
+                CanonicalBlock(
+                    id=f"b-p-{s_idx}",
+                    kind=BlockKind.PARAGRAPH,
+                    text=" ".join(p_words),
+                    source=dummy,
+                )
+            )
+        elif kind_choice == 1:
+            # Table
+            cols = rng.randint(2, 4)
+            rows = rng.randint(3, 10)
+            t_cells: list[CanonicalTableCell] = []
+            for col_i in range(cols):
+                t_cells.append(
+                    CanonicalTableCell(
+                        row=0, column=col_i, text=f"Head_{col_i}", is_header=True, source=dummy
+                    )
+                )
+            for row_i in range(1, rows):
+                for col_i in range(cols):
+                    cell_word = f"cell_{s_idx}_{row_i}_{col_i}"
+                    all_source_words.append(cell_word)
+                    t_cells.append(
+                        CanonicalTableCell(
+                            row=row_i, column=col_i, text=cell_word, is_header=False, source=dummy
+                        )
+                    )
+            blocks.append(
+                CanonicalBlock(
+                    id=f"b-t-{s_idx}",
+                    kind=BlockKind.TABLE,
+                    table=CanonicalTable(caption=f"Table {s_idx}", cells=t_cells, source=dummy),
+                    source=dummy,
+                )
+            )
+        else:
+            # Nested list
+            l_items: list[CanonicalListItem] = []
+            for item_i in range(3):
+                w_parent = f"list_{s_idx}_parent_{item_i}"
+                all_source_words.append(w_parent)
+                w_child = f"list_{s_idx}_child_{item_i}"
+                all_source_words.append(w_child)
+                l_items.append(
+                    CanonicalListItem(
+                        text=w_parent,
+                        children=[CanonicalListItem(text=w_child, children=[], source=dummy)],
+                        source=dummy,
+                    )
+                )
+            blocks.append(
+                CanonicalBlock(
+                    id=f"b-l-{s_idx}",
+                    kind=BlockKind.ORDERED_LIST,
+                    list_items=l_items,
+                    source=dummy,
+                )
+            )
+
+        sections.append(
+            CanonicalSection(
+                id=sec_id,
+                heading=h_words[-1],
+                heading_level=len(h_words),
+                heading_path=h_path,
+                policy_number=f"SOP-GEN-{s_idx:02d}",
+                stable_key=f"key-{s_idx}",
+                content_hash=f"hash-{s_idx}",
+                blocks=blocks,
+                source=dummy,
+                access=scope,
+            )
+        )
+
+    sop = CanonicalSOP(
+        id="sop-generated",
+        organization_id="ajt",
+        policy_id="pol-gen",
+        version_id="ver-gen-1",
+        source_document_ids=["doc-gen"],
+        title="Generated Test SOP",
+        sections=sections,
+    )
+
+    chunker = SemanticChunker()
+    run1 = chunker.chunk(sop, "published")
+    run2 = chunker.chunk(sop, "published")
+
+    # Prove byte-identical output across two runs
+    assert len(run1) == len(run2)
+    for c1, c2 in zip(run1, run2, strict=True):
+        assert c1.id == c2.id
+        assert c1.text == c2.text
+        assert c1.heading_path == c2.heading_path
+        assert c1.policy_number == c2.policy_number
+        assert c1.organization_id == c2.organization_id
+
+    # Prove no text loss: all generated data tokens are present across chunks
+    combined_text = " ".join(c.text for c in run1)
+    for word in all_source_words:
+        assert word in combined_text, f"Missing token {word} from chunked output"
+
+    # Prove chunk IDs are strictly consecutive within each section
+    by_section: dict[str, list[RetrievalChunk]] = {}
+    for c in run1:
+        by_section.setdefault(c.section_id, []).append(c)
+
+    for sec_id, s_chunks in by_section.items():
+        for expected_idx, c in enumerate(s_chunks):
+            assert c.id == f"ver-gen-1:{sec_id}:{expected_idx}"
+            assert c.chunk_index == expected_idx
+
+
+def test_token_estimator_conservative_bounds() -> None:
+    chunker = SemanticChunker()
+
+    # Plain text
+    text1 = "This is a standard operating procedure for warehouse management."
+    est1 = chunker.estimate_tokens(text1)
+    assert est1 >= len(text1.split())
+
+    # Table text with pipes and codes
+    text2 = "| SKU-1042 | PES-01 | 450 | 50 | 1000 | ACTIVE |"
+    est2 = chunker.estimate_tokens(text2)
+    assert est2 >= len(text2.split())
+    assert est2 >= int(len(text2) / 3.8)
