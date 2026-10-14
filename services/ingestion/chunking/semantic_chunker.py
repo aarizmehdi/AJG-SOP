@@ -66,6 +66,18 @@ class SemanticChunker(Chunker):
 
     MAX_WORDS = 350
 
+    @staticmethod
+    def estimate_tokens(text: str) -> int:
+        """Conservative dependency-free token estimate for English SOP text.
+
+        Uses max(words * 1.35, characters / 3.8) to account for subwords,
+        markdown table pipes, short numeric cells, and punctuation without
+        requiring a downloaded tokenizer.
+        """
+        words = len(text.split())
+        chars = len(text)
+        return max(int(words * 1.35 + 0.999), int(chars / 3.8 + 0.999))
+
     def chunk(self, document: CanonicalSOP, publication_status: str) -> list[RetrievalChunk]:
         chunks: list[RetrievalChunk] = []
         for section in document.sections:
