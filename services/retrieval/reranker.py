@@ -47,9 +47,6 @@ class LexicalHeuristicReranker(Reranker):
     and metadata bonuses.
     """
 
-    def __init__(self, use_dev_routing: bool = False):
-        self.use_dev_routing = use_dev_routing
-
     async def rerank(
         self,
         query: str,
@@ -79,10 +76,6 @@ class LexicalHeuristicReranker(Reranker):
             relevance = len(query_terms & set(text.split())) * 0.5
 
             final_score = base_score + heading_bonus + late_section_bonus + relevance
-
-            if self.use_dev_routing:
-                # Dev / benchmark routing for candidate relevance components
-                final_score += 1.5
 
             reranked.append((chunk_id, final_score))
 
