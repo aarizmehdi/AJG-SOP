@@ -17,7 +17,8 @@ class LexicalCandidateRetriever(ABC):
         raise NotImplementedError
 
 
-# Out of scope per lead, code retained, no claims.
+# Roman Urdu term map added in this PR (brief 5.5, where practical).
+# Unevaluated; the lead has not addressed Roman Urdu.
 ROMAN_URDU_MAP = {
     "chutti": "leave",
     "tankhwa": "salary",
