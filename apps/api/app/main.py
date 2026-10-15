@@ -77,7 +77,7 @@ from services.ingestion.structure.canonical_document import Canonicalizer
 from services.retrieval.authorization_filter import AuthorizationFilter
 from services.retrieval.fusion import ReciprocalRankFusion
 from services.retrieval.lexical_search import FixtureLexicalRetriever
-from services.retrieval.reranker import FixtureReranker
+from services.retrieval.reranker import FixtureReranker, LexicalHeuristicReranker
 from services.retrieval.retriever import RetrievalService
 from services.retrieval.semantic_search import (
     FixtureSemanticRetriever,
@@ -211,13 +211,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.pinecone_namespace_prefix,
             publication_embeddings,
         )
+
+    # FixtureLexicalRetriever is the lexical retriever used in live mode too: it performs
+    # in-memory term matching and transliteration bonus over authorized chunks despite its
+    # fixture-style prefix. FixtureReranker is the default reranker in all modes, providing
+    # a deterministic token-overlap baseline. Neither is a cross-encoder or neural reranker.
+
+    from services.retrieval.reranker import Reranker
+
+    reranker: Reranker
+    if settings.retrieval_reranker == "lexical_heuristic":
+        reranker = LexicalHeuristicReranker()
+    else:
+        reranker = FixtureReranker()
+
     app.state.retrieval_service = RetrievalService(
         app.state.foundation_store,
         authorization,
         FixtureLexicalRetriever(),
         semantic,
         ReciprocalRankFusion(),
-        FixtureReranker(),
+        reranker,
         app.state.metrics,
         app.state.purge_repository.synchronize_cache,
     )

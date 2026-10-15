@@ -9,39 +9,76 @@ from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
 class LexicalCandidateRetriever(ABC):
     @abstractmethod
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self,
+        query: str,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,
     ) -> list[RetrievalCandidate]:
         raise NotImplementedError
 
 
 class FixtureLexicalRetriever(LexicalCandidateRetriever):
+    """In-memory lexical candidate retriever used across both fixture and live modes.
+
+    Despite its fixture-prefixed name, this component is the active lexical retrieval channel
+    in production wiring. It operates strictly over pre-filtered, authorized eligible chunks,
+    applying exact SOP code matching bonuses (+10.0), exact phrase matching bonuses (+4.0),
+    and term frequency scoring. All candidate rankings are deterministic.
+    """
+
     async def search(
-        self, query: str, eligible_chunks: Sequence[RetrievalChunk], limit: int
+        self,
+        query: str,
+        eligible_chunks: Sequence[RetrievalChunk],
+        limit: int,
     ) -> list[RetrievalCandidate]:
         terms = self._terms(query)
+        query_sop_codes = self._extract_sop_codes(query)
+
         scored: list[tuple[RetrievalChunk, float]] = []
         for chunk in eligible_chunks:
             content = chunk.text.casefold()
+
+            # Exact SOP number match
+            policy_bonus = 0.0
+            if chunk.policy_number and chunk.policy_number.casefold() in query_sop_codes:
+                policy_bonus = 10.0
+
+            # Exact phrase match
             exact_bonus = 4.0 if query.casefold() in content else 0.0
-            policy_bonus = (
-                3.0
-                if chunk.policy_number and chunk.policy_number.casefold() in query.casefold()
-                else 0.0
-            )
+
             hits = sum(content.count(term) for term in terms)
-            if hits or exact_bonus or policy_bonus:
+
+            if hits > 0 or exact_bonus > 0 or policy_bonus > 0:
                 scored.append((chunk, float(hits) + exact_bonus + policy_bonus))
+
         scored.sort(key=lambda item: (-item[1], item[0].id))
         return [
             RetrievalCandidate(
+                tenant_id=chunk.organization_id,
                 organization_id=chunk.organization_id,
                 chunk_id=chunk.id,
                 channel=CandidateChannel.LEXICAL,
                 score=score,
                 rank=rank,
+                text=chunk.text,
+                policy_number=chunk.policy_number,
+                heading_path=chunk.heading_path,
+                allowed_roles=list(chunk.access.roles.values),
+                department=next(iter(chunk.access.departments.values))
+                if chunk.access.departments.values
+                else None,  # noqa: E501
+                location=next(iter(chunk.access.locations.values))
+                if chunk.access.locations.values
+                else None,  # noqa: E501
             )
             for rank, (chunk, score) in enumerate(scored[:limit], start=1)
         ]
+
+    @staticmethod
+    def _extract_sop_codes(text: str) -> set[str]:
+        # Matches formats like SOP-014, HR-POL-2024
+        return set(re.findall(r"[a-z]{2,4}(?:-[a-z]{2,4})*-\d{3,4}", text.casefold()))
 
     @staticmethod
     def _terms(text: str) -> set[str]:

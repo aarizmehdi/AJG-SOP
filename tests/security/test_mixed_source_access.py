@@ -172,3 +172,27 @@ async def test_mixed_access_original_is_not_exposed(tmp_path: Path) -> None:
     }
     assert "original_sources" not in system_document.model_dump()
     assert system_document.sections[0].blocks[0].kind is BlockKind.PARAGRAPH
+
+
+def test_policy_reader_constructs_tenant_dynamic_metadata():
+    s = section("test-sec", "store")
+
+    # organization 1
+    reader_section_org1 = PolicyReaderService._reader_section(
+        organization_id="org-alpha",
+        policy_id="pol-1",
+        version_id="ver-1",
+        section=s,
+    )
+    assert reader_section_org1.tenant_id == "org-alpha"
+    assert reader_section_org1.organization_id == "org-alpha"
+
+    # organization 2
+    reader_section_org2 = PolicyReaderService._reader_section(
+        organization_id="org-beta",
+        policy_id="pol-1",
+        version_id="ver-1",
+        section=s,
+    )
+    assert reader_section_org2.tenant_id == "org-beta"
+    assert reader_section_org2.organization_id == "org-beta"

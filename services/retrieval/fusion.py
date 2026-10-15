@@ -29,7 +29,14 @@ class ReciprocalRankFusion(CandidateFusion):
         semantic: list[RetrievalCandidate],
     ) -> list[tuple[str, float]]:
         scores: dict[str, float] = {}
+        seen: set[tuple[str, CandidateChannel]] = set()
+
         for candidate in [*lexical, *semantic]:
+            seen_key = (candidate.chunk_id, candidate.channel)
+            if seen_key in seen:
+                continue
+            seen.add(seen_key)
+
             weight = (
                 self.lexical_weight
                 if candidate.channel is CandidateChannel.LEXICAL
