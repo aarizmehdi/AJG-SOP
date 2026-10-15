@@ -23,7 +23,6 @@ ROMAN_URDU_MAP = {
     "tankhwa": "salary",
     "tankha": "salary",
     "godam": "warehouse",
-    "godown": "warehouse",
     "haziri": "attendance",
     "mansookhi": "cancellation",
     "wapsi": "return",

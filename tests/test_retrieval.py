@@ -814,3 +814,89 @@ async def test_retrieval_abstains_when_no_evidence_matches():
 
     results = await service.retrieve(profile, "Completely random nonsense", limit=5)
     assert len(results) == 0
+
+
+async def test_godown_english_query_not_rewritten_and_matches_godown_chunk():
+    from packages.contracts.access import AccessDimension, AccessMode, AccessScope
+    from packages.contracts.canonical import RetrievalChunk, SourceLocator
+
+    query = "What is the capacity of godown 9?"
+    normalized = FixtureLexicalRetriever._normalize_urdu(query)
+    assert "godown" in normalized
+    assert "warehouse" not in normalized
+
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    source = SourceLocator(source_document_id="doc-godown-1")
+
+    godown_chunk = RetrievalChunk(
+        id="chunk-godown-9",
+        organization_id="tenant-1",
+        policy_id="pol-inv-01",
+        version_id="v1",
+        source_document_id="doc-godown-1",
+        section_id="sec-storage",
+        heading_path=("Inventory", "Storage Facilities"),
+        text="The storage capacity of godown 9 is 500 metric tons under SOP-014.",
+        access=scope,
+        source=source,
+        chunk_index=0,
+        publication_status="published",
+    )
+    unrelated_chunk = RetrievalChunk(
+        id="chunk-unrelated",
+        organization_id="tenant-1",
+        policy_id="pol-it-01",
+        version_id="v1",
+        source_document_id="doc-it-1",
+        section_id="sec-it",
+        heading_path=("IT", "Security"),
+        text="Fire safety equipment inspection logs.",
+        access=scope,
+        source=source,
+        chunk_index=1,
+        publication_status="published",
+    )
+
+    retriever = FixtureLexicalRetriever()
+    results = await retriever.search(query, [godown_chunk, unrelated_chunk], limit=5)
+
+    assert len(results) == 1
+    assert results[0].chunk_id == "chunk-godown-9"
+    assert "godown" in results[0].text
+    assert results[0].score > 0.0
+
+    # Specifically verify that query "godown" matches the godown chunk
+    # and is not rewritten to warehouse
+    godown_only_results = await retriever.search(
+        "godown", [godown_chunk, unrelated_chunk], limit=5
+    )
+    assert len(godown_only_results) == 1
+    assert godown_only_results[0].chunk_id == "chunk-godown-9"
+
+
+def test_roman_urdu_normalization_retained_terms():
+    query = "Mujhe emergency chutti aur tankhwa ki darkhwast deni hai"
+    normalized = FixtureLexicalRetriever._normalize_urdu(query)
+    assert "leave" in normalized
+    assert "salary" in normalized
+    assert "chutti" not in normalized
+    assert "tankhwa" not in normalized
+
+    godam_query = "godam 4 me inventory ka tareeqa aur wapsi usool"
+    godam_norm = FixtureLexicalRetriever._normalize_urdu(godam_query)
+    assert "warehouse" in godam_norm
+    assert "procedure" in godam_norm
+    assert "return" in godam_norm
+    assert "policy" in godam_norm
+    assert "godam" not in godam_norm
+
+
+def test_lexical_sop_code_extraction_unchanged():
+    codes = FixtureLexicalRetriever._extract_sop_codes(
+        "Refer to SOP-014 and HR-POL-2024 for godown inspection rules"
+    )
+    assert codes == {"sop-014", "hr-pol-2024"}
