@@ -17,31 +17,13 @@ class LexicalCandidateRetriever(ABC):
         raise NotImplementedError
 
 
-# Roman Urdu term map added in this PR (brief 5.5, where practical).
-# Unevaluated; the lead has not addressed Roman Urdu.
-ROMAN_URDU_MAP = {
-    "chutti": "leave",
-    "tankhwa": "salary",
-    "tankha": "salary",
-    "godam": "warehouse",
-    "haziri": "attendance",
-    "mansookhi": "cancellation",
-    "wapsi": "return",
-    "shikayat": "complaint",
-    "mustarad": "rejected",
-    "manzoori": "approval",
-    "tareeqa": "procedure",
-    "usool": "policy",
-}
-
-
 class FixtureLexicalRetriever(LexicalCandidateRetriever):
     """In-memory lexical candidate retriever used across both fixture and live modes.
 
     Despite its fixture-prefixed name, this component is the active lexical retrieval channel
     in production wiring. It operates strictly over pre-filtered, authorized eligible chunks,
-    applying Roman Urdu normalization, exact SOP code matching bonuses (+10.0), exact phrase
-    matching bonuses (+4.0), and term frequency scoring. All candidate rankings are deterministic.
+    applying exact SOP code matching bonuses (+10.0), exact phrase matching bonuses (+4.0),
+    and term frequency scoring. All candidate rankings are deterministic.
     """
 
     async def search(
@@ -50,8 +32,7 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
         eligible_chunks: Sequence[RetrievalChunk],
         limit: int,
     ) -> list[RetrievalCandidate]:
-        normalized_query = self._normalize_urdu(query)
-        terms = self._terms(normalized_query)
+        terms = self._terms(query)
         query_sop_codes = self._extract_sop_codes(query)
 
         scored: list[tuple[RetrievalChunk, float]] = []
@@ -64,7 +45,7 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
                 policy_bonus = 10.0
 
             # Exact phrase match
-            exact_bonus = 4.0 if normalized_query in content else 0.0
+            exact_bonus = 4.0 if query.casefold() in content else 0.0
 
             hits = sum(content.count(term) for term in terms)
 
@@ -93,13 +74,6 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
             )
             for rank, (chunk, score) in enumerate(scored[:limit], start=1)
         ]
-
-    @staticmethod
-    def _normalize_urdu(text: str) -> str:
-        text = text.casefold()
-        for urdu, eng in ROMAN_URDU_MAP.items():
-            text = re.sub(rf"\b{urdu}\b", eng, text)
-        return text
 
     @staticmethod
     def _extract_sop_codes(text: str) -> set[str]:

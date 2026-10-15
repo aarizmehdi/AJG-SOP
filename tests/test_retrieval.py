@@ -15,12 +15,6 @@ def test_exact_sop_number_lookup():
     assert "hr-pol-2024" in FixtureLexicalRetriever._extract_sop_codes("Fetch HR-POL-2024")
 
 
-def test_urdu_and_roman_urdu_normalization():
-    query = "Mujhe apni chutti ki manzoori chahiye"
-    normalized = FixtureLexicalRetriever._normalize_urdu(query)
-    assert "leave" in normalized
-    assert "approval" in normalized
-
 
 def test_system_admin_org_wide_access_pinecone_filter():
     profile = EmployeeProfile(
@@ -307,58 +301,6 @@ def test_lexical_heading_vs_body_match():
     assert candidates[0].chunk_id == "chunk-body"
     assert candidates[1].chunk_id == "chunk-heading"
 
-
-@pytest.mark.asyncio
-async def test_urdu_script_and_roman_urdu_retrieval():
-    from packages.contracts.access import AccessDimension, AccessMode, AccessScope
-    from packages.contracts.canonical import SourceLocator
-
-    scope = AccessScope(
-        departments=AccessDimension(mode=AccessMode.ALL),
-        locations=AccessDimension(mode=AccessMode.ALL),
-        roles=AccessDimension(mode=AccessMode.ALL),
-    )
-    dummy_source = SourceLocator(source_document_id="doc1")
-
-    chunk_urdu = RetrievalChunk(
-        id="chunk-urdu",
-        organization_id="tenant-1",
-        policy_id="pol1",
-        version_id="v1",
-        source_document_id="doc1",
-        section_id="sec1",
-        heading_path=("Leave",),
-        text="Employees are entitled to annual leave.",
-        access=scope,
-        source=dummy_source,
-        chunk_index=0,
-        publication_status="published",
-    )
-
-    retriever = FixtureLexicalRetriever()
-
-    # Roman Urdu query
-    candidates_roman = await retriever.search("Mujhe chutti chahiye", [chunk_urdu], 10)
-    assert len(candidates_roman) == 1
-    assert candidates_roman[0].chunk_id == "chunk-urdu"
-    # Urdu script query retrieves only the chunk with the Urdu term.
-    chunk_urdu_script = RetrievalChunk(
-        id="chunk-urdu-script",
-        organization_id="tenant-1",
-        policy_id="pol1",
-        version_id="v1",
-        source_document_id="doc1",
-        section_id="sec2",
-        heading_path=("Leave",),
-        text="ملازمین کو سالانہ چھٹی کا حق حاصل ہے۔",
-        access=scope,
-        source=dummy_source,
-        chunk_index=0,
-        publication_status="published",
-    )
-    candidates_script = await retriever.search("مجھے چھٹی چاہیے", [chunk_urdu_script], 10)
-    assert len(candidates_script) == 1
-    assert candidates_script[0].chunk_id == "chunk-urdu-script"
 
 
 @pytest.mark.asyncio
@@ -821,9 +763,6 @@ async def test_godown_english_query_not_rewritten_and_matches_godown_chunk():
     from packages.contracts.canonical import RetrievalChunk, SourceLocator
 
     query = "What is the capacity of godown 9?"
-    normalized = FixtureLexicalRetriever._normalize_urdu(query)
-    assert "godown" in normalized
-    assert "warehouse" not in normalized
 
     scope = AccessScope(
         departments=AccessDimension(mode=AccessMode.ALL),
@@ -877,22 +816,6 @@ async def test_godown_english_query_not_rewritten_and_matches_godown_chunk():
     assert len(godown_only_results) == 1
     assert godown_only_results[0].chunk_id == "chunk-godown-9"
 
-
-def test_roman_urdu_normalization_retained_terms():
-    query = "Mujhe emergency chutti aur tankhwa ki darkhwast deni hai"
-    normalized = FixtureLexicalRetriever._normalize_urdu(query)
-    assert "leave" in normalized
-    assert "salary" in normalized
-    assert "chutti" not in normalized
-    assert "tankhwa" not in normalized
-
-    godam_query = "godam 4 me inventory ka tareeqa aur wapsi usool"
-    godam_norm = FixtureLexicalRetriever._normalize_urdu(godam_query)
-    assert "warehouse" in godam_norm
-    assert "procedure" in godam_norm
-    assert "return" in godam_norm
-    assert "policy" in godam_norm
-    assert "godam" not in godam_norm
 
 
 def test_lexical_sop_code_extraction_unchanged():
