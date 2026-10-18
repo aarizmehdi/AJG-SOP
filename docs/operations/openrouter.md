@@ -16,7 +16,7 @@ OPENROUTER_MODEL=deepseek/deepseek-v4.1-flash-1017
 OPENROUTER_FALLBACK_MODEL=deepseek/deepseek-v4-flash
 OPENROUTER_API_KEY=<backend secret>
 OPENROUTER_TEMPERATURE=0.2
-OPENROUTER_ALLOWED_PROVIDERS=[]
+OPENROUTER_ALLOWED_PROVIDERS=["relace","deepinfra"]
 LLM_REQUEST_TIMEOUT_SECONDS=45
 LLM_READ_TIMEOUT_SECONDS=20
 LLM_MAX_CONNECTIONS=20
@@ -138,7 +138,14 @@ environment, never a command argument, committed file or browser variable.
 Initial real API result on 2026-10-18: primary passed schema/citation/deterministic-grounding
 checks in one request (2,828ms, 343 input tokens, 151 output tokens, 0 cached tokens,
 provider-reported cost USD 0.00010775). The fallback returned HTTP 429 on both bounded attempts;
-successful fallback generation is **unverified**. No SOPs or employee records were used.
+follow-up diagnostics identified OpenInference as the failing upstream. The authenticated key
+endpoint confirmed paid access with remaining credit; no credit limit was changed. Restricting
+the eligible provider pool to `relace` and `deepinfra` resolved the synthetic fallback failure
+without weakening `zdr`, `data_collection`, parameter support or upstream fallback restrictions.
+Both exact models then passed schema, citation and deterministic-grounding checks in one request
+each: primary 2,014ms / USD 0.00010775; fallback 6,759ms / USD 0.00006354. No SOPs or employee
+records were used in these isolated checks. A catalogue-supported endpoint may still return 429;
+the allowlist is operational configuration and must be revalidated when availability changes.
 One synthetic request is not an accuracy benchmark, production latency percentile, or measured
 pooling speedup. No cache savings were observed. Mock tests establish the fallback control flow.
 

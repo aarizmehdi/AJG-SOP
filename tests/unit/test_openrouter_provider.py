@@ -402,6 +402,9 @@ async def test_direct_deepseek_rollback_uses_same_model_retry_only():
     [
         (503, {"error": {"code": 403, "message": "moderation"}}),
         (503, {"choices": [{"message": {"refusal": "moderation"}}]}),
+        (503, {"choices": [{"message": {}, "error": {"code": 403}}]}),
+        (429, {"choices": [{"message": {}, "error": {"code": 403}}]}),
+        (200, {"choices": [{"message": {}, "error": {"code": "moderation"}}]}),
         (403, {"error": {"code": 503}}),
     ],
 )

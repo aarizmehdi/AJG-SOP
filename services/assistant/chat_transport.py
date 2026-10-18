@@ -198,6 +198,12 @@ class ChatCompletionTransport:
                                 isinstance(message, dict) and message.get("refusal")
                             ):
                                 raise LLMRejectedError("LLM moderation refusal")
+                            # A per-choice rejection must outrank an ambiguous 5xx,
+                            # just like a top-level rejection. Inspect all refusals
+                            # before classifying any availability error.
+                            error = item.get("error")
+                            if error and not self._availability_error(error):
+                                raise LLMRejectedError("LLM provider rejected the request")
                 self._error(body.get("error"), self._retry_after(response))
             if status == 429 or 500 <= status <= 599:
                 raise LLMAvailabilityError(f"http_{status}", self._retry_after(response))
@@ -233,13 +239,18 @@ class ChatCompletionTransport:
             )
 
     @staticmethod
+    def _availability_error(error: object) -> bool:
+        if not isinstance(error, dict):
+            return False
+        code = error.get("code")
+        return type(code) is int and (code == 429 or 500 <= code <= 599)
+
+    @staticmethod
     def _error(error: object, retry_after: float | None = None) -> None:
         if not error:
             return
-        if isinstance(error, dict):
-            code = error.get("code")
-            if type(code) is int and (code == 429 or 500 <= code <= 599):
-                raise LLMAvailabilityError(f"http_{code}", retry_after)
+        if isinstance(error, dict) and ChatCompletionTransport._availability_error(error):
+            raise LLMAvailabilityError(f"http_{error['code']}", retry_after)
         raise LLMRejectedError("LLM provider rejected the request")
 
     @staticmethod
