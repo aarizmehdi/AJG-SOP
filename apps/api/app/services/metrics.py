@@ -14,6 +14,11 @@ class MetricsRegistry:
 
     def __init__(self) -> None:
         self._metrics: dict[str, Metric] = {}
+        self._totals: dict[str, float | int] = {}
+
+    def increment(self, name: str, value: float | int = 1) -> None:
+        """Aggregate content-free counts/usage; missing provider values stay absent."""
+        self._totals[name] = self._totals.get(name, 0) + value
 
     def observe(self, name: str, duration_ms: float, *, failed: bool = False) -> None:
         metric = self._metrics.setdefault(name, Metric())
@@ -23,7 +28,7 @@ class MetricsRegistry:
         metric.maximum_duration_ms = max(metric.maximum_duration_ms, duration_ms)
 
     def snapshot(self) -> dict[str, dict[str, float | int]]:
-        return {
+        durations = {
             name: {
                 "count": metric.count,
                 "failures": metric.failures,
@@ -33,3 +38,4 @@ class MetricsRegistry:
             for name, metric in sorted(self._metrics.items())
             if metric.count
         }
+        return {**durations, **{name: {"total": value} for name, value in self._totals.items()}}
