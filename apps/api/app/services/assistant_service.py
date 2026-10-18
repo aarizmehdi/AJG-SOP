@@ -1,5 +1,6 @@
 """Ephemeral assistant orchestration with authorized, verified answer release."""
 
+import inspect
 from collections.abc import Callable, Sequence
 from time import perf_counter
 from typing import Protocol
@@ -8,6 +9,7 @@ from apps.api.app.models.organization import EmployeeProfile, MembershipStatus
 from apps.api.app.repositories.database import CanonicalDatabase
 from apps.api.app.services.metrics import MetricsRegistry
 from packages.contracts.assistant import (
+    AssistantCitation,
     ConversationTurn,
     GeneratedAnswer,
     InternalAnswerMode,
@@ -17,7 +19,11 @@ from packages.contracts.assistant import (
 from packages.contracts.common import Language
 from packages.contracts.retrieval import AssistantEvidence, SearchEvidence
 from services.assistant.answer_generator import LLMProvider, LLMResponseError
-from services.assistant.answerability import AnswerabilityGate
+from services.assistant.answerability import (
+    AnswerabilityDecision,
+    AnswerabilityGate,
+    AnswerabilityResult,
+)
 from services.assistant.citations import CitationValidator
 from services.assistant.conversation import build_query_plan, canned
 from services.assistant.grounding import GroundingVerifier
@@ -100,10 +106,24 @@ class AssistantService:
         if progress:
             progress("retrieving")
         evidence = await self.retrieval.retrieve(profile, plan.resolved_query, 8)
-        if not self.answerability.is_answerable(question, evidence):
+        gate_decision = await self._evaluate_answerability(question, evidence)
+        if gate_decision == AnswerabilityDecision.GREETING:
+            result = self._canned(profile, language, ResponseKind.SMALLTALK, question)
+            self._observe(result.kind, started)
+            return result, []
+        if gate_decision == AnswerabilityDecision.CLARIFICATION:
+            result = self._canned(profile, language, ResponseKind.CLARIFICATION)
+            self._observe(result.kind, started)
+            return result, []
+        if gate_decision not in {
+            AnswerabilityDecision.ANSWERABLE,
+            AnswerabilityDecision.SYNTHESIS,
+        }:
             result = self._canned(profile, language, ResponseKind.NO_ANSWER)
             self._observe(result.kind, started)
             return result, []
+        if gate_decision == AnswerabilityDecision.SYNTHESIS:
+            plan.answer_mode = InternalAnswerMode.SYNTHESIZE_MULTIPLE_POLICIES
         if progress:
             progress("reading")
         context = await self.retrieval.assistant_context(profile, evidence)
@@ -163,23 +183,159 @@ class AssistantService:
                 self._observe(result.kind, started)
                 return result, context
             self._metric("grounding_verification", verification_started, failed=True)
+            reason = (
+                getattr(self.grounding, "last_rejection_reason", None)
+                or "grounding verification"
+            )
             feedback = (
-                "The previous answer failed citation or grounding validation. "
+                f"The previous answer failed {reason}. "
                 "Use only supported facts and exact supplied citation metadata."
             )
             if attempt == 0:
                 continue
+
+        if self._is_broad_policy_question(question, context):
+            overview = self._build_sections_overview(profile, language, context)
+            if overview is not None:
+                await self.assert_release_authorized(profile, context)
+                self._observe(overview.kind, started)
+                return overview, context
+
         raise VerificationError("Generated answer failed citation or grounding verification")
+
+    def _is_broad_policy_question(
+        self, question: str, context: Sequence[AssistantEvidence]
+    ) -> bool:
+        q = question.strip().casefold()
+
+        narrow_prefixes = (
+            "how ", "how's ", "when ", "who ", "where ", "why ",
+            "is ", "are ", "can ", "could ", "should ", "do ", "does ", "will ", "would ",
+            "kaise ", "kese ", "kab ", "kaun ", "kon ", "kahan ", "kyun ", "kiun ",
+            "کیسے ", "کب ", "کون ", "کہاں ", "کیوں ",
+        )
+        if any(q.startswith(prefix) for prefix in narrow_prefixes):
+            return False
+
+        narrow_attributes = (
+            "deadline", "due date", "capacity", "quantity", "limit", "maximum",
+            "minimum", "fee", "penalty", "approval authority", "who approves",
+        )
+        if any(attr in q for attr in narrow_attributes):
+            return False
+
+        for item in context:
+            sec = item.heading_path[-1] if item.heading_path else ""
+            if sec and len(sec) > 3 and sec.casefold() in q:
+                if sec.casefold() != item.policy_title.casefold():
+                    return False
+
+        broad_indicators = (
+            "sop", "policy", "policies", "procedure", "procedures",
+            "overview", "summary", "guideline", "guidelines",
+            "پالیسی", "ایس او پی",
+        )
+        if any(ind in q for ind in broad_indicators):
+            return True
+
+        for item in context:
+            if item.policy_title and item.policy_title.casefold() in q:
+                return True
+
+        return False
+
+    def _build_sections_overview(
+        self,
+        profile: EmployeeProfile,
+        language: Language,
+        context: Sequence[AssistantEvidence],
+    ) -> VerifiedAnswer | None:
+        if not context:
+            return None
+
+        unique_sections: list[tuple[str, str, AssistantEvidence]] = []
+        seen_section_keys: set[tuple[str, str]] = set()
+
+        for item in context:
+            sec_key = (item.policy_id, item.section_id)
+            if sec_key not in seen_section_keys:
+                seen_section_keys.add(sec_key)
+                sec_name = item.heading_path[-1] if item.heading_path else item.policy_title
+                unique_sections.append((item.policy_title, sec_name, item))
+                if len(unique_sections) >= 8:
+                    break
+
+        if len(unique_sections) < 2:
+            return None
+
+        unique_policy_titles = list(dict.fromkeys(pol for pol, _, _ in unique_sections))
+        if len(unique_policy_titles) == 1:
+            policy_name = unique_policy_titles[0]
+            if language == Language.URDU:
+                header = f"{policy_name} میں آپ کی مجاز پالیسیوں سے یہ سیکشنز ملے ہیں:\n\n"
+                prompt_line = "\n\nآپ کس سیکشن کے بارے میں تفصیلات جاننا چاہتے ہیں؟"
+            elif language == Language.ROMAN_URDU:
+                header = (
+                    f"{policy_name} mein aap ki authorized policies se yeh sections miley hain:\n\n"
+                )
+                prompt_line = "\n\nKis section ke baare mein aap tafseelat jaanna chahte hain?"
+            else:
+                header = (
+                    f"{policy_name} covers these sections found in your authorized policies:\n\n"
+                )
+                prompt_line = "\n\nWhich section would you like details on?"
+            body = "\n".join(f"{i + 1}. {sec}" for i, (_, sec, _) in enumerate(unique_sections))
+        else:
+            if language == Language.URDU:
+                header = "آپ کی مجاز پالیسیوں میں یہ سیکشنز ملے ہیں:\n\n"
+                prompt_line = "\n\nآپ کس سیکشن کے بارے میں تفصیلات جاننا چاہتے ہیں؟"
+            elif language == Language.ROMAN_URDU:
+                header = "Aap ki authorized policies mein yeh sections miley hain:\n\n"
+                prompt_line = "\n\nKis section ke baare mein aap tafseelat jaanna chahte hain?"
+            else:
+                header = "The following sections were found in your authorized policies:\n\n"
+                prompt_line = "\n\nWhich section would you like details on?"
+            body = "\n".join(
+                f"{i + 1}. {pol} → {sec}" for i, (pol, sec, _) in enumerate(unique_sections)
+            )
+
+        overview_text = header + body + prompt_line
+
+        citations = [
+            AssistantCitation(
+                chunk_id=item.chunk_id,
+                policy_id=item.policy_id,
+                policy_title=item.policy_title,
+                section_id=item.section_id,
+                heading_path=item.heading_path,
+                document_id=item.source.source_document_id,
+                source=item.source,
+            )
+            for _, _, item in unique_sections
+        ]
+
+        return VerifiedAnswer(
+            organization_id=profile.organization_id,
+            kind=ResponseKind.CLARIFICATION,
+            answerable=False,
+            answer=overview_text,
+            language=language,
+            citations=citations,
+            verified=True,
+        )
 
     async def _valid(
         self, generated: GeneratedAnswer, context: Sequence[AssistantEvidence]
     ) -> bool:
-        return (
-            bool(generated.answer.strip())
-            and bool(generated.citations)
-            and self.citations.validate(generated.citations, context)
-            and await self.grounding.verify(generated, context)
-        )
+        if not generated.answer.strip() or not generated.citations:
+            if hasattr(self.grounding, "last_rejection_reason"):
+                self.grounding.last_rejection_reason = "citation validation"
+            return False
+        if not self.citations.validate(generated.citations, context):
+            if hasattr(self.grounding, "last_rejection_reason"):
+                self.grounding.last_rejection_reason = "citation validation"
+            return False
+        return await self.grounding.verify(generated, context)
 
     async def assert_release_authorized(
         self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
@@ -225,3 +381,23 @@ class AssistantService:
     def _observe(self, kind: ResponseKind, started: float) -> None:
         self._metric(f"assistant_{kind.value}", started)
         self._metric("assistant_total", started)
+
+    async def _evaluate_answerability(
+        self, question: str, evidence: Sequence[SearchEvidence]
+    ) -> AnswerabilityDecision:
+        if hasattr(self.answerability, "evaluate"):
+            eval_fn = self.answerability.evaluate
+            eval_call = eval_fn(question, evidence)
+            eval_res = await eval_call if inspect.isawaitable(eval_call) else eval_call
+            if isinstance(eval_res, AnswerabilityResult):
+                return eval_res.decision
+            if isinstance(eval_res, AnswerabilityDecision):
+                return eval_res
+        is_ans_fn = self.answerability.is_answerable
+        ans_call = is_ans_fn(question, evidence)
+        ans_bool = await ans_call if inspect.isawaitable(ans_call) else ans_call
+        return (
+            AnswerabilityDecision.ANSWERABLE
+            if ans_bool
+            else AnswerabilityDecision.INSUFFICIENT_EVIDENCE
+        )

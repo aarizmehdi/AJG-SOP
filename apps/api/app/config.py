@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     firebase_project_id: str | None = None
     firebase_service_account_json: SecretStr | None = None
 
-    llm_provider: Literal["fixture", "deepseek"] = "deepseek"
+    llm_provider: str = "deepseek"
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"

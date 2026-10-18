@@ -221,6 +221,12 @@ class DeepSeekLLMProvider(LLMProvider):
         else:
             base += " ANSWER MODE: Answer the user's question using ONLY authorized retrieved evidence. Explain conflicting evidence instead of guessing."  # noqa: E501
 
+        base += (
+            " For broad questions about a large policy, give a short structured summary "
+            "per section using only supported facts from authorized_evidence, do not "
+            "repeat every number, and do not combine facts from different sections."
+        )
+
         return base
 
     async def plan_query(

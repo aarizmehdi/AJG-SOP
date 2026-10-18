@@ -55,13 +55,19 @@ from services.assistant.answer_generator import (
     LLMProvider,
     UnavailableLLMProvider,
 )
-from services.assistant.answerability import FixtureAnswerabilityGate
+from services.assistant.answerability import (
+    AnswerabilityGate,
+    DeepSeekAnswerabilityGate,
+    FixtureAnswerabilityGate,
+    UnavailableAnswerabilityGate,
+)
 from services.assistant.citations import CitationValidator
 from services.assistant.grounding import (
     DeepSeekSemanticVerifier,
     FixtureSemanticVerifier,
     GroundingVerifier,
     SemanticVerifier,
+    UnavailableSemanticVerifier,
 )
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider, FixtureEmbeddingProvider
@@ -107,6 +113,59 @@ def build_parser(settings: Settings) -> DocumentParser:
         "auto": [azure, DoclingDocumentParser(), fixture],
     }
     return ParserRouter(providers[settings.document_parser_provider])
+
+
+def create_answerability_gate(settings: Settings) -> AnswerabilityGate:
+    if settings.app_mode == "live":
+        if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
+            return DeepSeekAnswerabilityGate(
+                settings.deepseek_api_key.get_secret_value(),
+                settings.deepseek_base_url,
+                settings.deepseek_model,
+            )
+        return UnavailableAnswerabilityGate()
+    return FixtureAnswerabilityGate()
+
+
+def build_assistant_components(
+    settings: Settings,
+) -> tuple[LLMProvider, SemanticVerifier, AnswerabilityGate]:
+    answerability_gate = create_answerability_gate(settings)
+    if settings.app_mode == "live":
+        if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
+            llm_provider: LLMProvider = DeepSeekLLMProvider(
+                settings.deepseek_api_key.get_secret_value(),
+                settings.deepseek_base_url,
+                settings.deepseek_model,
+                settings.deepseek_temperature,
+            )
+            semantic_verifier: SemanticVerifier = DeepSeekSemanticVerifier(
+                settings.deepseek_api_key.get_secret_value(),
+                settings.deepseek_base_url,
+                settings.deepseek_model,
+            )
+        else:
+            llm_provider = UnavailableLLMProvider()
+            semantic_verifier = UnavailableSemanticVerifier()
+    elif settings.llm_provider == "fixture":
+        llm_provider = FixtureLLMProvider()
+        semantic_verifier = FixtureSemanticVerifier()
+    elif settings.llm_provider == "deepseek" and settings.deepseek_api_key:
+        llm_provider = DeepSeekLLMProvider(
+            settings.deepseek_api_key.get_secret_value(),
+            settings.deepseek_base_url,
+            settings.deepseek_model,
+            settings.deepseek_temperature,
+        )
+        semantic_verifier = DeepSeekSemanticVerifier(
+            settings.deepseek_api_key.get_secret_value(),
+            settings.deepseek_base_url,
+            settings.deepseek_model,
+        )
+    else:
+        llm_provider = UnavailableLLMProvider()
+        semantic_verifier = UnavailableSemanticVerifier()
+    return llm_provider, semantic_verifier, answerability_gate
 
 
 @asynccontextmanager
@@ -231,30 +290,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.purge_repository.cache_listener = app.state.retrieval_service.evict_chunks
 
-    # --- LLM provider ---
-    llm_provider: LLMProvider
-    semantic_verifier: SemanticVerifier
-    if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
-        llm_provider = DeepSeekLLMProvider(
-            settings.deepseek_api_key.get_secret_value(),
-            settings.deepseek_base_url,
-            settings.deepseek_model,
-            settings.deepseek_temperature,
-        )
-        semantic_verifier = DeepSeekSemanticVerifier(
-            settings.deepseek_api_key.get_secret_value(),
-            settings.deepseek_base_url,
-            settings.deepseek_model,
-        )
-    elif settings.llm_provider == "fixture":
-        llm_provider = FixtureLLMProvider()
-        semantic_verifier = FixtureSemanticVerifier()
-    else:
-        llm_provider = UnavailableLLMProvider()
-        semantic_verifier = FixtureSemanticVerifier()
+    llm_provider, semantic_verifier, answerability_gate = build_assistant_components(settings)
     app.state.assistant_service = AssistantService(
         app.state.retrieval_service,
-        FixtureAnswerabilityGate(),
+        answerability_gate,
         llm_provider,
         CitationValidator(),
         GroundingVerifier(semantic_verifier=semantic_verifier),

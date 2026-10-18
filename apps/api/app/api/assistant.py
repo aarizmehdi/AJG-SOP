@@ -46,7 +46,12 @@ async def answer(
 async def answer_events(
     request: Request, payload: AssistantRequest, profile: CurrentProfile
 ) -> StreamingResponse:
-    """Progress is immediate; answer deltas begin only after full verification."""
+    """Progress is immediate; answer deltas begin only after full verification.
+
+    After verification the text is chunked into 160-character slices (verified-answer chunking,
+    not unverified token streaming). Citations and answer text are never released incrementally
+    prior to complete grounding and authorization verification.
+    """
 
     async def events() -> AsyncIterator[str]:
         queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
