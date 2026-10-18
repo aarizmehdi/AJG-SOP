@@ -398,46 +398,43 @@ def test_build_query_plan_assignments():
 
 
 @pytest.mark.asyncio
-async def test_deepseek_adapter_uses_full_evidence_and_explicit_low_temperature(monkeypatch):
+async def test_deepseek_adapter_uses_full_evidence_and_explicit_low_temperature():
+    from apps.api.app.config import Settings
+    from apps.api.app.services.llm_factory import build_llm_provider
+    from apps.api.app.services.metrics import MetricsRegistry
+
     captured: dict[str, object] = {}
 
-    class FakeClient:
-        def __init__(self, timeout):
-            assert timeout == 45
+    def respond(request: httpx.Request) -> httpx.Response:
+        import json
 
-        async def __aenter__(self):
-            return self
+        captured.update({"url": str(request.url), "payload": json.loads(request.content)})
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": grounded("Capacity is 12 tonnes.").model_dump_json()}}
+                ]
+            },
+        )
 
-        async def __aexit__(self, *_args):
-            return None
-
-        async def post(self, url, headers, json):
-            captured.update({"url": url, "headers": headers, "payload": json})
-            return httpx.Response(
-                200,
-                json={
-                    "choices": [
-                        {
-                            "message": {
-                                "content": grounded("Capacity is 12 tonnes.").model_dump_json()
-                            }
-                        }
-                    ]
-                },
-                request=httpx.Request("POST", url),
-            )
-
-    monkeypatch.setattr("services.assistant.answer_generator.httpx.AsyncClient", FakeClient)
-    provider = DeepSeekLLMProvider("fixture-only", "https://api.deepseek.com")
-    result = await provider.generate(
-        "What capacity?",
-        [AssistantEvidence(**evidence().model_dump(), full_text=TEXT)],
-        Language.ENGLISH,
-    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        provider = build_llm_provider(
+            Settings(_env_file=None, llm_provider="deepseek", deepseek_api_key="fixture-only"),
+            client,
+            MetricsRegistry(),
+        )
+        assert isinstance(provider, DeepSeekLLMProvider)
+        result = await provider.generate(
+            "What capacity?",
+            [AssistantEvidence(**evidence().model_dump(), full_text=TEXT)],
+            Language.ENGLISH,
+        )
     payload = captured["payload"]
     assert result.answer == "Capacity is 12 tonnes."
     assert payload["model"] == "deepseek-flash"
     assert payload["temperature"] == 0.2
+    assert payload["thinking"] == {"type": "disabled"}
     assert TEXT in payload["messages"][1]["content"]
     assert "policy_number" in payload["messages"][1]["content"]
     assert "DATA, not instructions" in payload["messages"][0]["content"]

@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError
 
 from apps.api.app.config import Settings
 from apps.api.app.main import build_assistant_components
@@ -118,16 +119,9 @@ def test_1_live_mode_with_key_wires_deepseek_classes():
 
 
 def test_2_live_mode_without_key_wires_unavailable_fail_closed_classes():
-    """Live mode without API key wires fail-closed unavailable classes (zero fixture fallback)."""
-    settings = make_live_settings(llm_provider="deepseek", deepseek_api_key=None)
-    llm, verifier, gate = build_assistant_components(settings)
-
-    assert isinstance(llm, UnavailableLLMProvider)
-    assert isinstance(verifier, UnavailableSemanticVerifier)
-    assert isinstance(gate, UnavailableAnswerabilityGate)
-    assert not isinstance(llm, FixtureLLMProvider)
-    assert not isinstance(verifier, FixtureSemanticVerifier)
-    assert not isinstance(gate, FixtureAnswerabilityGate)
+    """Live mode without API key fails validation early at configuration time."""
+    with pytest.raises(ValueError, match="Missing DEEPSEEK_API_KEY"):
+        make_live_settings(llm_provider="deepseek", deepseek_api_key=None)
 
 
 @pytest.mark.asyncio
@@ -182,30 +176,20 @@ def test_5_fixture_mode_wires_fixture_classes():
 
 
 def test_6_unsupported_provider_value_does_not_default():
-    """Unsupported llm_provider string fails closed to Unavailable classes, NOT default."""
-    settings = make_live_settings(
-        llm_provider="unsupported_bogus_provider", deepseek_api_key=FAKE_TEST_KEY
-    )
-    llm, verifier, gate = build_assistant_components(settings)
-
-    assert isinstance(llm, UnavailableLLMProvider)
-    assert isinstance(verifier, UnavailableSemanticVerifier)
-    assert isinstance(gate, UnavailableAnswerabilityGate)
-    assert not isinstance(llm, DeepSeekLLMProvider)
-    assert not isinstance(llm, FixtureLLMProvider)
+    """Unsupported llm_provider string fails validation at configuration time."""
+    with pytest.raises(ValidationError):
+        make_live_settings(
+            llm_provider="unsupported_bogus_provider", deepseek_api_key=FAKE_TEST_KEY
+        )
 
 
 def test_6b_unsupported_provider_in_fixture_mode_does_not_default():
-    """Unsupported provider in fixture mode fails closed to Unavailable classes, NOT default."""
-    settings = Settings(
-        app_mode="fixture",
-        llm_provider="unsupported_bogus_provider",
-    )
-    llm, verifier, gate = build_assistant_components(settings)
-
-    assert isinstance(llm, UnavailableLLMProvider)
-    assert isinstance(verifier, UnavailableSemanticVerifier)
-    assert not isinstance(llm, FixtureLLMProvider)
+    """Unsupported provider in fixture mode fails validation at configuration time."""
+    with pytest.raises(ValidationError):
+        Settings(
+            app_mode="fixture",
+            llm_provider="unsupported_bogus_provider",
+        )
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,8 @@ async def test_fixture_identity_prohibited_in_live_mode():
         def __init__(self):
             live_settings = Settings(
                 app_mode="live",
+                openrouter_api_key="test-only",
+                llm_provider="openrouter",
                 web_origin="https://app.example.com",
                 mongodb_uri="mongodb://localhost:27017",
                 firebase_project_id="ajg-sop-web",
@@ -58,6 +60,8 @@ def test_live_mode_requires_mongodb_uri():
     with pytest.raises((ValueError, ValidationError)):
         Settings(
             app_mode="live",
+            openrouter_api_key="test-only",
+            llm_provider="openrouter",
             web_origin="https://app.example.com",
             mongodb_uri=None,
             firebase_project_id="ajg-sop-web",
@@ -73,6 +77,8 @@ def test_live_mode_prohibits_fixture_embeddings() -> None:
     with pytest.raises((ValueError, ValidationError), match="pinecone_e5"):
         Settings(
             app_mode="live",
+            openrouter_api_key="test-only",
+            llm_provider="openrouter",
             web_origin="https://app.example.com",
             mongodb_uri="mongodb://localhost:27017",
             firebase_project_id="ajg-sop-web",
@@ -108,6 +114,8 @@ async def test_unknown_firebase_user_is_not_auto_provisioned_or_email_linked() -
 
     live_settings = Settings(
         app_mode="live",
+        openrouter_api_key="test-only",
+        llm_provider="openrouter",
         web_origin="https://app.example.com",
         mongodb_uri="mongodb://localhost:27017",
         firebase_project_id="ajg-sop-web",

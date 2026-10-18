@@ -15,8 +15,10 @@ answers are derived artifacts.
 Fixture login accepts the identities shown on the login page. Live mode requires Firebase Authentication, MongoDB,
 private S3-compatible storage, Pinecone, and configured model providers.
 
-The Phase 1 LLM adapter is DeepSeek (`deepseek-v4-flash`) behind the provider-neutral
-`LLMProvider` interface. Keep its key in ignored `.env.local` or a deployment secret manager. Search
+The LLM adapter is OpenRouter (`deepseek/deepseek-v4.1-flash-1017`, with an availability-only
+fallback to `deepseek/deepseek-v4-flash`) behind the provider-neutral `LLMProvider` interface.
+Direct DeepSeek remains an explicitly selected rollback provider. Keep keys in backend secrets;
+see [provider configuration, privacy and verification](docs/operations/openrouter.md). Search
 and canonical policy reading do not depend on the LLM.
 
 Voice input is implemented behind `VITE_VOICE_INPUT_ENABLED=false` and a provider-neutral backend
@@ -36,5 +38,5 @@ uv run pytest
 uv run python -m scripts.evaluation.run_fixture
 ```
 
-This foundation is not production- or pilot-ready until real SOP extraction, multilingual retrieval,
+This foundation is not production- or pilot-ready until real SOP extraction, English retrieval,
 authorization, and grounding have been benchmarked and approved by a human reviewer.
