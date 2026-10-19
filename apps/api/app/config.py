@@ -100,7 +100,6 @@ class Settings(BaseSettings):
                 "FIREBASE_SERVICE_ACCOUNT_JSON": self.firebase_service_account_json,
                 "S3_ACCESS_KEY_ID": self.s3_access_key_id,
                 "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
-                "PINECONE_API_KEY": self.pinecone_api_key,
             }
             if self.llm_provider == "openrouter":
                 required["OPENROUTER_API_KEY"] = self.openrouter_api_key
