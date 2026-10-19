@@ -1406,7 +1406,9 @@ def test_headings_with_deep_heading_paths() -> None:
     )
 
     chunks = chunker.chunk(sop, "published")
-    assert len(chunks) == 2
+    # Under 480-token budget, 500 emergency_step tokens split into 6 chunks (exact tokenizer)
+    # or 7 chunks (conservative fallback estimator), all strictly <= 480 tokens
+    assert len(chunks) in {6, 7}
     expected_header_prefix = " > ".join(deep_path)
 
     for idx, c in enumerate(chunks):
@@ -1599,3 +1601,474 @@ def test_token_estimator_conservative_bounds() -> None:
     est2 = chunker.estimate_tokens(text2)
     assert est2 >= len(text2.split())
     assert est2 >= int(len(text2) / 3.8)
+
+
+def test_strict_token_budget_enforcement():
+    """Verify that every chunk produced strictly respects the 480 target and 507 hard maximum."""
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc-budget")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+
+    # Construct a section with heavy markdown table
+    cells = [
+        CanonicalTableCell(row=0, column=0, text="Code", is_header=True, source=dummy),
+        CanonicalTableCell(row=0, column=1, text="Description", is_header=True, source=dummy),
+        CanonicalTableCell(row=0, column=2, text="Specification", is_header=True, source=dummy),
+    ]
+    for r in range(1, 35):
+        cells.extend(
+            [
+                CanonicalTableCell(
+                    row=r, column=0, text=f"SKU-{r:04d}", is_header=False, source=dummy
+                ),
+                CanonicalTableCell(
+                    row=r,
+                    column=1,
+                    text=f"Raw material batch allocation item for sector {r} testing standard",
+                    is_header=False,
+                    source=dummy,
+                ),
+                CanonicalTableCell(
+                    row=r,
+                    column=2,
+                    text=f"Tolerance threshold +-0.{r % 9 + 1}mm at 25C operating condition",
+                    is_header=False,
+                    source=dummy,
+                ),
+            ]
+        )
+    table = CanonicalTable(caption="Batch Specifications", cells=cells, source=dummy)
+
+    section = CanonicalSection(
+        id="sec-budget",
+        heading="Batch Control",
+        heading_level=2,
+        heading_path=("Production Operations", "Batch Control"),
+        policy_number="SOP-MFG-002",
+        stable_key="key-sec-budget",
+        content_hash="hash-sec-budget",
+        blocks=[CanonicalBlock(id="b-tbl", kind=BlockKind.TABLE, table=table, source=dummy)],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-budget",
+        organization_id="ajt",
+        policy_id="pol-mfg",
+        version_id="ver-mfg-v1",
+        source_document_ids=["doc-budget"],
+        title="Manufacturing SOP",
+        sections=[section],
+    )
+
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) > 1
+
+    for c in chunks:
+        tok_count = chunker.count_embedding_tokens(c.text)
+        assert tok_count <= chunker.SOFT_TARGET_TOKENS, (
+            f"Chunk {c.id} exceeded soft target 480 tokens: observed {tok_count}"
+        )
+        assert tok_count <= chunker.HARD_MAX_TOKENS, (
+            f"Chunk {c.id} exceeded hard limit 507 tokens: observed {tok_count}"
+        )
+
+
+def test_hard_max_token_guard_failure():
+    """Verify that if a chunk exceeds HARD_MAX_TOKENS (507), a ValueError is raised."""
+    import pytest
+
+    chunker = SemanticChunker()
+    original_count = chunker.count_embedding_tokens
+
+    def failing_counter(text: str) -> int:
+        if "OVERSIZED_TOKEN_BLOB" in text:
+            return 515
+        return original_count(text)
+
+    chunker.count_embedding_tokens = failing_counter  # type: ignore[method-assign]
+
+    dummy = SourceLocator(source_document_id="doc-fail")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    section = CanonicalSection(
+        id="sec-fail",
+        heading="Failure Test",
+        heading_level=1,
+        heading_path=("Failure Test",),
+        stable_key="key-fail",
+        content_hash="hash-fail",
+        blocks=[
+            CanonicalBlock(
+                id="b-fail",
+                kind=BlockKind.PARAGRAPH,
+                text="OVERSIZED_TOKEN_BLOB",
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-fail",
+        organization_id="ajt",
+        policy_id="pol-fail",
+        version_id="ver-fail-1",
+        source_document_ids=["doc-fail"],
+        title="Fail SOP",
+        sections=[section],
+    )
+
+    with pytest.raises(ValueError, match="exceeds hard maximum of 507 tokens"):
+        chunker.chunk(sop, "published")
+
+
+def test_hard_max_token_boundary_507_and_508():
+    """Verify that an input of exactly 507 tokens passes, while 508 fails with ValueError."""
+    import pytest
+
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc-boundary")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+
+    def make_sop(token_target: int) -> CanonicalSOP:
+        section = CanonicalSection(
+            id=f"sec-boundary-{token_target}",
+            heading="Boundary",
+            heading_level=1,
+            heading_path=("Boundary",),
+            stable_key=f"k-{token_target}",
+            content_hash=f"h-{token_target}",
+            blocks=[
+                CanonicalBlock(id="b1", kind=BlockKind.PARAGRAPH, text="content", source=dummy)
+            ],
+            source=dummy,
+            access=scope,
+        )
+        return CanonicalSOP(
+            id=f"sop-boundary-{token_target}",
+            organization_id="org",
+            policy_id="pol",
+            version_id="ver",
+            source_document_ids=["doc-boundary"],
+            title="Boundary SOP",
+            sections=[section],
+        )
+
+    # 1. Exactly 507 tokens must pass
+    chunker.count_embedding_tokens = lambda text: 507  # type: ignore[method-assign]
+    chunks = chunker.chunk(make_sop(507), "published")
+    assert len(chunks) == 1
+    assert chunks[0].id == "ver:sec-boundary-507:0"
+
+    # 2. Exactly 508 tokens must fail with ValueError
+    chunker.count_embedding_tokens = lambda text: 508  # type: ignore[method-assign]
+    with pytest.raises(ValueError, match="exceeds hard maximum of 507 tokens"):
+        chunker.chunk(make_sop(508), "published")
+
+
+def test_table_row_reassembly_and_header_replication():
+    """Verify that split tables replicate caption/headers on each fragment and preserve all rows."""
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc-tbl")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+
+    headers = ["Item ID", "Category", "Threshold Level", "Responsible Party"]
+    total_rows = 25
+    expected_row_ids: list[str] = []
+
+    cells = [
+        CanonicalTableCell(row=0, column=c_idx, text=h, is_header=True, source=dummy)
+        for c_idx, h in enumerate(headers)
+    ]
+    for r in range(1, total_rows + 1):
+        item_id = f"ITEM-{r:03d}"
+        expected_row_ids.append(item_id)
+        cells.extend(
+            [
+                CanonicalTableCell(row=r, column=0, text=item_id, is_header=False, source=dummy),
+                CanonicalTableCell(
+                    row=r, column=1, text=f"Category-{r % 4}", is_header=False, source=dummy
+                ),
+                CanonicalTableCell(
+                    row=r,
+                    column=2,
+                    text=f"Value {r * 10} units per hour",
+                    is_header=False,
+                    source=dummy,
+                ),
+                CanonicalTableCell(
+                    row=r,
+                    column=3,
+                    text=f"Officer {r % 3} supervisor",
+                    is_header=False,
+                    source=dummy,
+                ),
+            ]
+        )
+
+    table = CanonicalTable(caption="Threshold Matrix", cells=cells, source=dummy)
+    section = CanonicalSection(
+        id="sec-tbl",
+        heading="Matrix",
+        heading_level=1,
+        heading_path=("Inventory", "Matrix"),
+        policy_number="SOP-INV-001",
+        stable_key="key-sec-tbl",
+        content_hash="hash-sec-tbl",
+        blocks=[CanonicalBlock(id="b-tbl", kind=BlockKind.TABLE, table=table, source=dummy)],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-tbl",
+        organization_id="ajt",
+        policy_id="pol-inv",
+        version_id="ver-inv-1",
+        source_document_ids=["doc-tbl"],
+        title="Inventory SOP",
+        sections=[section],
+    )
+
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) > 1
+
+    # Verify every chunk contains repeated table header and caption
+    found_row_ids: list[str] = []
+    for c in chunks:
+        assert "**Threshold Matrix**" in c.text
+        assert "| Item ID | Category | Threshold Level | Responsible Party |" in c.text
+        assert "|---|---|---|---|" in c.text
+        for line in c.text.splitlines():
+            for item_id in expected_row_ids:
+                if f"| {item_id} |" in line:
+                    found_row_ids.append(item_id)
+
+    # Exact 1-to-1 preservation: no row omitted, no duplicate data rows
+    assert sorted(found_row_ids) == sorted(expected_row_ids)
+    assert len(found_row_ids) == len(expected_row_ids)
+
+
+def test_heading_shortening_preserves_sop_identifier_and_parent_leaf():
+    """Verify deterministic heading shortening preserves primary SOP identifier,
+    while keeping the complete original heading path recoverable in chunk metadata."""
+    chunker = SemanticChunker()
+
+    # Case 1: Heading fits within budget <= 75 tokens -> preserved exactly
+    short_path = ("Aziz Jan Group", "Store Operations", "4.3 Damaged Stock")
+    formatted_short = chunker._format_heading_prefix(short_path, policy_number="SOP-STORE-04")
+    assert formatted_short == "Aziz Jan Group > Store Operations > 4.3 Damaged Stock"
+
+    # Case 2: Deep path with intermediate SOP identifier that exceeds budget
+    deep_long_path = (
+        "Aziz Jan Group Holding Corporate Operational Standard Manual 2026",
+        "Division of Textile Manufacturing and Industrial Yarn Quality Assurance",
+        "SOP-TEXTILE-042 High Speed Loom Automated Safety Interlocks Protocol",
+        "Subclause 4.2 Mechanical Emergency Braking Calibration and Tolerance Thresholds",
+        "Section 4.2.1 Immediate Manual Override and Secondary Emergency Cutoff Switch Procedure",
+    )
+    formatted_deep = chunker._format_heading_prefix(deep_long_path, policy_number=None)
+
+    # Must be deterministic across calls
+    assert formatted_deep == chunker._format_heading_prefix(deep_long_path, policy_number=None)
+
+    # Must preserve root, SOP identifier, parent, and leaf
+    assert "Aziz Jan Group" in formatted_deep
+    assert "SOP-TEXTILE-042" in formatted_deep
+    assert "..." in formatted_deep
+    assert "Subclause 4.2" in formatted_deep
+    assert "Section 4.2.1" in formatted_deep
+
+    # Case 3: Policy number provided externally and not in heading path
+    deep_no_sop_in_path = (
+        "Aziz Jan Group Holding Corporate Operational Standard Manual 2026",
+        "Division of Textile Manufacturing and Industrial Yarn Quality Assurance",
+        "Departmental Safety Review Framework for Critical Machinery and Loom Infrastructure",
+        "Subclause 4.2 Mechanical Emergency Braking Calibration and Tolerance Thresholds",
+        "Section 4.2.1 Immediate Manual Override and Secondary Emergency Cutoff Switch Procedure",
+    )
+    formatted_with_pol = chunker._format_heading_prefix(
+        deep_no_sop_in_path, policy_number="SOP-EXT-999"
+    )
+    assert "[SOP-EXT-999]" in formatted_with_pol
+    assert "Section 4.2.1" in formatted_with_pol
+
+    # Case 4: Verify chunk metadata stores full recoverable path
+    dummy = SourceLocator(source_document_id="doc-head")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+    section = CanonicalSection(
+        id="sec-head",
+        heading="Immediate Manual Override and Secondary Emergency Cutoff Switch Procedure",
+        heading_level=5,
+        heading_path=deep_long_path,
+        policy_number="SOP-TEXTILE-042",
+        stable_key="key-sec-head",
+        content_hash="hash-sec-head",
+        blocks=[
+            CanonicalBlock(
+                id="b-head",
+                kind=BlockKind.PARAGRAPH,
+                text="Execute emergency cutoff switch immediately upon hearing abnormal vibration.",
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-head",
+        organization_id="ajt",
+        policy_id="pol-textile",
+        version_id="ver-textile-1",
+        source_document_ids=["doc-head"],
+        title="Textile SOP",
+        sections=[section],
+    )
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 1
+    # Full unshortened path is completely preserved in chunk metadata
+    assert chunks[0].heading_path == deep_long_path
+    assert chunks[0].policy_number == "SOP-TEXTILE-042"
+
+
+def test_small_sections_invariance_and_id_stability():
+    """Verify that sections fitting in token budget produce 1 chunk with identical IDs."""
+    chunker = SemanticChunker()
+    dummy = SourceLocator(source_document_id="doc-small")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+
+    section = CanonicalSection(
+        id="sec-small",
+        heading="Scope and Purpose",
+        heading_level=1,
+        heading_path=("Policy", "Scope and Purpose"),
+        policy_number="SOP-001",
+        stable_key="key-sec-small",
+        content_hash="hash-sec-small",
+        blocks=[
+            CanonicalBlock(
+                id="b-small",
+                kind=BlockKind.PARAGRAPH,
+                text="This policy applies to all personnel within the organization.",
+                source=dummy,
+            )
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-small",
+        organization_id="ajt",
+        policy_id="pol-001",
+        version_id="ver-001",
+        source_document_ids=["doc-small"],
+        title="Small SOP",
+        sections=[section],
+    )
+
+    chunks1 = chunker.chunk(sop, "published")
+    chunks2 = chunker.chunk(sop, "published")
+
+    assert len(chunks1) == 1
+    assert len(chunks2) == 1
+    assert chunks1[0].id == "ver-001:sec-small:0"
+    assert chunks1[0].id == chunks2[0].id
+    assert chunks1[0].text == chunks2[0].text
+    assert chunks1[0].chunk_index == 0
+
+
+def test_semantic_chunker_fallback_without_tokenizer():
+    """Verify chunker operates reliably and conservatively in fallback mode without a tokenizer."""
+    chunker = SemanticChunker(tokenizer=None)
+    # Ensure fallback mode is active (no external tokenizer object)
+    assert chunker._tokenizer is None
+
+    # 1. Conservative estimator checks on diverse text patterns
+    plain_text = "Standard Operating Procedure for warehouse dispatch operations."
+    table_text = "| SKU-001 | 500 MT | ACTIVE |\n| SKU-002 | 250 MT | PENDING |"
+    dense_codes = "PO#994821-A / Model: XL-240V / Serial: 8839-2049-1102"
+
+    plain_est = chunker.count_embedding_tokens(plain_text)
+    table_est = chunker.count_embedding_tokens(table_text)
+    code_est = chunker.count_embedding_tokens(dense_codes)
+
+    assert plain_est >= len(plain_text.split())
+    assert table_est >= len(table_text.split())
+    assert code_est >= len(dense_codes.split())
+
+    # 2. End-to-end chunking in fallback mode
+    dummy = SourceLocator(source_document_id="doc-fallback-test")
+    scope = AccessScope(
+        departments=AccessDimension(mode=AccessMode.ALL),
+        locations=AccessDimension(mode=AccessMode.ALL),
+        roles=AccessDimension(mode=AccessMode.ALL),
+    )
+
+    section = CanonicalSection(
+        id="sec-fallback",
+        heading="Fallback Safety & Quality",
+        heading_level=1,
+        heading_path=("SOP", "Fallback Safety & Quality"),
+        policy_number="SOP-FALLBACK-01",
+        stable_key="key-sec-fallback",
+        content_hash="hash-sec-fallback",
+        blocks=[
+            CanonicalBlock(
+                id="b-fallback-1",
+                kind=BlockKind.PARAGRAPH,
+                text="This is an operational guideline verified under pure fallback token bounds.",
+                source=dummy,
+            ),
+            CanonicalBlock(
+                id="b-fallback-2",
+                kind=BlockKind.PARAGRAPH,
+                text="Specifications: Parameter A = 100, Parameter B = 200, Tolerance = +/- 2.5%.",
+                source=dummy,
+            ),
+        ],
+        source=dummy,
+        access=scope,
+    )
+    sop = CanonicalSOP(
+        id="sop-fallback",
+        organization_id="ajt",
+        policy_id="pol-fallback",
+        version_id="ver-fallback",
+        source_document_ids=["doc-fallback-test"],
+        title="Fallback Verification SOP",
+        sections=[section],
+    )
+
+    chunks = chunker.chunk(sop, "published")
+    assert len(chunks) == 1
+    assert chunks[0].id == "ver-fallback:sec-fallback:0"
+    assert chunks[0].section_id == "sec-fallback"
+    
+    # Token count of the resulting chunk must obey limits in fallback mode
+    tokens = chunker.count_embedding_tokens(chunks[0].text)
+    assert tokens <= SemanticChunker.SOFT_TARGET_TOKENS
+    assert tokens <= SemanticChunker.HARD_MAX_TOKENS
+
