@@ -1,3 +1,4 @@
+import importlib
 import os
 import re
 from abc import ABC, abstractmethod
@@ -89,7 +90,8 @@ class SemanticChunker(Chunker):
         if not path or not os.path.exists(path):
             return None
         try:
-            from tokenizers import Tokenizer
+            tokenizers_module = importlib.import_module("tokenizers")
+            Tokenizer = tokenizers_module.Tokenizer
 
             return Tokenizer.from_file(path)
         except Exception:
