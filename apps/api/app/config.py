@@ -7,7 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env.local", ".env"), env_file_encoding="utf-8", extra="ignore"
+        env_file=(".env.local", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        hide_input_in_errors=True,
     )
 
     app_mode: Literal["fixture", "live"] = "fixture"
@@ -42,11 +45,25 @@ class Settings(BaseSettings):
     firebase_project_id: str | None = None
     firebase_service_account_json: SecretStr | None = None
 
-    llm_provider: Literal["fixture", "deepseek"] = "deepseek"
+    llm_provider: Literal["fixture", "deepseek", "openrouter"] = "openrouter"
     deepseek_api_key: SecretStr | None = None
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
     deepseek_temperature: float = Field(default=0.2, ge=0, le=1)
+
+    openrouter_api_key: SecretStr | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = Field(
+        default="deepseek/deepseek-v4.1-flash-1017", pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    )
+    openrouter_fallback_model: str = Field(
+        default="deepseek/deepseek-v4-flash", pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    )
+    openrouter_temperature: float = Field(default=0.2, ge=0, le=1)
+    openrouter_allowed_providers: tuple[str, ...] = ()
+    llm_request_timeout_seconds: float = Field(default=45, gt=0, le=120, allow_inf_nan=False)
+    llm_read_timeout_seconds: float = Field(default=20, gt=0, le=60, allow_inf_nan=False)
+    llm_max_connections: int = Field(default=20, ge=1, le=100)
 
     embedding_provider: Literal["fixture", "pinecone_e5", "e5"] = "fixture"
     embedding_model: str = "multilingual-e5-large"
@@ -84,13 +101,25 @@ class Settings(BaseSettings):
                 "S3_ACCESS_KEY_ID": self.s3_access_key_id,
                 "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
                 "PINECONE_API_KEY": self.pinecone_api_key,
-                "DEEPSEEK_API_KEY": self.deepseek_api_key,
             }
+            if self.llm_provider == "openrouter":
+                required["OPENROUTER_API_KEY"] = self.openrouter_api_key
+            elif self.llm_provider == "deepseek":
+                required["DEEPSEEK_API_KEY"] = self.deepseek_api_key
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
             if self.embedding_provider not in {"pinecone_e5", "e5"}:
                 raise ValueError("EMBEDDING_PROVIDER must be pinecone_e5 or e5 in live mode")
+            if self.llm_provider == "fixture":
+                raise ValueError("Fixture LLM is prohibited in live mode")
+            llm_key = (
+                self.openrouter_api_key
+                if self.llm_provider == "openrouter"
+                else self.deepseek_api_key
+            )
+            if not llm_key or not llm_key.get_secret_value().strip():
+                raise ValueError(f"Missing {self.llm_provider.upper()}_API_KEY")
             if "localhost" in self.web_origin:
                 raise ValueError(
                     "WEB_ORIGIN must not be localhost in live mode; "

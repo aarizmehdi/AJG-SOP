@@ -4,6 +4,7 @@ from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
+import httpx
 import structlog
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,6 +43,7 @@ from apps.api.app.services.identity_admin_service import (
     FirebaseAdminIdentityService,
     FixtureIdentityAdminService,
 )
+from apps.api.app.services.llm_factory import build_llm_provider
 from apps.api.app.services.metrics import MetricsRegistry
 from apps.api.app.services.organization_service import OrganizationService
 from apps.api.app.services.policy_purge_service import PolicyPurgeService
@@ -49,12 +51,6 @@ from apps.api.app.services.policy_reader_service import PolicyReaderService
 from apps.api.app.services.policy_service import PolicyService
 from apps.api.app.services.storage_service import LocalArtifactStore, S3ArtifactStore
 from apps.api.app.services.user_admin_service import UserAdminService
-from services.assistant.answer_generator import (
-    DeepSeekLLMProvider,
-    FixtureLLMProvider,
-    LLMProvider,
-    UnavailableLLMProvider,
-)
 from services.assistant.answerability import FixtureAnswerabilityGate
 from services.assistant.citations import CitationValidator
 from services.assistant.grounding import GroundingVerifier
@@ -105,7 +101,7 @@ def build_parser(settings: Settings) -> DocumentParser:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     app.state.settings = settings
     app.state.metrics = MetricsRegistry()
@@ -241,18 +237,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.purge_repository.cache_listener = app.state.retrieval_service.evict_chunks
 
     # --- LLM provider ---
-    llm_provider: LLMProvider
-    if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
-        llm_provider = DeepSeekLLMProvider(
-            settings.deepseek_api_key.get_secret_value(),
-            settings.deepseek_base_url,
-            settings.deepseek_model,
-            settings.deepseek_temperature,
-        )
-    elif settings.llm_provider == "fixture":
-        llm_provider = FixtureLLMProvider()
-    else:
-        llm_provider = UnavailableLLMProvider()
+    llm_provider = build_llm_provider(settings, app.state.llm_http_client, app.state.metrics)
     app.state.assistant_service = AssistantService(
         app.state.retrieval_service,
         FixtureAnswerabilityGate(),
@@ -273,6 +258,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         structlog.get_logger().exception("shutdown_flush_failed")
     await app.state.foundation_persistence.close()
     await app.state.database.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Close the shared LLM pool even when application startup/shutdown raises."""
+    config = get_settings()
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=5, read=config.llm_read_timeout_seconds, write=10, pool=2),
+        limits=httpx.Limits(
+            max_connections=config.llm_max_connections,
+            max_keepalive_connections=min(10, config.llm_max_connections),
+            keepalive_expiry=30,
+        ),
+        follow_redirects=False,
+        trust_env=False,
+    ) as client:
+        app.state.llm_http_client = client
+        async with application_lifespan(app):
+            yield
 
 
 settings = get_settings()
