@@ -140,8 +140,17 @@ def main() -> int:
             data = json.loads(result.read_text(encoding="utf-8"))
             # The archived directory has no .git. Correct the runner's parent
             # checkout lookup using the explicitly resolved archive provenance.
+            reported_commit = data["git_commit"]
             data["git_commit"] = baseline if label == "baseline" else head
             result.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            report = result_dir / "report.md"
+            if report.exists():
+                report.write_text(
+                    report.read_text(encoding="utf-8").replace(
+                        f"- Commit: `{reported_commit}`", f"- Commit: `{data['git_commit']}`"
+                    ),
+                    encoding="utf-8",
+                )
             print(
                 json.dumps(
                     {
