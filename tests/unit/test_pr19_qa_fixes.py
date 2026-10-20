@@ -431,6 +431,9 @@ async def test_qa05_policy_reader_long_sop_more_than_8_sections():
     ]
 
     class FakePolicyReader:
+        def list_available(self, profile):
+            return []
+
         def read_policy(self, profile, policy_id):
             return PolicyReaderDocument(
                 policy_id="pol-100",

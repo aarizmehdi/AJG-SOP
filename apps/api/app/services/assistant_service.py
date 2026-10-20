@@ -19,7 +19,12 @@ from packages.contracts.assistant import (
     VerifiedAnswer,
 )
 from packages.contracts.common import Language
-from packages.contracts.retrieval import AssistantEvidence, PolicyReaderDocument, SearchEvidence
+from packages.contracts.retrieval import (
+    AssistantEvidence,
+    AvailablePolicySummary,
+    PolicyReaderDocument,
+    SearchEvidence,
+)
 from services.assistant.answer_generator import LLMProvider, LLMResponseError
 from services.assistant.answerability import (
     AnswerabilityDecision,
@@ -50,6 +55,8 @@ class VerificationError(RuntimeError):
 
 
 class AuthorizedPolicyReader(Protocol):
+    def list_available(self, profile: EmployeeProfile) -> list[AvailablePolicySummary]: ...
+
     def read_policy(
         self, profile: EmployeeProfile, policy_id: str
     ) -> PolicyReaderDocument | None: ...
@@ -133,7 +140,7 @@ class AssistantService:
             and plan.answer_mode == InternalAnswerMode.ANSWER
             and self._is_broad_policy_question(question, context)
         ):
-            overview = self._build_sections_overview(profile, language, context)
+            overview = self._build_sections_overview(profile, language, context, question)
             if overview is not None:
                 if progress:
                     progress("verifying")
@@ -227,7 +234,7 @@ class AssistantService:
             and plan.answer_mode == InternalAnswerMode.ANSWER
             and self._is_broad_policy_question(question, context)
         ):
-            overview = self._build_sections_overview(profile, language, context)
+            overview = self._build_sections_overview(profile, language, context, question)
             if overview is not None:
                 await self.assert_release_authorized(profile, context, overview.section_options)
                 self._observe(overview.kind, started)
@@ -308,27 +315,56 @@ class AssistantService:
             "پالیسی",
             "ایس او پی",
         )
-        if any(ind in q for ind in broad_indicators):
-            return True
-
-        for item in context:
-            if item.policy_title and item.policy_title.casefold() in q:
-                return True
-
-        return False
+        # A policy reference alone does not make a question broad: e.g.
+        # "According to SOP X, who signs it?" or "What allowance does SOP X grant?"
+        # must reach answerability/generation, not bypass them with navigation.
+        explicit_overview = re.search(
+            r"\b(overview|summary|summari[sz]e|outline|table of contents|list sections|"
+            r"list headings|what sections|what chapters)\b",
+            q,
+        )
+        general_request = re.match(
+            r"^(?:please\s+)?(?:what (?:is|are)|explain|describe|tell me about|"
+            r"show me|show the|give me)\b",
+            q,
+        )
+        bare_policy_request = re.fullmatch(
+            r"sop\s*#?\s*[\w/-]+(?:\s+(?:guidelines|overview|summary))?", q
+        )
+        policy_reference = any(ind in q for ind in broad_indicators) or any(
+            item.policy_title and item.policy_title.casefold() in q for item in context
+        )
+        return bool(
+            policy_reference and (explicit_overview or general_request or bare_policy_request)
+        )
 
     def _build_sections_overview(
         self,
         profile: EmployeeProfile,
         language: Language,
         context: Sequence[AssistantEvidence],
+        question: str = "",
     ) -> VerifiedAnswer | None:
         if not context:
             return None
 
         # Canonical navigation is independent of retrieval chunk citations.
+        # Exact named-policy navigation uses the same authorized catalog as the
+        # employee reader; retrieval ranking must not substitute another SOP.
+        policy_ids = list(dict.fromkeys(item.policy_id for item in context))
+        named_policy_ids: list[str] = []
+        if question and self.policy_reader is not None:
+            normalized = re.sub(r"\W+", " ", question).casefold().strip()
+            named_policy_ids = [
+                policy.policy_id
+                for policy in self.policy_reader.list_available(profile)
+                if " " + re.sub(r"\W+", " ", policy.title).casefold().strip() + " "
+                in " " + normalized + " "
+            ]
+            if named_policy_ids:
+                policy_ids = named_policy_ids
         groups: list[list[AssistantSectionOption]] = []
-        for policy_id in dict.fromkeys(item.policy_id for item in context):
+        for policy_id in policy_ids:
             items = [item for item in context if item.policy_id == policy_id]
             versions = {item.version_id for item in items}
             options: list[AssistantSectionOption] = []
@@ -340,7 +376,9 @@ class AssistantService:
                     if (
                         section.organization_id != profile.organization_id
                         or section.policy_id != policy_id
-                        or section.version_id not in versions
+                        or (
+                            policy_id not in named_policy_ids and section.version_id not in versions
+                        )
                     ):
                         continue
                     options.append(
