@@ -980,4 +980,3 @@ async def test_token_aware_chunk_end_to_end_retrieval():
     assert "HV-018" in top_chunk.text
     assert top_chunk.heading_path == ("Technical Operations", "Hydraulic System Verification")
     assert top_chunk.policy_number == "SOP-TECH-400"
-

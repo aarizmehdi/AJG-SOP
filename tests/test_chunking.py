@@ -2074,9 +2074,8 @@ def test_semantic_chunker_fallback_without_tokenizer():
     assert len(chunks) == 1
     assert chunks[0].id == "ver-fallback:sec-fallback:0"
     assert chunks[0].section_id == "sec-fallback"
-    
+
     # Token count of the resulting chunk must obey limits in fallback mode
     tokens = chunker.count_embedding_tokens(chunks[0].text)
     assert tokens <= SemanticChunker.SOFT_TARGET_TOKENS
     assert tokens <= SemanticChunker.HARD_MAX_TOKENS
-

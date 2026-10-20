@@ -163,4 +163,3 @@ def test_embedding_provider_e5_alias_and_bge_m3_rejected() -> None:
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **common, embedding_provider="bge_m3")
-

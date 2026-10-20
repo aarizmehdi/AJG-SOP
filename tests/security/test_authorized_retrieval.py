@@ -1589,4 +1589,3 @@ async def test_lexical_and_semantic_channels_receive_identical_eligible_set() ->
     assert lexical_ids == ["chunk-allowed-1", "chunk-allowed-2"]
     assert semantic_ids == ["chunk-allowed-1", "chunk-allowed-2"]
     assert lexical_ids == semantic_ids
-

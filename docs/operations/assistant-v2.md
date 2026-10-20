@@ -44,6 +44,18 @@ uv run python -m scripts.evaluation.compare_retrieval --baseline adf70c251d7ce22
 
 The hosted baseline uses an explicit **transport-only benchmark shim** for batching and bounded transient retries; its chunker, lexical ranking and historical END truncation remain unchanged. The unmodified main benchmark separately fails when its 193 inputs exceed the hosted 96-input request limit; no quality metric is invented for that failed configuration. Hosted comparisons use stateless inference and read-only index metadata, never upserts or production vector queries. CI's hash-embedding matrix is a regression/security gate, not hosted semantic quality. Its historical multilingual rows are not multilingual acceptance. Use English-only comparisons for this release.
 
+Release comparison provenance: baseline `adf70c251d7ce22e0b8c3f00ceb1da9d72577ebd`, integrated runtime `06373db403fc9e0e7eaeee9ae12bd7b8e1ac3eb7`, clean checkout; English dataset SHA-256 `fd4b8daebb539ccfca8c6b2f2d480844859927cfeed15b2035eed2c7470b5423`, private corpus fingerprint `0be66f5b45e1a114`. Later reporting/whitespace corrections do not change the measured ranking/chunking code. Results include 124 cases, 103 retrieval-scored; the same cases were used during development, so this is not held-out acceptance.
+
+| Evidence / configuration | Recall@1 | Recall@5 | MRR | nDCG@5 |
+| --- | --- | --- | --- | --- |
+| Fixture hash, main with overlap reranker | 0.2039 | 0.4922 | 0.3330 | 0.3625 |
+| Fixture hash, integrated with preserved fusion | 0.3447 | 0.6214 | 0.4497 | 0.4899 |
+| Hosted E5, main with overlap reranker (transport shim) | 0.3592 | 0.6937 | 0.5107 | 0.5501 |
+| Hosted E5, main with preserved fusion (transport shim) | 0.2743 | 0.6500 | 0.4380 | 0.4824 |
+| Hosted E5, integrated with preserved fusion | 0.7767 | 0.9626 | 0.8631 | 0.8853 |
+
+Hosted category Recall@5, main overlap -> integrated preserved fusion: tables 0.1429 -> 1.0000 (14 cases), exact SOP references 0.6786 -> 0.9643 (28), nested lists 0.8000 -> 1.0000 (5), late evidence 0.9500 -> 1.0000 (20), broad questions 0.4875 -> 0.5375 (4). Broad nDCG@5 remains lower (0.5310 -> 0.4385): five chunk slots still do not represent every relevant section in a collection. Named-document overviews use the preserved canonical navigation path instead. No fusion-weight tuning or section-level deduplication was added. Unauthorized retrieval and technical failures were zero in these completed comparisons. Fixture hash semantic-only Recall@5 decreased (0.3422 -> 0.3131), reinforcing why fixture semantic scores cannot establish hosted E5 quality.
+
 ### Separate approved migration required for existing SOPs
 
 Deploying retrieval code does **not** rebuild existing chunks/vectors or change canonical policies. Current published documents benefit from lexical matching/rank corrections immediately, but cannot receive newly split, fully embedded passages without a separate approved publication/index migration.

@@ -24,7 +24,7 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
 
     Despite its fixture-prefixed name, this component is the active lexical retrieval channel
     in production wiring. It operates strictly over pre-filtered, authorized eligible chunks,
-    applying exact SOP code matching bonuses (+10.0), exact phrase matching bonuses (+8.0),
+    applying exact SOP code matching bonuses (+100.0), exact phrase matching bonuses (+8.0),
     stop-word-filtered term coordination matching, and sub-linear term frequency scoring.
     All candidate rankings are deterministic.
     """

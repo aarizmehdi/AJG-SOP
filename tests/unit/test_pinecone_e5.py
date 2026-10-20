@@ -206,6 +206,3 @@ async def test_production_e5_dimension_mismatch_during_embed() -> None:
 
     with pytest.raises(EmbeddingDimensionError, match="does not match expected 4"):
         await provider.embed_documents(["doc1"])
-
-
-
