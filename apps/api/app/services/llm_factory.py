@@ -10,17 +10,29 @@ from services.assistant.answer_generator import (
     LLMProvider,
     UnavailableLLMProvider,
 )
+from services.assistant.answerability import (
+    AnswerabilityGate,
+    DeepSeekAnswerabilityGate,
+    FixtureAnswerabilityGate,
+    UnavailableAnswerabilityGate,
+)
 from services.assistant.chat_transport import ChatCompletionTransport
+from services.assistant.grounding import (
+    DeepSeekSemanticVerifier,
+    FixtureSemanticVerifier,
+    SemanticVerifier,
+    UnavailableSemanticVerifier,
+)
 from services.assistant.openrouter import OpenRouterLLMProvider
 
 
-def build_llm_provider(
+def build_chat_transport(
     settings: Settings, client: httpx.AsyncClient, metrics: MetricsRegistry
-) -> LLMProvider:
+) -> ChatCompletionTransport | None:
     if settings.llm_provider == "fixture":
         if settings.app_mode == "live":
             raise ValueError("Fixture LLM is prohibited in live mode")
-        return FixtureLLMProvider()
+        return None
     secret = (
         settings.openrouter_api_key
         if settings.llm_provider == "openrouter"
@@ -29,7 +41,7 @@ def build_llm_provider(
     if not secret or not secret.get_secret_value().strip():
         if settings.app_mode == "live":
             raise ValueError(f"Missing {settings.llm_provider.upper()}_API_KEY")
-        return UnavailableLLMProvider()
+        return None
     options: dict[str, object]
     if settings.llm_provider == "openrouter":
         routing: dict[str, object] = {
@@ -47,7 +59,7 @@ def build_llm_provider(
     else:
         options = {"thinking": {"type": "disabled"}}
         base_url = settings.deepseek_base_url
-    transport = ChatCompletionTransport(
+    return ChatCompletionTransport(
         client,
         provider_id=settings.llm_provider,
         api_key=secret.get_secret_value(),
@@ -57,6 +69,18 @@ def build_llm_provider(
         structured_schema=settings.llm_provider == "openrouter",
         options=options,
     )
+
+
+def build_llm_provider(
+    settings: Settings, client: httpx.AsyncClient, metrics: MetricsRegistry
+) -> LLMProvider:
+    if settings.llm_provider == "fixture":
+        if settings.app_mode == "live":
+            raise ValueError("Fixture LLM is prohibited in live mode")
+        return FixtureLLMProvider()
+    transport = build_chat_transport(settings, client, metrics)
+    if transport is None:
+        return UnavailableLLMProvider()
     if settings.llm_provider == "openrouter":
         return OpenRouterLLMProvider(
             transport,
@@ -65,3 +89,79 @@ def build_llm_provider(
             settings.openrouter_temperature,
         )
     return DeepSeekLLMProvider(transport, settings.deepseek_model, settings.deepseek_temperature)
+
+
+def build_answerability_gate(
+    settings: Settings, transport: ChatCompletionTransport | None = None
+) -> AnswerabilityGate:
+    if settings.app_mode != "live":
+        return FixtureAnswerabilityGate()
+    model = (
+        settings.openrouter_model
+        if settings.llm_provider == "openrouter"
+        else settings.deepseek_model
+    )
+    fallback = (
+        settings.openrouter_fallback_model if settings.llm_provider == "openrouter" else None
+    )
+    if transport is not None:
+        return DeepSeekAnswerabilityGate(
+            transport, base_url_or_model=model, fallback_model=fallback
+        )
+
+    secret = (
+        settings.openrouter_api_key
+        if settings.llm_provider == "openrouter"
+        else settings.deepseek_api_key
+    )
+    base_url = (
+        settings.openrouter_base_url
+        if settings.llm_provider == "openrouter"
+        else settings.deepseek_base_url
+    )
+    if secret and secret.get_secret_value().strip():
+        return DeepSeekAnswerabilityGate(
+            api_key=secret.get_secret_value(),
+            base_url=base_url,
+            model=model,
+            fallback_model=fallback,
+        )
+    return UnavailableAnswerabilityGate()
+
+
+def build_semantic_verifier(
+    settings: Settings, transport: ChatCompletionTransport | None = None
+) -> SemanticVerifier:
+    if settings.app_mode != "live":
+        return FixtureSemanticVerifier()
+    model = (
+        settings.openrouter_model
+        if settings.llm_provider == "openrouter"
+        else settings.deepseek_model
+    )
+    fallback = (
+        settings.openrouter_fallback_model if settings.llm_provider == "openrouter" else None
+    )
+    if transport is not None:
+        return DeepSeekSemanticVerifier(
+            transport, base_url_or_model=model, fallback_model=fallback
+        )
+
+    secret = (
+        settings.openrouter_api_key
+        if settings.llm_provider == "openrouter"
+        else settings.deepseek_api_key
+    )
+    base_url = (
+        settings.openrouter_base_url
+        if settings.llm_provider == "openrouter"
+        else settings.deepseek_base_url
+    )
+    if secret and secret.get_secret_value().strip():
+        return DeepSeekSemanticVerifier(
+            api_key=secret.get_secret_value(),
+            base_url=base_url,
+            model=model,
+            fallback_model=fallback,
+        )
+    return UnavailableSemanticVerifier()

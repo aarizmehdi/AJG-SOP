@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from apps.api.app.config import get_settings
 from apps.api.app.main import app
+from apps.api.app.models.organization import ApplicationRole, EmployeeProfile
 from packages.contracts.assistant import (
     Language,
     MessageRole,
@@ -12,7 +13,16 @@ from packages.contracts.assistant import (
     VerifiedAnswer,
 )
 from services.assistant.conversation import ConversationTurn
-from tests.unit.test_assistant_v2 import PROFILE
+
+DEFAULT_SMOKE_PROFILE = EmployeeProfile(
+    id="smoke-user",
+    organization_id="ajt",
+    identity_subject="fixture|smoke-test-user",
+    display_name="Smoke Test User",
+    email="smoke@example.test",
+    application_roles=frozenset({ApplicationRole.EMPLOYEE, ApplicationRole.SOP_ADMIN}),
+    departments=frozenset({"store", "operations"}),
+)
 
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
@@ -26,14 +36,27 @@ async def smoke_test(service=None, settings=None, profile=None) -> int:
 
         app_mode = getattr(settings, "app_mode", None)
         llm_provider = getattr(settings, "llm_provider", None)
-        has_key = bool(
-            getattr(settings, "deepseek_api_key", None)
-            and (
-                settings.deepseek_api_key.get_secret_value()
-                if hasattr(settings.deepseek_api_key, "get_secret_value")
-                else settings.deepseek_api_key
+
+        if llm_provider == "openrouter":
+            has_key = bool(
+                getattr(settings, "openrouter_api_key", None)
+                and (
+                    settings.openrouter_api_key.get_secret_value()
+                    if hasattr(settings.openrouter_api_key, "get_secret_value")
+                    else settings.openrouter_api_key
+                )
             )
-        )
+            key_name = "OPENROUTER_API_KEY"
+        else:
+            has_key = bool(
+                getattr(settings, "deepseek_api_key", None)
+                and (
+                    settings.deepseek_api_key.get_secret_value()
+                    if hasattr(settings.deepseek_api_key, "get_secret_value")
+                    else settings.deepseek_api_key
+                )
+            )
+            key_name = "DEEPSEEK_API_KEY"
 
         print(f"Active app_mode: {app_mode}")
         print(f"Active llm_provider: {llm_provider}")
@@ -41,11 +64,11 @@ async def smoke_test(service=None, settings=None, profile=None) -> int:
         # Check for live prerequisites
         if app_mode != "live" or not has_key:
             print("\n[SMOKE TEST] SKIPPED (live smoke test not run)")
-            print("Reason: Requires app_mode='live' and a configured DEEPSEEK_API_KEY.")
+            print(f"Reason: Requires app_mode='live' and a configured {key_name}.")
             return EXIT_SKIPPED
 
         if profile is None:
-            profile = PROFILE
+            profile = DEFAULT_SMOKE_PROFILE
 
         def validate_answer(resp: object, step_name: str) -> bool:
             if not isinstance(resp, VerifiedAnswer):

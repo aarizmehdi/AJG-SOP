@@ -43,7 +43,11 @@ from apps.api.app.services.identity_admin_service import (
     FirebaseAdminIdentityService,
     FixtureIdentityAdminService,
 )
-from apps.api.app.services.llm_factory import build_llm_provider
+from apps.api.app.services.llm_factory import (
+    build_answerability_gate,
+    build_chat_transport,
+    build_semantic_verifier,
+)
 from apps.api.app.services.metrics import MetricsRegistry
 from apps.api.app.services.organization_service import OrganizationService
 from apps.api.app.services.policy_purge_service import PolicyPurgeService
@@ -59,14 +63,12 @@ from services.assistant.answer_generator import (
 )
 from services.assistant.answerability import (
     AnswerabilityGate,
-    DeepSeekAnswerabilityGate,
     FixtureAnswerabilityGate,
     UnavailableAnswerabilityGate,
 )
 from services.assistant.chat_transport import ChatCompletionTransport
 from services.assistant.citations import CitationValidator
 from services.assistant.grounding import (
-    DeepSeekSemanticVerifier,
     FixtureSemanticVerifier,
     GroundingVerifier,
     SemanticVerifier,
@@ -119,40 +121,16 @@ def build_parser(settings: Settings) -> DocumentParser:
     return ParserRouter(providers[settings.document_parser_provider])
 
 
-def create_answerability_gate(settings: Settings) -> AnswerabilityGate:
-    if settings.app_mode == "live":
-        if settings.llm_provider == "openrouter" and settings.openrouter_api_key:
-            return DeepSeekAnswerabilityGate(
-                settings.openrouter_api_key.get_secret_value(),
-                settings.openrouter_base_url,
-                settings.openrouter_model,
-            )
-        if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
-            return DeepSeekAnswerabilityGate(
-                settings.deepseek_api_key.get_secret_value(),
-                settings.deepseek_base_url,
-                settings.deepseek_model,
-            )
-        return UnavailableAnswerabilityGate()
-    return FixtureAnswerabilityGate()
+def create_answerability_gate(
+    settings: Settings, transport: ChatCompletionTransport | None = None
+) -> AnswerabilityGate:
+    return build_answerability_gate(settings, transport)
 
 
-def create_semantic_verifier(settings: Settings) -> SemanticVerifier:
-    if settings.app_mode == "live":
-        if settings.llm_provider == "openrouter" and settings.openrouter_api_key:
-            return DeepSeekSemanticVerifier(
-                settings.openrouter_api_key.get_secret_value(),
-                settings.openrouter_base_url,
-                settings.openrouter_model,
-            )
-        if settings.llm_provider == "deepseek" and settings.deepseek_api_key:
-            return DeepSeekSemanticVerifier(
-                settings.deepseek_api_key.get_secret_value(),
-                settings.deepseek_base_url,
-                settings.deepseek_model,
-            )
-        return UnavailableSemanticVerifier()
-    return FixtureSemanticVerifier()
+def create_semantic_verifier(
+    settings: Settings, transport: ChatCompletionTransport | None = None
+) -> SemanticVerifier:
+    return build_semantic_verifier(settings, transport)
 
 
 def build_assistant_components(
@@ -160,39 +138,31 @@ def build_assistant_components(
     client: httpx.AsyncClient | None = None,
     metrics: MetricsRegistry | None = None,
 ) -> tuple[LLMProvider, SemanticVerifier, AnswerabilityGate]:
-    answerability_gate = create_answerability_gate(settings)
-    semantic_verifier = create_semantic_verifier(settings)
-    if client is not None:
-        llm_provider = build_llm_provider(settings, client, metrics or MetricsRegistry())
-    elif settings.llm_provider == "fixture":
-        llm_provider = FixtureLLMProvider()
-    elif settings.llm_provider == "openrouter" and settings.openrouter_api_key:
-        llm_provider = OpenRouterLLMProvider(
-            ChatCompletionTransport(
-                httpx.AsyncClient(),
-                provider_id="openrouter",
-                api_key=settings.openrouter_api_key.get_secret_value(),
-                base_url=settings.openrouter_base_url,
-                metrics=metrics or MetricsRegistry(),
-            ),
+    if settings.llm_provider == "fixture":
+        return FixtureLLMProvider(), FixtureSemanticVerifier(), FixtureAnswerabilityGate()
+    if client is None:
+        raise ValueError("A caller-owned httpx.AsyncClient is required for cloud LLM providers")
+    reg = metrics or MetricsRegistry()
+    transport = build_chat_transport(settings, client, reg)
+    if transport is None:
+        return (
+            UnavailableLLMProvider(),
+            UnavailableSemanticVerifier(),
+            UnavailableAnswerabilityGate(),
+        )
+    if settings.llm_provider == "openrouter":
+        llm_provider: LLMProvider = OpenRouterLLMProvider(
+            transport,
             settings.openrouter_model,
             settings.openrouter_fallback_model,
             settings.openrouter_temperature,
         )
-    elif settings.llm_provider == "deepseek" and settings.deepseek_api_key:
-        llm_provider = DeepSeekLLMProvider(
-            ChatCompletionTransport(
-                httpx.AsyncClient(),
-                provider_id="deepseek",
-                api_key=settings.deepseek_api_key.get_secret_value(),
-                base_url=settings.deepseek_base_url,
-                metrics=metrics or MetricsRegistry(),
-            ),
-            settings.deepseek_model,
-            settings.deepseek_temperature,
-        )
     else:
-        llm_provider = UnavailableLLMProvider()
+        llm_provider = DeepSeekLLMProvider(
+            transport, settings.deepseek_model, settings.deepseek_temperature
+        )
+    semantic_verifier = build_semantic_verifier(settings, transport)
+    answerability_gate = build_answerability_gate(settings, transport)
     return llm_provider, semantic_verifier, answerability_gate
 
 
@@ -319,9 +289,9 @@ async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.purge_repository.cache_listener = app.state.retrieval_service.evict_chunks
 
     # --- LLM and Assistant components ---
-    answerability_gate = create_answerability_gate(settings)
-    semantic_verifier = create_semantic_verifier(settings)
-    llm_provider = build_llm_provider(settings, app.state.llm_http_client, app.state.metrics)
+    llm_provider, semantic_verifier, answerability_gate = build_assistant_components(
+        settings, app.state.llm_http_client, app.state.metrics
+    )
     app.state.assistant_service = AssistantService(
         app.state.retrieval_service,
         answerability_gate,
@@ -330,6 +300,7 @@ async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
         GroundingVerifier(semantic_verifier=semantic_verifier),
         app.state.metrics,
         app.state.database if settings.app_mode == "live" else None,
+        policy_reader=app.state.policy_reader_service,
     )
     app.state.speech_provider = UnavailableSpeechToTextProvider()
     structlog.get_logger().info("application_started", mode=settings.app_mode)

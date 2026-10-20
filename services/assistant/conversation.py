@@ -138,28 +138,43 @@ def prior_assistant_turn(history: Sequence[ConversationTurn]) -> str | None:
     return None
 
 
+_INJECTION_PATTERN = re.compile(
+    r"\b(ignore\s+(?:all\s+)?previous|system\s*prompt|system\s*:|developer\s+mode|"
+    r"jailbreak|admin\s+override|disregard|you\s+are\s+now|output\s+the\s+secret|"
+    r"show\s+prompt|reveal\s+instructions)\b|<[^>]+>|https?://",
+    re.I,
+)
+
+
 def extract_assistant_options(text: str) -> list[str]:
-    """Extract numbered or bulleted options/items from an assistant message."""
+    """Extract numbered or bulleted options/items from an assistant message safely."""
     if not text.strip():
         return []
     numbered = re.findall(r"(?:^|\n)\s*(?:\d+[\.\)]|\(\d+\))\s+([^\n]+)", text)
     if numbered:
-        return [_clean_option_item(item) for item in numbered if item.strip()]
+        items = [_clean_option_item(item) for item in numbered]
+        return [i for i in items if i is not None]
 
     bulleted = re.findall(r"(?:^|\n)\s*[-*•]\s+([^\n]+)", text)
     if bulleted:
-        return [_clean_option_item(item) for item in bulleted if item.strip()]
+        items = [_clean_option_item(item) for item in bulleted]
+        return [i for i in items if i is not None]
 
     return []
 
 
-def _clean_option_item(item: str) -> str:
+def _clean_option_item(item: str) -> str | None:
+    if _INJECTION_PATTERN.search(item):
+        return None
     cleaned = item.replace("**", "").replace("*", "").strip()
     parts = re.split(r"(?:\s*[:\-–—]\s+)", cleaned)
     if parts and parts[0].strip():
         cleaned = parts[0].strip()
     cleaned = re.sub(r"[.!?,]+$", "", cleaned).strip()
-    return cleaned[:100]
+    cleaned = re.sub(r"[^\w\s\-\(\)\/]", "", cleaned).strip()
+    if not cleaned or len(cleaned) < 2 or _INJECTION_PATTERN.search(cleaned):
+        return None
+    return cleaned[:60]
 
 
 def extract_topic_from_question(question: str) -> str:

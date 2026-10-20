@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from packages.contracts.assistant import GeneratedAnswer
 from packages.contracts.retrieval import SearchEvidence
+from services.assistant.chat_transport import ChatCompletionTransport
+from services.assistant.llm_errors import LLMUnavailableError
 
 
 class SemanticVerificationResult(BaseModel):
@@ -34,43 +36,99 @@ class UnavailableSemanticVerifier(SemanticVerifier):
 
 
 class DeepSeekSemanticVerifier(SemanticVerifier):
-    def __init__(self, api_key: str, base_url: str, model: str = "deepseek-flash"):
-        self._api_key = api_key
-        self._base_url = base_url.rstrip("/")
-        self.model_id = model
+    def __init__(
+        self,
+        transport_or_api_key: ChatCompletionTransport | str | None = None,
+        base_url_or_model: str = "deepseek/deepseek-v4.1-flash-1017",
+        model: str = "deepseek-flash",
+        timeout: float = 15.0,
+        fallback_model: str | None = None,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        transport: ChatCompletionTransport | None = None,
+    ) -> None:
+        eff_transport = transport if transport is not None else (
+            transport_or_api_key
+            if isinstance(transport_or_api_key, ChatCompletionTransport)
+            else None
+        )
+        eff_key = api_key if api_key is not None else (
+            transport_or_api_key if isinstance(transport_or_api_key, str) else None
+        )
+        eff_url = base_url if base_url is not None else (
+            base_url_or_model if eff_transport is None else "https://api.deepseek.com"
+        )
+        eff_model = model if eff_transport is None else base_url_or_model
+
+        if eff_transport is not None:
+            self.transport: ChatCompletionTransport | None = eff_transport
+            self.model_id = eff_model
+            self.fallback_model = fallback_model
+            self._api_key: str | None = None
+            self._base_url: str | None = None
+            self._timeout = timeout
+        else:
+            self.transport = None
+            self._api_key = eff_key
+            self._base_url = eff_url.rstrip("/")
+            self.model_id = eff_model
+            self.fallback_model = fallback_model
+            self._timeout = timeout
 
     async def verify_claims(self, answer: str, evidence: Sequence[SearchEvidence]) -> bool:
         if not evidence or not answer.strip():
             return False
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a factual verification assistant. Verify if ALL claims in the "
+                    "generated answer are fully supported by the provided authorized evidence. "
+                    "Do NOT use outside knowledge. Return a JSON object with "
+                    "'is_grounded' (bool) and 'unsupported_claims' (list of strings)."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "generated_answer": answer,
+                        "authorized_evidence": [
+                            getattr(item, "full_text", item.excerpt) for item in evidence
+                        ],
+                    }
+                ),
+            },
+        ]
+
+        if self.transport is not None:
+            try:
+                res = await self.transport.complete(
+                    messages=messages,
+                    response_model=SemanticVerificationResult,
+                    model=self.model_id,
+                    fallback_model=self.fallback_model,
+                    temperature=0.0,
+                )
+                if res.is_grounded is not True:
+                    return False
+                if len(res.unsupported_claims) != 0:
+                    return False
+                return True
+            except LLMUnavailableError:
+                raise
+            except Exception:
+                return False
+
         payload = {
             "model": self.model_id,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a factual verification assistant. Verify if ALL claims in the "
-                        "generated answer are fully supported by the provided authorized evidence. "
-                        "Do NOT use outside knowledge. Return a JSON object with "
-                        "'is_grounded' (bool) and 'unsupported_claims' (list of strings)."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "generated_answer": answer,
-                            "authorized_evidence": [
-                                getattr(item, "full_text", item.excerpt) for item in evidence
-                            ],
-                        }
-                    ),
-                },
-            ],
+            "messages": messages,
             "response_format": {"type": "json_object"},
             "temperature": 0.0,
         }
         try:
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
                 response = await client.post(
                     f"{self._base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self._api_key}"},
@@ -104,6 +162,8 @@ class DeepSeekSemanticVerifier(SemanticVerifier):
             if not isinstance(unsupported_claims, list) or len(unsupported_claims) != 0:
                 return False
             return True
+        except LLMUnavailableError:
+            raise
         except Exception:
             return False
 
@@ -236,6 +296,8 @@ class GroundingVerifier:
             if not passed:
                 self.last_rejection_reason = "semantic verifier reason"
             return passed
+        except LLMUnavailableError:
+            raise
         except Exception:
             self.last_rejection_reason = "semantic verifier reason"
             return False

@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -35,6 +36,7 @@ from services.assistant.grounding import (
     GroundingVerifier,
     UnavailableSemanticVerifier,
 )
+from services.assistant.openrouter import OpenRouterLLMProvider
 
 FAKE_TEST_KEY = "FAKE-KEY-FOR-TEST-123"
 
@@ -91,11 +93,13 @@ class StubRetrieval:
 def make_live_settings(
     llm_provider: str = "deepseek",
     deepseek_api_key: str | None = FAKE_TEST_KEY,
+    openrouter_api_key: str | None = None,
 ) -> Settings:
     return Settings(
         app_mode="live",
         llm_provider=llm_provider,
         deepseek_api_key=deepseek_api_key,
+        openrouter_api_key=openrouter_api_key,
         firebase_project_id="test-project",
         firebase_service_account_json='{"type": "service_account"}',  # type: ignore[arg-type]
         s3_access_key_id="fake-s3-key",  # type: ignore[arg-type]
@@ -105,10 +109,12 @@ def make_live_settings(
     )
 
 
-def test_1_live_mode_with_key_wires_deepseek_classes():
+@pytest.mark.asyncio
+async def test_1_live_mode_with_key_wires_deepseek_classes():
     """Live mode with DeepSeek key wires strictly DeepSeek-backed classes."""
     settings = make_live_settings(llm_provider="deepseek", deepseek_api_key=FAKE_TEST_KEY)
-    llm, verifier, gate = build_assistant_components(settings)
+    async with httpx.AsyncClient() as client:
+        llm, verifier, gate = build_assistant_components(settings, client=client)
 
     assert isinstance(llm, DeepSeekLLMProvider)
     assert isinstance(verifier, DeepSeekSemanticVerifier)
@@ -116,6 +122,31 @@ def test_1_live_mode_with_key_wires_deepseek_classes():
     assert not isinstance(llm, FixtureLLMProvider)
     assert not isinstance(verifier, FixtureSemanticVerifier)
     assert not isinstance(gate, FixtureAnswerabilityGate)
+
+
+@pytest.mark.asyncio
+async def test_1b_live_mode_with_openrouter_wires_openrouter_classes():
+    """Live mode with OpenRouter key wires OpenRouter provider and DeepSeek verifier/gate.
+
+    Uses shared transport.
+    """
+    settings = make_live_settings(llm_provider="openrouter", openrouter_api_key=FAKE_TEST_KEY)
+    async with httpx.AsyncClient() as client:
+        llm, verifier, gate = build_assistant_components(settings, client=client)
+
+    assert isinstance(llm, OpenRouterLLMProvider)
+    assert isinstance(verifier, DeepSeekSemanticVerifier)
+    assert isinstance(gate, DeepSeekAnswerabilityGate)
+    assert verifier.transport is not None
+    assert gate.transport is not None
+    assert verifier.transport == gate.transport
+
+
+def test_1c_live_mode_without_client_raises_value_error():
+    """Live mode without caller-owned client raises ValueError to prevent unowned HTTP pools."""
+    settings = make_live_settings(llm_provider="openrouter", openrouter_api_key=FAKE_TEST_KEY)
+    with pytest.raises(ValueError, match="caller-owned"):
+        build_assistant_components(settings)
 
 
 def test_2_live_mode_without_key_wires_unavailable_fail_closed_classes():

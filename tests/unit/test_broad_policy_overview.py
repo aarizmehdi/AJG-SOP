@@ -249,29 +249,60 @@ async def test_3_multisection_policy_returns_overview_zero_llm_text():
     profile = make_profile()
     result = await service.answer(profile, "what is SOP #49", Language.ENGLISH)
 
-    # 1. Verification failed twice on provider
-    assert provider.call_count == 2
-    # 2. Repair feedback passed failing check name
-    assert (
-        "number" in (provider.last_repair_feedback or "")
-        or "citation" in (provider.last_repair_feedback or "")
-        or "grounding" in (provider.last_repair_feedback or "")
-    )
-    # 3. Contract semantics
+    # 1. Broad policy navigation runs upfront: ZERO LLM attempts wasted!
+    assert provider.call_count == 0
+    # 2. Contract semantics
     assert result.kind == ResponseKind.CLARIFICATION
     assert result.answerable is False
     assert result.verified is True
-    # 4. Zero LLM text present
+    # 3. Zero LLM text present
     assert "invented" not in result.answer
     assert "fabricated" not in result.answer
-    # 5. Correct sections and headings present
+    # 4. Correct sections and headings present
     assert "Contract" in result.answer
     assert "Accounts Working and Consumption" in result.answer
     assert "Arrival" in result.answer
     assert "Which section would you like details on?" in result.answer
-    # 6. Citations present for sections
+    # 5. Citations present for sections
     assert len(result.citations) == 3
     assert {c.chunk_id for c in result.citations} == {"c1", "c2", "c3"}
+
+
+@pytest.mark.asyncio
+async def test_3b_verification_failure_fallback_to_overview():
+    """If a broad question bypasses upfront check, verification failure still falls back safely."""
+    chunks = [
+        make_chunk(
+            "c1", "pol-49", "SOP #49 — Yarn Conversion", "sec-contract", "Contract", "Contract text"
+        ),
+        make_chunk(
+            "c2",
+            "pol-49",
+            "SOP #49 — Yarn Conversion",
+            "sec-accounts",
+            "Accounts Working and Consumption",
+            "Accounts text",
+        ),
+    ]
+    provider = UngroundedProvider(fabricated_text="Hallucinated claims.")
+    service = AssistantService(
+        retrieval=StubRetrieval(chunks),
+        answerability=FixtureAnswerabilityGate(),
+        provider=provider,
+        citations=CitationValidator(),
+        grounding=GroundingVerifier(),
+    )
+
+    profile = make_profile()
+    # Question that reaches provider but is broad on policy
+    result = await service.answer(profile, "SOP #49 guidelines", Language.ENGLISH)
+
+    assert result.kind == ResponseKind.CLARIFICATION
+    assert result.answerable is False
+    assert result.verified is True
+    assert "Contract" in result.answer
+    assert "Accounts Working and Consumption" in result.answer
+    assert "Which section would you like details on?" in result.answer
 
 
 # ---------------------------------------------------------------------------

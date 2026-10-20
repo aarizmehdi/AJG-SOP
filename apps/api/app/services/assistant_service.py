@@ -3,7 +3,7 @@
 import inspect
 from collections.abc import Callable, Sequence
 from time import perf_counter
-from typing import Protocol
+from typing import Any, Protocol
 
 from apps.api.app.models.organization import EmployeeProfile, MembershipStatus
 from apps.api.app.repositories.database import CanonicalDatabase
@@ -57,6 +57,7 @@ class AssistantService:
         grounding: GroundingVerifier,
         metrics: MetricsRegistry | None = None,
         database: CanonicalDatabase | None = None,
+        policy_reader: Any = None,
     ) -> None:
         self.retrieval = retrieval
         self.answerability = answerability
@@ -65,6 +66,7 @@ class AssistantService:
         self.grounding = grounding
         self.metrics = metrics
         self.database = database
+        self.policy_reader = policy_reader
 
     async def answer(
         self,
@@ -106,7 +108,34 @@ class AssistantService:
         if progress:
             progress("retrieving")
         evidence = await self.retrieval.retrieve(profile, plan.resolved_query, 8)
-        gate_decision = await self._evaluate_answerability(question, evidence)
+        if not evidence:
+            gate_decision = await self._evaluate_answerability(question, [])
+            if gate_decision == AnswerabilityDecision.GREETING:
+                result = self._canned(profile, language, ResponseKind.SMALLTALK, question)
+                self._observe(result.kind, started)
+                return result, []
+            result = self._canned(profile, language, ResponseKind.NO_ANSWER)
+            self._observe(result.kind, started)
+            return result, []
+
+        if progress:
+            progress("reading")
+        context = await self.retrieval.assistant_context(profile, evidence)
+        if not context or not await self.retrieval.revalidate_evidence(profile, context):
+            result = self._canned(profile, language, ResponseKind.NO_ANSWER)
+            self._observe(result.kind, started)
+            return result, []
+
+        # QA-05: Check broad policy question UPFRONT on identifiable large SOP
+        if self._is_broad_policy_question(question, context):
+            overview = self._build_sections_overview(profile, language, context)
+            if overview is not None:
+                await self.assert_release_authorized(profile, context)
+                self._observe(overview.kind, started)
+                return overview, context
+
+        # QA-04: Evaluate answerability gate using the full authorized context
+        gate_decision = await self._evaluate_answerability(question, context)
         if gate_decision == AnswerabilityDecision.GREETING:
             result = self._canned(profile, language, ResponseKind.SMALLTALK, question)
             self._observe(result.kind, started)
@@ -124,13 +153,6 @@ class AssistantService:
             return result, []
         if gate_decision == AnswerabilityDecision.SYNTHESIS:
             plan.answer_mode = InternalAnswerMode.SYNTHESIZE_MULTIPLE_POLICIES
-        if progress:
-            progress("reading")
-        context = await self.retrieval.assistant_context(profile, evidence)
-        if not context or not await self.retrieval.revalidate_evidence(profile, context):
-            result = self._canned(profile, language, ResponseKind.NO_ANSWER)
-            self._observe(result.kind, started)
-            return result, []
 
         feedback: str | None = None
         for attempt in range(2):
@@ -253,22 +275,45 @@ class AssistantService:
         if not context:
             return None
 
-        unique_sections: list[tuple[str, str, AssistantEvidence]] = []
-        seen_section_keys: set[tuple[str, str]] = set()
+        # Check if an identifiable SOP exists with canonical sections from policy reader
+        policy_ids = list(dict.fromkeys(item.policy_id for item in context))
+        canonical_sections: list[tuple[str, str, SearchEvidence]] = []
 
-        for item in context:
-            sec_key = (item.policy_id, item.section_id)
-            if sec_key not in seen_section_keys:
-                seen_section_keys.add(sec_key)
-                sec_name = item.heading_path[-1] if item.heading_path else item.policy_title
-                unique_sections.append((item.policy_title, sec_name, item))
-                if len(unique_sections) >= 8:
-                    break
+        if len(policy_ids) == 1 and getattr(self, "policy_reader", None) is not None:
+            policy_id = policy_ids[0]
+            try:
+                reader_doc = self.policy_reader.read_policy(profile, policy_id)
+                if reader_doc and len(reader_doc.sections) >= 2:
+                    context_by_sec = {item.section_id: item for item in context}
+                    fallback_chunk = context[0]
+                    for sec in reader_doc.sections:
+                        chunk_ref = context_by_sec.get(sec.section_id, fallback_chunk)
+                        sec_name = (
+                            sec.heading
+                            if sec.heading
+                            else sec.heading_path[-1]
+                            if sec.heading_path
+                            else reader_doc.title
+                        )
+                        canonical_sections.append((reader_doc.title, sec_name, chunk_ref))
+            except Exception:
+                canonical_sections = []
 
-        if len(unique_sections) < 2:
+        if not canonical_sections:
+            seen_section_keys: set[tuple[str, str]] = set()
+            for item in context:
+                sec_key = (item.policy_id, item.section_id)
+                if sec_key not in seen_section_keys:
+                    seen_section_keys.add(sec_key)
+                    sec_name = item.heading_path[-1] if item.heading_path else item.policy_title
+                    canonical_sections.append((item.policy_title, sec_name, item))
+                    if len(canonical_sections) >= 8:
+                        break
+
+        if len(canonical_sections) < 2:
             return None
 
-        unique_policy_titles = list(dict.fromkeys(pol for pol, _, _ in unique_sections))
+        unique_policy_titles = list(dict.fromkeys(pol for pol, _, _ in canonical_sections))
         if len(unique_policy_titles) == 1:
             policy_name = unique_policy_titles[0]
             if language == Language.URDU:
@@ -284,7 +329,7 @@ class AssistantService:
                     f"{policy_name} covers these sections found in your authorized policies:\n\n"
                 )
                 prompt_line = "\n\nWhich section would you like details on?"
-            body = "\n".join(f"{i + 1}. {sec}" for i, (_, sec, _) in enumerate(unique_sections))
+            body = "\n".join(f"{i + 1}. {sec}" for i, (_, sec, _) in enumerate(canonical_sections))
         else:
             if language == Language.URDU:
                 header = "آپ کی مجاز پالیسیوں میں یہ سیکشنز ملے ہیں:\n\n"
@@ -296,7 +341,7 @@ class AssistantService:
                 header = "The following sections were found in your authorized policies:\n\n"
                 prompt_line = "\n\nWhich section would you like details on?"
             body = "\n".join(
-                f"{i + 1}. {pol} → {sec}" for i, (pol, sec, _) in enumerate(unique_sections)
+                f"{i + 1}. {pol} → {sec}" for i, (pol, sec, _) in enumerate(canonical_sections)
             )
 
         overview_text = header + body + prompt_line
@@ -311,7 +356,7 @@ class AssistantService:
                 document_id=item.source.source_document_id,
                 source=item.source,
             )
-            for _, _, item in unique_sections
+            for _, _, item in canonical_sections
         ]
 
         return VerifiedAnswer(
