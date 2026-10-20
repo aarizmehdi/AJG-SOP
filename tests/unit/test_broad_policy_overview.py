@@ -269,8 +269,8 @@ async def test_3_multisection_policy_returns_overview_zero_llm_text():
 
 
 @pytest.mark.asyncio
-async def test_3b_verification_failure_fallback_to_overview():
-    """If a broad question bypasses upfront check, verification failure still falls back safely."""
+async def test_3b_bare_policy_guidelines_returns_overview():
+    """A bare SOP reference with guidelines is still broad navigation."""
     chunks = [
         make_chunk(
             "c1", "pol-49", "SOP #49 — Yarn Conversion", "sec-contract", "Contract", "Contract text"
@@ -294,9 +294,10 @@ async def test_3b_verification_failure_fallback_to_overview():
     )
 
     profile = make_profile()
-    # Question that reaches provider but is broad on policy
+    # A bare policy reference should not need generated policy claims.
     result = await service.answer(profile, "SOP #49 guidelines", Language.ENGLISH)
 
+    assert provider.call_count == 0
     assert result.kind == ResponseKind.CLARIFICATION
     assert result.answerable is False
     assert result.verified is True

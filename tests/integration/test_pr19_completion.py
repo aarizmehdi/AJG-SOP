@@ -139,6 +139,24 @@ async def test_long_canonical_overview_has_real_navigation_not_borrowed_citation
     gate.evaluate.assert_not_called()
 
 
+async def test_exact_named_overview_does_not_substitute_retrieved_policy(long_policy):
+    _, profile, _, retrieval, _, _, service = long_policy
+    available = service.policy_reader.list_available(profile)
+    named = available[0]
+    item = (await retrieval.retrieve(profile, "overview", 8))[0]
+    unrelated = item.model_copy(
+        update={"policy_id": "another-policy", "policy_title": "Another collection"}
+    )
+    result = service._build_sections_overview(
+        profile, Language.ENGLISH, [unrelated], f"Give me an overview of {named.title}"
+    )
+    assert result is not None
+    assert {s.policy_id for s in result.section_options} == {named.policy_id}
+    assert result.citations == []
+    assert "Confidential board heading" not in result.answer
+    await service.assert_release_authorized(profile, [], result.section_options)
+
+
 @pytest.mark.parametrize("mismatch", ["source", "heading_path", "policy_id", "version_id"])
 def test_overview_does_not_cite_mismatched_metadata(long_policy, mismatch):
     _, profile, canonical, retrieval, _, _, service = long_policy
@@ -182,6 +200,33 @@ async def test_empty_authorized_evidence_does_not_call_any_paid_component(long_p
     result = await service.answer(profile, "Explain the retention procedure", Language.ENGLISH)
     assert result.kind == ResponseKind.NO_ANSWER and not result.citations
     gate.evaluate.assert_not_called()
+    provider.generate.assert_not_called()
+
+
+async def test_scoped_specific_question_does_not_return_an_overview(long_policy):
+    _, profile, _, _, provider, gate, service = long_policy
+    result = await service.answer(
+        profile, "According to SOP 2024/Gat/002, who records the received item?", Language.ENGLISH
+    )
+    assert result.kind == ResponseKind.POLICY_ANSWER
+    assert not result.section_options
+    gate.evaluate.assert_called_once()
+    provider.generate.assert_called_once()
+
+
+async def test_unsupported_scoped_question_reaches_the_gate(long_policy):
+    _, profile, _, _, provider, gate, service = long_policy
+    from services.assistant.answerability import AnswerabilityResult
+
+    gate.evaluate = AsyncMock(
+        return_value=AnswerabilityResult(decision=AnswerabilityDecision.NOT_IN_CORPUS)
+    )
+    result = await service.answer(
+        profile, "What housing allowance does SOP 2024/Gat/002 grant employees?", Language.ENGLISH
+    )
+    assert result.kind == ResponseKind.NO_ANSWER
+    assert not result.section_options and not result.citations
+    gate.evaluate.assert_called_once()
     provider.generate.assert_not_called()
 
 
