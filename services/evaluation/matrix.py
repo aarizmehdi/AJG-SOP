@@ -10,7 +10,7 @@ class RetrievalConfig(BaseModel):
     """One retrieval configuration to benchmark.
 
     Defaults describe today's product pipeline (section chunker, reciprocal-rank fusion with equal
-    weights, fixture reranker) with a deterministic stand-in embedding.
+    weights, preserved fused order) with a deterministic stand-in embedding.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -18,7 +18,7 @@ class RetrievalConfig(BaseModel):
     description: str = ""
     chunker: str = "current"
     embedding: str = "fixture-hash"
-    reranker: str = "fixture"
+    reranker: str = "none"
     lexical: bool = True
     semantic: bool = True
     lexical_weight: float = Field(default=1.0, ge=0)

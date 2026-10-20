@@ -19,3 +19,44 @@ Deterministic SOP-reference checks compare complete identifiers, including slash
 Metrics expose retrieval, LLM, grounding verification, total assistant work, response kind, repair count, first status, first verified delta, and completed stream latency. They contain no question or answer text. Retrieval traces contain query length and chunk IDs, not raw queries. Existing historical Mongo `chat_sessions` and `chat_messages` are left untouched; Assistant v2 neither loads nor writes them.
 
 Acceptance scope is English corpus and English queries using multilingual E5/Pinecone. Existing product-language controls remain; no multilingual acceptance or BGE-M3 work is included. Benchmark real AJG SOP examples for answerability, citation precision, grounding, long-section context, ambiguous follow-ups, latency and false rejections. Fixture verification does not establish live-model quality. `smoke_test.py` invokes an internal service with a synthetic profile; it does **not** perform Firebase login or an authenticated HTTP API test. A passing production check must separately exercise real Firebase ID tokens, employee scope, deployed APIs and the browser. Review provider errors and verification failures without logging employee conversation text.
+
+## Retrieval integration and future publication
+
+`RETRIEVAL_RERANKER=none` preserves RRF order through an explicit reranker stage. The token-overlap `fixture` and opt-in `lexical_heuristic` adapters remain available for controlled comparisons. Semantic and lexical candidate generation, fusion, reranking and authorization revalidation remain separate. A hosted-E5 comparison on the same 124 English cases (103 retrieval-scored) favored preserved order over the overlap heuristic: Recall@5 96.26% vs 94.85%, MRR 0.8631 vs 0.8000, nDCG@5 0.8853 vs 0.8305. These are in-memory rankings with real hosted embeddings, not measurements of a rebuilt production index or held-out acceptance results. Equal fusion weights are unchanged.
+
+Exact lexical identifiers retain complete slash/dot/hyphen suffixes and qualified prefixes, including `SOP # 89`, `Sop# 2024/Gat/002`, `SOP-014` and `AJTM/STORE/SOP-1`. Distinct namespaces/suffixes do not acquire shared short aliases. Semantic filters partition large eligible-ID sets into bounded requests; every request retains tenant, published state, exact eligible chunk IDs and their active version IDs. Results are merged by score and post-filtered. No tenant/policy-only fallback broadens access. Runtime retrieval traces retain IDs/ranks/scores rather than chunk bodies.
+
+Future live publication requires the exact E5 tokenizer. Docker installs the pinned public tokenizer with a SHA-256 check and sets `E5_TOKENIZER_PATH`; no SOP data goes to Hugging Face, and no tokenizer download occurs during a request. `tokenizers` is a lightweight tokenizer dependency, not a new embedding model/framework. Missing/invalid live tokenizer configuration fails startup instead of silently using fixture estimation. Fixture mode may use the explicit estimator, whose counts are not evidence of E5 accuracy. The complete `passage:` payload, including special tokens, targets 480 tokens with a conservative 507-token hard guard. The current hosted model reports a 507-input-token limit and maximum batch size 96; batches are capped at 64. `truncate=NONE` rejects oversize inputs instead of dropping their tail. Only bounded transient availability retries are allowed; invalid inputs are not retried. See the [Pinecone inference documentation](https://sdk.pinecone.io/python/how-to/inference/embeddings.html).
+
+Tables repeat captions and column headers where they fit. Oversize row keys/headers use explicit row/column continuation coordinates; cell text is preserved, including single-word character splitting when necessary. Canonical source/access/section metadata remains attached. Long heading prefixes may be abbreviated for embeddings, while full headings remain in metadata and the reader. Nested-list context is repeated for split items. Hash headings take precedence; legacy files without a hash section hierarchy infer only a small allowlist of standalone bold document/section labels and emit human-review warnings. Ordinary bold clauses/notes are not promoted. Markdown parser version 3 records this compatibility behavior.
+
+### Reproduce comparisons without touching production content
+
+Use an ignored private corpus directory. Never commit SOP bodies, credentials, raw provider payloads or private diff reports. The comparison driver records source commits, archive/dataset/corpus hashes, runtime file hashes and whether the checkout is dirty. Use a clean committed tree for release evidence.
+
+```powershell
+uv run python scripts/install_e5_tokenizer.py --output .data/e5-tokenizer.json
+$env:E5_TOKENIZER_PATH = (Resolve-Path .data/e5-tokenizer.json).Path
+uv run python -m scripts.evaluation.compare_retrieval --baseline adf70c251d7ce22e0b8c3f00ceb1da9d72577ebd --corpus-dir .data/private-corpus --output-dir .data/retrieval-fixture-comparison
+# Hosted comparison additionally requires an authorized backend-only PINECONE_API_KEY.
+uv run python -m scripts.evaluation.compare_retrieval --baseline adf70c251d7ce22e0b8c3f00ceb1da9d72577ebd --corpus-dir .data/private-corpus --output-dir .data/retrieval-hosted-comparison --hosted
+```
+
+The hosted baseline uses an explicit **transport-only benchmark shim** for batching and bounded transient retries; its chunker, lexical ranking and historical END truncation remain unchanged. The unmodified main benchmark separately fails when its 193 inputs exceed the hosted 96-input request limit; no quality metric is invented for that failed configuration. Hosted comparisons use stateless inference and read-only index metadata, never upserts or production vector queries. CI's hash-embedding matrix is a regression/security gate, not hosted semantic quality. Its historical multilingual rows are not multilingual acceptance. Use English-only comparisons for this release.
+
+### Separate approved migration required for existing SOPs
+
+Deploying retrieval code does **not** rebuild existing chunks/vectors or change canonical policies. Current published documents benefit from lexical matching/rank corrections immediately, but cannot receive newly split, fully embedded passages without a separate approved publication/index migration.
+
+A read-only preview over the current unchanged production canonicals yields 36 -> 52 and 35 -> 61 chunks (71 -> 113 total), with zero canonical/source edits. Exact added/removed/changed chunk-ID lists are retained only in the local private preview. This is not authorization to apply those changes and is not a prediction for different authoritative source files. The local Markdown variants contain wording differences, so human approval is required before choosing replacement content.
+
+Before any future migration:
+
+1. Confirm authoritative PDFs/Markdown and human-reviewed canonical wording/structure. Recompute source/canonical diffs and exact chunk/vector differences for those approved inputs.
+2. Capture Mongo, private R2 object and vector backups/fingerprints; retain the published active version.
+3. Stage a **new policy version/source IDs** with new version-scoped chunk/vector IDs, existing organization/access metadata and unchanged E5/index dimension. Never overwrite published same-ID vectors during an in-place partial rebuild.
+4. Validate token budgets, source/citation mapping, table/list/late-section recall, cross-tenant and department/location/role restrictions in staging. Failed staging must leave the published version active.
+5. After explicit human approval, use the existing publication integrity boundary to activate only a completely indexed, verified version. Keep old version artifacts/vectors available for rollback, with eligibility tied to the active published version.
+6. Verify production search/assistant/access and compare fingerprints. Roll back to the prior active version on failure. Cleanup or permanent deletion is a separately approved operation.
+
+No step of that migration is executed by the retrieval integration release.

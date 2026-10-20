@@ -1,9 +1,11 @@
 import re
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Sequence
 
 from packages.contracts.canonical import RetrievalChunk
 from packages.contracts.retrieval import CandidateChannel, RetrievalCandidate
+from services.retrieval.policy_references import policy_references
 
 
 class LexicalCandidateRetriever(ABC):
@@ -27,19 +29,102 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
     All candidate rankings are deterministic.
     """
 
-    STOP_WORDS = frozenset({
-        "a", "an", "the", "and", "or", "but", "if", "then", "else", "when",
-        "at", "from", "by", "for", "with", "about", "against", "between",
-        "into", "through", "during", "before", "after", "above", "below",
-        "to", "of", "up", "down", "in", "out", "on", "off", "over", "under",
-        "again", "further", "once", "here", "there", "all", "any", "both",
-        "each", "few", "more", "most", "other", "some", "such", "no", "nor",
-        "not", "only", "own", "same", "so", "than", "too", "very", "s", "t",
-        "can", "will", "just", "don", "should", "now", "is", "are", "was",
-        "were", "be", "been", "being", "have", "has", "had", "do", "does",
-        "did", "doing", "what", "which", "who", "whom", "this", "that",
-        "these", "those", "am", "how",
-    })
+    STOP_WORDS = frozenset(
+        {
+            "a",
+            "an",
+            "the",
+            "and",
+            "or",
+            "but",
+            "if",
+            "then",
+            "else",
+            "when",
+            "at",
+            "from",
+            "by",
+            "for",
+            "with",
+            "about",
+            "against",
+            "between",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "to",
+            "of",
+            "up",
+            "down",
+            "in",
+            "out",
+            "on",
+            "off",
+            "over",
+            "under",
+            "again",
+            "further",
+            "once",
+            "here",
+            "there",
+            "all",
+            "any",
+            "both",
+            "each",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+            "s",
+            "t",
+            "can",
+            "will",
+            "just",
+            "don",
+            "should",
+            "now",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "doing",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "this",
+            "that",
+            "these",
+            "those",
+            "am",
+            "how",
+        }
+    )
 
     ABBREVIATIONS = {
         "standard": "std",
@@ -77,16 +162,20 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
 
             # Exact SOP number match
             policy_bonus = 0.0
-            if chunk.policy_number and chunk.policy_number.casefold() in query_sop_codes:
-                policy_bonus = 10.0
+            chunk_codes = policy_references(chunk.text) | policy_references(
+                chunk.policy_number or "", metadata=True
+            )
+            if chunk_codes & query_sop_codes:
+                policy_bonus = 100.0
 
+            counts = Counter(re.findall(r"[\w]+", content))
             matched_terms: set[str] = set()
             tf_score = 0.0
             for t in expanded_terms:
                 st = self._stem(t)
-                cnt = content.count(t)
+                cnt = counts[t]
                 if cnt == 0 and st != t and len(st) >= 3:
-                    cnt = content.count(st)
+                    cnt = counts[st]
                     if cnt > 0:
                         matched_terms.add(st)
                 elif cnt > 0:
@@ -133,13 +222,12 @@ class FixtureLexicalRetriever(LexicalCandidateRetriever):
                 if term.endswith(suffix):
                     if suffix == "ies":
                         return term[:-3] + "y"
-                    return term[:-len(suffix)]
+                    return term[: -len(suffix)]
         return term
 
     @staticmethod
     def _extract_sop_codes(text: str) -> set[str]:
-        # Matches formats like SOP-014, HR-POL-2024
-        return set(re.findall(r"[a-z]{2,4}(?:-[a-z]{2,4})*-\d{3,4}", text.casefold()))
+        return policy_references(text, metadata=True)
 
     @classmethod
     def _terms(cls, text: str) -> set[str]:

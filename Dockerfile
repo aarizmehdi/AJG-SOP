@@ -21,6 +21,10 @@ COPY services/ services/
 COPY packages/ packages/
 COPY scripts/ scripts/
 
+# Exact E5 token counts; pin public tokenizer bytes, with no runtime download.
+RUN uv run python scripts/install_e5_tokenizer.py --output /app/.cache/e5/tokenizer.json
+ENV E5_TOKENIZER_PATH=/app/.cache/e5/tokenizer.json
+
 # Railway injects PORT; default to 8000 for local testing
 ENV PORT=8000
 

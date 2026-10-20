@@ -70,12 +70,12 @@ async def test_e5_uses_passage_for_documents_and_query_for_questions() -> None:
         (
             "multilingual-e5-large",
             ["first", "second"],
-            {"input_type": "passage", "truncate": "END"},
+            {"input_type": "passage", "truncate": "NONE"},
         ),
         (
             "multilingual-e5-large",
             ["question"],
-            {"input_type": "query", "truncate": "END"},
+            {"input_type": "query", "truncate": "NONE"},
         ),
     ]
 
@@ -132,7 +132,7 @@ async def test_production_e5_batches_inputs_at_most_64_and_preserves_order() -> 
         assert len(batch_inputs) <= PineconeE5EmbeddingProvider.BATCH_SIZE
         assert len(batch_inputs) <= 64
         assert model == "multilingual-e5-large"
-        assert params == {"input_type": "passage", "truncate": "END"}
+        assert params == {"input_type": "passage", "truncate": "NONE"}
 
     assert len(vectors) == input_count
     for i, vec in enumerate(vectors):

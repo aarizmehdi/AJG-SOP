@@ -1,3 +1,5 @@
+import json
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any
@@ -93,36 +95,65 @@ class PineconeSemanticRetriever(SemanticCandidateRetriever):
         if any(chunk.organization_id != organization_id for chunk in eligible_chunks):
             raise PermissionError("Semantic corpus cannot cross organizations")
         vector = await self._embeddings.embed_query(query)
-        eligible_ids = [chunk.id for chunk in eligible_chunks]
         namespace = f"{self._namespace_prefix}--{self._safe_tenant(organization_id)}"
-        filter_expr = {
-            "$and": [
-                {"organization_id": {"$eq": organization_id}},
-                {"publication_status": {"$eq": "published"}},
-                {"chunk_id": {"$in": eligible_ids}},
-            ]
-        }
-
-        response = await anyio.to_thread.run_sync(
-            lambda: self._index.query(
-                namespace=namespace,
-                vector=vector,
-                top_k=limit,
-                filter=filter_expr,
+        # Every partition contains only pre-authorized IDs. Never broaden to a
+        # policy/tenant-only filter when the eligible corpus is large.
+        by_id = {chunk.id: chunk for chunk in eligible_chunks}
+        batches: list[list[str]] = []
+        batch: list[str] = []
+        size = 0
+        for chunk_id in by_id:
+            item_size = (
+                len(json.dumps(chunk_id).encode("utf-8"))
+                + len(json.dumps(by_id[chunk_id].version_id).encode("utf-8"))
+                + 2
             )
-        )
-        matches = getattr(response, "matches", [])
+            if item_size > 2000:
+                raise ValueError("Chunk identifier exceeds the semantic filter budget")
+            if batch and (len(batch) >= 500 or size + item_size > 24000):
+                batches.append(batch)
+                batch, size = [], 0
+            batch.append(chunk_id)
+            size += item_size
+        if batch:
+            batches.append(batch)
+        scores: dict[str, float] = {}
+        for ids in batches:
+            allowed_ids = set(ids)
+            versions = sorted({by_id[i].version_id for i in ids})
+            filter_expr = {
+                "$and": [
+                    {"organization_id": {"$eq": organization_id}},
+                    {"publication_status": {"$eq": "published"}},
+                    {"chunk_id": {"$in": ids}},
+                    {"version_id": {"$in": versions}},
+                ]
+            }
+            if len(json.dumps(filter_expr).encode("utf-8")) > 30000:
+                raise ValueError("Semantic authorization filter exceeds its byte budget")
+            response = await anyio.to_thread.run_sync(
+                lambda: self._index.query(  # noqa: B023 - awaited before advancing partition
+                    namespace=namespace,
+                    vector=vector,
+                    top_k=limit,
+                    filter=filter_expr,  # noqa: B023
+                )
+            )
+            for match in getattr(response, "matches", []):
+                chunk_id, score = str(match.id), float(match.score)
+                if chunk_id in allowed_ids and math.isfinite(score):
+                    scores[chunk_id] = max(scores.get(chunk_id, -math.inf), score)
+        ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0]))[:limit]
         return [
             RetrievalCandidate(
                 tenant_id=organization_id,
                 organization_id=organization_id,
-                chunk_id=str(match.id),
+                chunk_id=chunk_id,
                 channel=CandidateChannel.SEMANTIC,
-                score=float(match.score),
+                score=score,
                 rank=rank,
             )
-            for rank, match in enumerate(matches, start=1)
-            if str(match.id) in eligible_ids
+            for rank, (chunk_id, score) in enumerate(ranked, 1)
         ]
 
     @staticmethod

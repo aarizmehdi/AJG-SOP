@@ -1684,6 +1684,7 @@ def test_hard_max_token_guard_failure():
 
     chunker = SemanticChunker()
     original_count = chunker.count_embedding_tokens
+    chunker.SOFT_TARGET_TOKENS = 600  # Force final hard-limit guard, independently of splitting.
 
     def failing_counter(text: str) -> int:
         if "OVERSIZED_TOKEN_BLOB" in text:
@@ -1766,14 +1767,21 @@ def test_hard_max_token_boundary_507_and_508():
             sections=[section],
         )
 
+    # Force the final guard rather than a tokenizer that claims even empty context is full.
+    chunker.SOFT_TARGET_TOKENS = 600
+    original_count = chunker.count_embedding_tokens
     # 1. Exactly 507 tokens must pass
-    chunker.count_embedding_tokens = lambda text: 507  # type: ignore[method-assign]
+    chunker.count_embedding_tokens = (
+        lambda text: 507 if "\ncontent" in text else original_count(text)
+    )  # type: ignore[method-assign]
     chunks = chunker.chunk(make_sop(507), "published")
     assert len(chunks) == 1
     assert chunks[0].id == "ver:sec-boundary-507:0"
 
     # 2. Exactly 508 tokens must fail with ValueError
-    chunker.count_embedding_tokens = lambda text: 508  # type: ignore[method-assign]
+    chunker.count_embedding_tokens = (
+        lambda text: 508 if "\ncontent" in text else original_count(text)
+    )  # type: ignore[method-assign]
     with pytest.raises(ValueError, match="exceeds hard maximum of 507 tokens"):
         chunker.chunk(make_sop(508), "published")
 

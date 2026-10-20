@@ -77,7 +77,7 @@ class PineconeE5EmbeddingProvider(EmbeddingProvider):
                     lambda: self._client.inference.embed(
                         model=self.model_id,
                         inputs=batch,
-                        parameters={"input_type": input_type, "truncate": "END"},
+                        parameters={"input_type": input_type, "truncate": "NONE"},
                     )
                 )
                 vectors = [self._vector(item) for item in response.data]
@@ -92,8 +92,8 @@ class PineconeE5EmbeddingProvider(EmbeddingProvider):
                 return vectors
             except Exception as error:
                 status = getattr(error, "status", None) or getattr(error, "status_code", None)
-                is_429 = status == 429 or "429" in str(error)
-                if is_429 and attempt < max_retries - 1:
+                transient = status in {429, 500, 502, 503, 504}
+                if transient and attempt < max_retries - 1:
                     await anyio.sleep(backoff_seconds * (2**attempt))
                     continue
                 raise

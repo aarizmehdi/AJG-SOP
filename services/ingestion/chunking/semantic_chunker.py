@@ -2,9 +2,8 @@ import importlib
 import os
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
-
-import structlog
 
 from packages.contracts.canonical import (
     BlockKind,
@@ -74,10 +73,17 @@ class SemanticChunker(Chunker):
     PASSAGE_PREFIX = "passage: "
     PREFIX_OVERHEAD_TOKENS = 4  # <s> + </s> + passage + :
 
-    def __init__(self, tokenizer: Any | None = None) -> None:
+    def __init__(self, tokenizer: Any | None = None, *, require_tokenizer: bool = False) -> None:
         self._tokenizer = tokenizer
         if self._tokenizer is None:
             self._tokenizer = self._resolve_tokenizer()
+        if require_tokenizer and self._tokenizer is None:
+            raise ValueError("Live publication requires the pinned E5_TOKENIZER_PATH")
+        if self._tokenizer is not None:
+            if hasattr(self._tokenizer, "no_truncation"):
+                self._tokenizer.no_truncation()
+            if hasattr(self._tokenizer, "no_padding"):
+                self._tokenizer.no_padding()
 
     @staticmethod
     def _resolve_tokenizer() -> Any | None:
@@ -87,15 +93,17 @@ class SemanticChunker(Chunker):
         only when an explicit valid file path is supplied.
         """
         path = os.environ.get("E5_TOKENIZER_PATH")
-        if not path or not os.path.exists(path):
+        if not path:
             return None
+        if not os.path.isfile(path):
+            raise ValueError("E5_TOKENIZER_PATH is not a tokenizer file")
         try:
             tokenizers_module = importlib.import_module("tokenizers")
             Tokenizer = tokenizers_module.Tokenizer
 
             return Tokenizer.from_file(path)
-        except Exception:
-            return None
+        except Exception as error:
+            raise ValueError("E5 tokenizer could not be loaded") from error
 
     @staticmethod
     def estimate_tokens(text: str) -> int:
@@ -146,7 +154,7 @@ class SemanticChunker(Chunker):
             return full_heading
 
         if len(heading_path) <= 2:
-            return full_heading
+            return self._bounded_heading(full_heading, policy_number)
 
         # 1. Identify primary SOP identifier
         sop_seg_idx: int | None = None
@@ -208,7 +216,20 @@ class SemanticChunker(Chunker):
                         bounded_parts.append(p)
             shortened = " > ".join(bounded_parts)
 
-        return shortened
+        return self._bounded_heading(shortened, policy_number)
+
+    def _bounded_heading(self, heading: str, policy_number: str | None) -> str:
+        if self.count_embedding_tokens(heading) <= 75:
+            return heading
+        prefix = f"[{policy_number}] " if policy_number else ""
+        if self.count_embedding_tokens(prefix) > 65:
+            raise ValueError("Policy identifier exceeds the heading budget")
+        heading = " > ".join(
+            " ".join(part.split()[:3])[:64] + "..." for part in heading.split(" > ")
+        )
+        while heading and self.count_embedding_tokens(prefix + heading + "...") > 75:
+            heading = heading[: max(0, len(heading) - max(1, len(heading) // 8))]
+        return prefix + heading + "..."
 
     def chunk(self, document: CanonicalSOP, publication_status: str) -> list[RetrievalChunk]:
         chunks: list[RetrievalChunk] = []
@@ -222,6 +243,7 @@ class SemanticChunker(Chunker):
         row_cells: list[str],
         caption: str | None,
         heading: str,
+        row_index: int = 1,
     ) -> list[list[str]]:
         num_cols = len(headers)
         context_cell = row_cells[0] if num_cols > 0 else ""
@@ -234,22 +256,35 @@ class SemanticChunker(Chunker):
 
         parts: list[list[str]] = []
 
-        if num_cols <= 1:
-            words = context_cell.split()
-            step = min(self.MAX_WORDS, 50)
-            for i in range(0, len(words), step):
-                seg = " ".join(words[i : i + step])
-                parts.append([*header_lines, f"| {seg} |"])
-            return parts
+        if (
+            self.count_embedding_tokens(f"{heading}\n" + "\n".join(header_lines) + context_cell)
+            > self.SOFT_TARGET_TOKENS - 20
+        ):
+            # A long row key/header cannot be copied into every fragment. Use
+            # explicit row/column coordinates instead, preserving every cell.
+            anchor = f"Table row {row_index} (continued); canonical table coordinates"
+            result: list[list[str]] = []
+            if caption:
+                for part in self._text_fragments(
+                    caption, lambda t: f"{heading}\n{anchor}\nCaption: {t}"
+                ):
+                    result.append([anchor, f"Caption: {part}"])
+            for col, (label, value) in enumerate(zip(headers, row_cells, strict=True), 1):
+                for kind, text in (("header", label), ("value", value)):
+                    prefix = f"{anchor}; column {col} {kind}: "
+                    for part in self._text_fragments(
+                        text,
+                        lambda t: f"{heading}\n{prefix}{t}",  # noqa: B023 - consumed synchronously
+                    ):
+                        result.append([prefix + part])
+            return result
 
-        if len(context_cell.split()) > self.MAX_WORDS:
-            structlog.get_logger().warning(
-                "oversized_table_row_header_context_exceeds_limit",
-                heading=heading,
-                caption=caption,
-                context_words=len(context_cell.split()),
-                limit=self.MAX_WORDS,
-            )
+        if num_cols <= 1:
+            for segment in self._text_fragments(
+                context_cell, lambda t: f"{heading}\n" + "\n".join([*header_lines, f"| {t} |"])
+            ):
+                parts.append([*header_lines, f"| {segment} |"])
+            return parts
 
         def row_line_for(col_dict: dict[int, str]) -> str:
             cells = [context_cell]
@@ -285,24 +320,11 @@ class SemanticChunker(Chunker):
                     parts.append([*header_lines, row_line_for(current_cols)])
                     current_cols = {}
 
-                words = cell_text.split()
-                step = min(self.MAX_WORDS, 50)
-                seg_words: list[str] = []
-                for w in words:
-                    test_seg = seg_words + [w]
-                    test_line = row_line_for({c: " ".join(test_seg)})
-                    test_toks = self.count_embedding_tokens(
-                        f"{heading}\n" + "\n".join([*header_lines, test_line])
-                    )
-                    if seg_words and (
-                        len(test_seg) > step or test_toks > self.SOFT_TARGET_TOKENS
-                    ):
-                        parts.append([*header_lines, row_line_for({c: " ".join(seg_words)})])
-                        seg_words = [w]
-                    else:
-                        seg_words.append(w)
-                if seg_words:
-                    parts.append([*header_lines, row_line_for({c: " ".join(seg_words)})])
+                for segment in self._text_fragments(
+                    cell_text,
+                    lambda t: f"{heading}\n" + "\n".join([*header_lines, row_line_for({c: t})]),  # noqa: B023
+                ):
+                    parts.append([*header_lines, row_line_for({c: segment})])
             else:
                 test_cols = dict(current_cols)
                 test_cols[c] = cell_text
@@ -311,8 +333,7 @@ class SemanticChunker(Chunker):
                     f"{heading}\n" + "\n".join([*header_lines, test_line])
                 )
                 if (
-                    row_words(test_cols) <= self.MAX_WORDS
-                    and test_toks <= self.SOFT_TARGET_TOKENS
+                    row_words(test_cols) <= self.MAX_WORDS and test_toks <= self.SOFT_TARGET_TOKENS
                 ) or not current_cols:
                     current_cols[c] = cell_text
                 else:
@@ -334,9 +355,7 @@ class SemanticChunker(Chunker):
         current_text: list[str] = []
         chunk_index = 0
 
-        heading_prefix = self._format_heading_prefix(
-            section.heading_path, section.policy_number
-        )
+        heading_prefix = self._format_heading_prefix(section.heading_path, section.policy_number)
 
         def can_fit_lines(extra_lines: list[str]) -> bool:
             candidate_text = f"{heading_prefix}\n" + "\n".join(current_text + extra_lines)
@@ -408,7 +427,7 @@ class SemanticChunker(Chunker):
                 temp_table_lines = list(header_lines)
                 table_body_words = 0
 
-                for row_cells in data_rows:
+                for row_index, row_cells in enumerate(data_rows, 1):
                     line = "| " + " | ".join(row_cells) + " |"
                     line_words = len(line.split())
                     row_test_text = f"{heading_prefix}\n" + "\n".join(header_lines + [line])
@@ -427,6 +446,7 @@ class SemanticChunker(Chunker):
                             row_cells,
                             caption=caption,
                             heading=heading_prefix,
+                            row_index=row_index,
                         )
                         for part_lines in part_lines_list:
                             current_text = list(part_lines)
@@ -472,22 +492,15 @@ class SemanticChunker(Chunker):
                 if line_words > self.MAX_WORDS or line_tokens > self.SOFT_TARGET_TOKENS:
                     if current_text:
                         flush()
-                    words = line.split()
-                    seg: list[str] = []
-                    for w in words:
-                        test_seg = seg + [w]
-                        test_cand = f"{heading_prefix}\n" + " ".join(test_seg)
-                        if seg and (
-                            len(test_seg) > self.MAX_WORDS
-                            or self.count_embedding_tokens(test_cand) > self.SOFT_TARGET_TOKENS
-                        ):
-                            current_text.append(" ".join(seg))
-                            flush()
-                            seg = [w]
-                        else:
-                            seg.append(w)
-                    if seg:
-                        current_text.append(" ".join(seg))
+                    list_context = line.rsplit(" > ", 1)[0] if " > " in line else ""
+                    if self.count_embedding_tokens(list_context) > 100:
+                        list_context = ""
+                    prefix = f"List context: {list_context}\n" if list_context else ""
+                    for segment in self._text_fragments(
+                        line,
+                        lambda t: f"{heading_prefix}\n{prefix}{t}",  # noqa: B023 - consumed synchronously
+                    ):
+                        current_text.append(prefix + segment.rstrip())
                         flush()
                     continue
 
@@ -498,6 +511,46 @@ class SemanticChunker(Chunker):
 
         flush()
         return chunks
+
+    def _text_fragments(self, text: str, render: Callable[[str], str]) -> list[str]:
+        """Word-first split with a character fallback for a single oversized token.
+
+        Render includes all repeated context so its budget cannot be forgotten.
+        No characters are discarded; canonical text remains authoritative.
+        """
+        if not text:
+            return []
+        if self.count_embedding_tokens(render("")) >= self.SOFT_TARGET_TOKENS:
+            raise ValueError("Repeated chunk context exceeds the token budget")
+        parts: list[str] = []
+        current = ""
+        for unit in re.findall(r"\S+\s*|\s+", text):
+            candidate = current + unit
+            if (
+                self.count_embedding_tokens(render(candidate)) <= self.SOFT_TARGET_TOKENS
+                and len(candidate.split()) <= self.MAX_WORDS
+            ):
+                current = candidate
+                continue
+            if current:
+                parts.append(current)
+                current = ""
+            while self.count_embedding_tokens(render(unit)) > self.SOFT_TARGET_TOKENS:
+                low, high = 0, len(unit)
+                while low < high:
+                    mid = (low + high + 1) // 2
+                    if self.count_embedding_tokens(render(unit[:mid])) <= self.SOFT_TARGET_TOKENS:
+                        low = mid
+                    else:
+                        high = mid - 1
+                if not low:
+                    raise ValueError("Single character exceeds the embedding token budget")
+                parts.append(unit[:low])
+                unit = unit[low:]
+            current = unit
+        if current:
+            parts.append(current)
+        return parts
 
     def _serialize_block(self, block: CanonicalBlock) -> str:
         if block.text:

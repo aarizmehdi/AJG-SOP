@@ -15,6 +15,18 @@ class Reranker(ABC):
         raise NotImplementedError
 
 
+class IdentityReranker(Reranker):
+    """Preserve fused rank while retaining the replaceable reranking boundary."""
+
+    async def rerank(
+        self,
+        query: str,
+        fused: Sequence[tuple[str, float]],
+        chunks: Mapping[str, RetrievalChunk],
+    ) -> list[tuple[str, float]]:
+        return [(chunk_id, score) for chunk_id, score in fused if chunk_id in chunks]
+
+
 class FixtureReranker(Reranker):
     """Deterministic baseline reranker used as the default in both fixture and live modes.
 

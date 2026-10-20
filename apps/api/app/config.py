@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     embedding_provider: Literal["fixture", "pinecone_e5", "e5"] = "fixture"
     embedding_model: str = "multilingual-e5-large"
     reranker_provider: str = "fixture"
-    retrieval_reranker: Literal["fixture", "lexical_heuristic"] = "fixture"
+    retrieval_reranker: Literal["none", "fixture", "lexical_heuristic"] = "none"
     document_parser_provider: Literal["fixture", "azure", "docling", "auto"] = "fixture"
     speech_provider: Literal["disabled"] = "disabled"
 
@@ -101,10 +101,6 @@ class Settings(BaseSettings):
                 "S3_ACCESS_KEY_ID": self.s3_access_key_id,
                 "S3_SECRET_ACCESS_KEY": self.s3_secret_access_key,
             }
-            if self.llm_provider == "openrouter":
-                required["OPENROUTER_API_KEY"] = self.openrouter_api_key
-            elif self.llm_provider == "deepseek":
-                required["DEEPSEEK_API_KEY"] = self.deepseek_api_key
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
