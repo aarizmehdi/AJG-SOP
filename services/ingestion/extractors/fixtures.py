@@ -61,7 +61,7 @@ class FixtureDocumentParser(DocumentParser):
             return RawDocumentResult(
                 organization_id=source.organization_id,
                 provider="fixture",
-                provider_version="2",
+                provider_version="3",
                 source_document_id=source.id,
                 title=parsed.title,
                 policy_number=parsed.policy_number,
@@ -98,9 +98,7 @@ class FixtureDocumentParser(DocumentParser):
         metadata, content_start, warnings = cls._front_matter(lines)
         title = metadata.get("title", "").strip() or None
         policy_number = (
-            metadata.get("policy_number")
-            or metadata.get("sop_number")
-            or metadata.get("policy")
+            metadata.get("policy_number") or metadata.get("sop_number") or metadata.get("policy")
         )
         policy_number = policy_number.strip() if policy_number else None
         date_value = metadata.get("effective_date") or metadata.get("issue_date")
@@ -109,6 +107,9 @@ class FixtureDocumentParser(DocumentParser):
             warnings.append("Markdown metadata date could not be parsed; effective_date is null")
 
         blocks: list[RawBlock] = []
+        # Explicit hash hierarchy wins. Legacy bold-only documents may use a
+        # small set of unambiguous document/section labels, never arbitrary bold prose.
+        bold_structure = not any(re.match(r"^#{2,6}\s+", row.strip()) for row in lines)
         index = content_start
         while index < len(lines):
             line = lines[index]
@@ -118,6 +119,33 @@ class FixtureDocumentParser(DocumentParser):
                 continue
 
             heading = re.match(r"^(#{1,6})\s+(.+?)\s*#*$", stripped)
+            if not heading and bold_structure and (index == 0 or not lines[index - 1].strip()):
+                bold = re.fullmatch(r"\*\*([^*]+)\*\*", stripped)
+                if bold:
+                    label = bold.group(1).strip()
+                    document_title = re.match(
+                        r"^(?:Document\s+\d+\s*:|SOP\s+for\s+|Procedure\s+for\s+)",
+                        label,
+                        re.IGNORECASE,
+                    )
+                    section_label = label.casefold() in {
+                        "responsibilities",
+                        "duties",
+                        "reports",
+                        "accountability",
+                        "scope",
+                        "purpose",
+                        "procedure",
+                        "annexure",
+                        "attachments",
+                    }
+                    if len(label) <= 180 and (document_title or section_label):
+                        level = 2 if document_title else 3
+                        heading = re.match(r"^(#{1,6})\s+(.+)$", "#" * level + " " + label)
+                        warnings.append(
+                            f"Line {index + 1}: legacy bold heading inferred; "
+                            "confirm in extraction review"
+                        )
             if heading:
                 heading_text = heading.group(2).strip()
                 blocks.append(
@@ -271,8 +299,7 @@ class FixtureDocumentParser(DocumentParser):
                 text=row[column_index] if column_index < len(row) else "",
                 is_header=row_index == 0,
                 cell_reference=(
-                    f"L{start + 1 + (0 if row_index == 0 else row_index + 1)}"
-                    f"C{column_index + 1}"
+                    f"L{start + 1 + (0 if row_index == 0 else row_index + 1)}C{column_index + 1}"
                 ),
             )
             for row_index, row in enumerate(rows)

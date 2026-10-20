@@ -28,11 +28,10 @@ from typing import Any, cast
 
 import anyio
 
-from packages.contracts.canonical import RetrievalChunk
 from services.ingestion.chunking.semantic_chunker import Chunker, SectionAwareFixtureChunker
 from services.ingestion.embeddings.base import EmbeddingProvider
 from services.ingestion.embeddings.pinecone_e5 import PineconeE5EmbeddingProvider
-from services.retrieval.reranker import FixtureReranker, Reranker
+from services.retrieval.reranker import FixtureReranker, IdentityReranker, Reranker
 
 
 class ProviderUnavailableError(RuntimeError):
@@ -231,18 +230,6 @@ def _build_pinecone_e5(environment: Mapping[str, str] | None) -> EmbeddingProvid
         )
     except Exception as error:  # noqa: BLE001 - configuration/network errors vary
         raise ProviderUnavailableError(f"Pinecone E5 provider failed to start: {error}") from error
-
-
-class IdentityReranker(Reranker):
-    """No-op reranker: keeps the fused order (isolates what reranking contributes)."""
-
-    async def rerank(
-        self,
-        query: str,
-        fused: Sequence[tuple[str, float]],
-        chunks: Mapping[str, RetrievalChunk],
-    ) -> list[tuple[str, float]]:
-        return [(chunk_id, score) for chunk_id, score in fused if chunk_id in chunks]
 
 
 def build_reranker(spec: str) -> Reranker:

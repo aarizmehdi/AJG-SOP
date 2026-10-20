@@ -102,8 +102,14 @@ class RetrievalService:
                 "roles": sorted(profile.organizational_roles),
             },
             "eligible_chunk_ids": [item.id for item in eligible],
-            "lexical_candidates": [item.model_dump(mode="json") for item in lexical],
-            "semantic_candidates": [item.model_dump(mode="json") for item in semantic],
+            "lexical_candidates": [
+                item.model_dump(mode="json", include={"chunk_id", "channel", "score", "rank"})
+                for item in lexical
+            ],
+            "semantic_candidates": [
+                item.model_dump(mode="json", include={"chunk_id", "channel", "score", "rank"})
+                for item in semantic
+            ],
             "fused_order": [item[0] for item in fused],
             "reranked_order": [item[0] for item in ranked],
             "selected_context": [item.chunk_id for item in evidence],
@@ -174,6 +180,7 @@ class RetrievalService:
     def _evidence(title: str, chunk: RetrievalChunk, score: float) -> SearchEvidence:
         excerpt = chunk.text[:420] + ("…" if len(chunk.text) > 420 else "")
         return SearchEvidence(
+            tenant_id=chunk.organization_id,
             organization_id=chunk.organization_id,
             chunk_id=chunk.id,
             policy_id=chunk.policy_id,

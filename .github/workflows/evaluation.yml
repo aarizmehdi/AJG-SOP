@@ -79,6 +79,8 @@ jobs:
 
       # The evaluation itself. Exit code 1 (gate failed) fails this step and the job.
       - name: Run evaluation benchmark (gate)
+        env:
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
         run: >-
           uv run python -m scripts.evaluation.run_benchmark
           --corpus-dir "$AJG_EVAL_CORPUS_DIR"

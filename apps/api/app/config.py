@@ -65,9 +65,10 @@ class Settings(BaseSettings):
     llm_read_timeout_seconds: float = Field(default=20, gt=0, le=60, allow_inf_nan=False)
     llm_max_connections: int = Field(default=20, ge=1, le=100)
 
-    embedding_provider: Literal["fixture", "pinecone_e5"] = "fixture"
+    embedding_provider: Literal["fixture", "pinecone_e5", "e5"] = "fixture"
     embedding_model: str = "multilingual-e5-large"
     reranker_provider: str = "fixture"
+    retrieval_reranker: Literal["none", "fixture", "lexical_heuristic"] = "none"
     document_parser_provider: Literal["fixture", "azure", "docling", "auto"] = "fixture"
     speech_provider: Literal["disabled"] = "disabled"
 
@@ -103,8 +104,8 @@ class Settings(BaseSettings):
             missing = [name for name, value in required.items() if not value]
             if missing:
                 raise ValueError(f"Missing required live configuration: {', '.join(missing)}")
-            if self.embedding_provider != "pinecone_e5":
-                raise ValueError("EMBEDDING_PROVIDER must be pinecone_e5 in live mode")
+            if self.embedding_provider not in {"pinecone_e5", "e5"}:
+                raise ValueError("EMBEDDING_PROVIDER must be pinecone_e5 or e5 in live mode")
             if self.llm_provider == "fixture":
                 raise ValueError("Fixture LLM is prohibited in live mode")
             llm_key = (

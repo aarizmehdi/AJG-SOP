@@ -94,7 +94,7 @@ from services.ingestion.structure.canonical_document import Canonicalizer
 from services.retrieval.authorization_filter import AuthorizationFilter
 from services.retrieval.fusion import ReciprocalRankFusion
 from services.retrieval.lexical_search import FixtureLexicalRetriever
-from services.retrieval.reranker import FixtureReranker
+from services.retrieval.reranker import FixtureReranker, IdentityReranker, LexicalHeuristicReranker
 from services.retrieval.retriever import RetrievalService
 from services.retrieval.semantic_search import (
     FixtureSemanticRetriever,
@@ -245,7 +245,7 @@ async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.audit_service = AuditService(app.state.foundation_store)
     app.state.policy_service = PolicyService(
         app.state.foundation_store,
-        SectionAwareFixtureChunker(),
+        SectionAwareFixtureChunker(require_tokenizer=settings.app_mode == "live"),
         publication_embeddings,
         app.state.retrieval_index,
         app.state.audit_service,
@@ -275,13 +275,28 @@ async def application_lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.pinecone_namespace_prefix,
             publication_embeddings,
         )
+
+    # FixtureLexicalRetriever is the lexical retriever used in live mode too: it performs
+    # in-memory exact-reference/term matching over authorized chunks. Hosted-E5
+    # comparisons favor preserving fused order over the token-overlap heuristic.
+
+    from services.retrieval.reranker import Reranker
+
+    reranker: Reranker
+    if settings.retrieval_reranker == "lexical_heuristic":
+        reranker = LexicalHeuristicReranker()
+    elif settings.retrieval_reranker == "none":
+        reranker = IdentityReranker()
+    else:
+        reranker = FixtureReranker()
+
     app.state.retrieval_service = RetrievalService(
         app.state.foundation_store,
         authorization,
         FixtureLexicalRetriever(),
         semantic,
         ReciprocalRankFusion(),
-        FixtureReranker(),
+        reranker,
         app.state.metrics,
         app.state.purge_repository.synchronize_cache,
     )

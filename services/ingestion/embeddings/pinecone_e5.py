@@ -47,6 +47,8 @@ class PineconeE5EmbeddingProvider(EmbeddingProvider):
                 f"{index_dimension}"
             )
 
+    BATCH_SIZE = 64
+
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return await self._embed(texts, "passage")
 
@@ -57,22 +59,45 @@ class PineconeE5EmbeddingProvider(EmbeddingProvider):
     async def _embed(self, texts: Sequence[str], input_type: str) -> list[list[float]]:
         if not texts:
             return []
-        response = await anyio.to_thread.run_sync(
-            lambda: self._client.inference.embed(
-                model=self.model_id,
-                inputs=list(texts),
-                parameters={"input_type": input_type, "truncate": "END"},
-            )
-        )
-        vectors = [self._vector(item) for item in response.data]
-        if len(vectors) != len(texts):
-            raise EmbeddingDimensionError("Pinecone returned an unexpected embedding count")
-        for vector in vectors:
-            if len(vector) != self.dimension:
-                raise EmbeddingDimensionError(
-                    f"Embedding dimension {len(vector)} does not match expected {self.dimension}"
+        all_vectors: list[list[float]] = []
+        for i in range(0, len(texts), self.BATCH_SIZE):
+            batch = list(texts[i : i + self.BATCH_SIZE])
+            vectors = await self._embed_batch_with_retry(batch, input_type)
+            all_vectors.extend(vectors)
+        return all_vectors
+
+    async def _embed_batch_with_retry(
+        self, batch: list[str], input_type: str
+    ) -> list[list[float]]:
+        max_retries = 3
+        backoff_seconds = 0.5
+        for attempt in range(max_retries):
+            try:
+                response = await anyio.to_thread.run_sync(
+                    lambda: self._client.inference.embed(
+                        model=self.model_id,
+                        inputs=batch,
+                        parameters={"input_type": input_type, "truncate": "NONE"},
+                    )
                 )
-        return vectors
+                vectors = [self._vector(item) for item in response.data]
+                if len(vectors) != len(batch):
+                    raise EmbeddingDimensionError("Pinecone returned an unexpected embedding count")
+                for vector in vectors:
+                    if len(vector) != self.dimension:
+                        raise EmbeddingDimensionError(
+                            f"Embedding dimension {len(vector)} does not match expected "
+                            f"{self.dimension}"
+                        )
+                return vectors
+            except Exception as error:
+                status = getattr(error, "status", None) or getattr(error, "status_code", None)
+                transient = status in {429, 500, 502, 503, 504}
+                if transient and attempt < max_retries - 1:
+                    await anyio.sleep(backoff_seconds * (2**attempt))
+                    continue
+                raise
+        return []
 
     @classmethod
     def _vector(cls, item: Any) -> list[float]:

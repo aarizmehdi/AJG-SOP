@@ -142,3 +142,24 @@ async def test_unknown_firebase_user_is_not_auto_provisioned_or_email_linked() -
     assert exc_info.value.status_code == 403
     assert database.collections["employee_profiles"] == [existing_admin]
     assert existing_admin["identity_subject"] == "legacy-provider|existing-subject"
+
+
+def test_embedding_provider_e5_alias_and_bge_m3_rejected() -> None:
+    common = dict(
+        app_mode="live",
+        web_origin="https://app.example.com",
+        mongodb_uri="mongodb://remote:27017",
+        firebase_project_id="ajg-sop-web",
+        firebase_service_account_json="{}",
+        pinecone_api_key="test-key",
+        llm_provider="openrouter",
+        openrouter_api_key="test-key",
+        s3_access_key_id="test-access",
+        s3_secret_access_key="test-secret",
+    )
+    for provider in ("e5", "pinecone_e5"):
+        settings = Settings(_env_file=None, **common, embedding_provider=provider)
+        assert settings.embedding_provider == provider
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **common, embedding_provider="bge_m3")

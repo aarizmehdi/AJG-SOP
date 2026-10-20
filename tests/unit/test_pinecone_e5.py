@@ -70,12 +70,12 @@ async def test_e5_uses_passage_for_documents_and_query_for_questions() -> None:
         (
             "multilingual-e5-large",
             ["first", "second"],
-            {"input_type": "passage", "truncate": "END"},
+            {"input_type": "passage", "truncate": "NONE"},
         ),
         (
             "multilingual-e5-large",
             ["question"],
-            {"input_type": "query", "truncate": "END"},
+            {"input_type": "query", "truncate": "NONE"},
         ),
     ]
 
@@ -98,3 +98,111 @@ def test_e5_rejects_dimension_mismatch() -> None:
             "multilingual-e5-large",
             client=FakePinecone(model_dimension=1024, index_dimension=384),
         )
+
+
+@pytest.mark.asyncio
+async def test_production_e5_batches_inputs_at_most_64_and_preserves_order() -> None:
+    class UniqueVectorFakeInference(FakeInference):
+        def embed(
+            self, model: str, inputs: list[str], parameters: dict[str, str]
+        ) -> SimpleNamespace:
+            self.calls.append((model, inputs, parameters))
+            data = [
+                SimpleNamespace(values=[float(item.split("_")[1])] * self.dimension)
+                for item in inputs
+            ]
+            return SimpleNamespace(data=data)
+
+    client = FakePinecone()
+    client.inference = UniqueVectorFakeInference(dimension=4)
+
+    provider = PineconeE5EmbeddingProvider(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "multilingual-e5-large",
+        client=client,
+    )
+
+    input_count = 219
+    inputs = [f"input_{i}" for i in range(input_count)]
+    vectors = await provider.embed_documents(inputs)
+
+    assert len(client.inference.calls) == 4
+    for model, batch_inputs, params in client.inference.calls:
+        assert len(batch_inputs) <= PineconeE5EmbeddingProvider.BATCH_SIZE
+        assert len(batch_inputs) <= 64
+        assert model == "multilingual-e5-large"
+        assert params == {"input_type": "passage", "truncate": "NONE"}
+
+    assert len(vectors) == input_count
+    for i, vec in enumerate(vectors):
+        assert vec == [float(i)] * 4
+
+
+@pytest.mark.asyncio
+async def test_production_e5_empty_inputs_returns_empty() -> None:
+    client = FakePinecone()
+    provider = PineconeE5EmbeddingProvider(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "multilingual-e5-large",
+        client=client,
+    )
+    assert await provider.embed_documents([]) == []
+    assert len(client.inference.calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_production_e5_retries_on_http_429() -> None:
+    class RateLimitedFakeInference(FakeInference):
+        def __init__(self, dimension: int = 4) -> None:
+            super().__init__(dimension)
+            self.attempts = 0
+
+        def embed(
+            self, model: str, inputs: list[str], parameters: dict[str, str]
+        ) -> SimpleNamespace:
+            self.attempts += 1
+            if self.attempts == 1:
+                class HTTP429Error(RuntimeError):
+                    status = 429
+                raise HTTP429Error("Rate limit exceeded 429")
+            return super().embed(model, inputs, parameters)
+
+    client = FakePinecone()
+    client.inference = RateLimitedFakeInference(dimension=4)
+
+    provider = PineconeE5EmbeddingProvider(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "multilingual-e5-large",
+        client=client,
+    )
+
+    vectors = await provider.embed_documents(["doc1", "doc2"])
+    assert len(vectors) == 2
+    assert client.inference.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_production_e5_dimension_mismatch_during_embed() -> None:
+    class WrongDimensionInference(FakeInference):
+        def embed(
+            self, model: str, inputs: list[str], parameters: dict[str, str]
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                data=[SimpleNamespace(values=[1.0, 2.0]) for _ in inputs]
+            )
+
+    client = FakePinecone(model_dimension=4, index_dimension=4)
+    client.inference = WrongDimensionInference(dimension=4)
+
+    provider = PineconeE5EmbeddingProvider(
+        "secret-not-used",
+        "aziz-jan-sop",
+        "multilingual-e5-large",
+        client=client,
+    )
+
+    with pytest.raises(EmbeddingDimensionError, match="does not match expected 4"):
+        await provider.embed_documents(["doc1"])

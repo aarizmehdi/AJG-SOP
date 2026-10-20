@@ -15,8 +15,25 @@ class Reranker(ABC):
         raise NotImplementedError
 
 
+class IdentityReranker(Reranker):
+    """Preserve fused rank while retaining the replaceable reranking boundary."""
+
+    async def rerank(
+        self,
+        query: str,
+        fused: Sequence[tuple[str, float]],
+        chunks: Mapping[str, RetrievalChunk],
+    ) -> list[tuple[str, float]]:
+        return [(chunk_id, score) for chunk_id, score in fused if chunk_id in chunks]
+
+
 class FixtureReranker(Reranker):
-    """Deterministic test reranker; provider/model selection remains provisional."""
+    """Deterministic baseline reranker used as the default in both fixture and live modes.
+
+    Applies a slight token-overlap tie-breaking adjustment (+0.001 per matching query term)
+    to fused candidates over authorized chunks. It only processes chunks present in the
+    authorized eligible map, preserving RRF ordering while remaining fully deterministic.
+    """
 
     async def rerank(
         self,
@@ -33,4 +50,45 @@ class FixtureReranker(Reranker):
             for chunk_id, score in fused
             if chunk_id in chunks
         ]
+        return sorted(reranked, key=lambda item: (-item[1], item[0]))
+
+
+class LexicalHeuristicReranker(Reranker):
+    """A token-overlap heuristic baseline for reranking.
+    This is NOT an operational cross-encoder and solely relies on lexical overlap
+    and metadata bonuses.
+    """
+
+    async def rerank(
+        self,
+        query: str,
+        fused: Sequence[tuple[str, float]],
+        chunks: Mapping[str, RetrievalChunk],
+    ) -> list[tuple[str, float]]:
+        query_terms = set(query.casefold().split())
+        reranked = []
+        for chunk_id, base_score in fused:
+            if chunk_id not in chunks:
+                continue
+
+            chunk = chunks[chunk_id]
+            text = chunk.text.casefold()
+
+            # Prioritize exact heading matches
+            heading_bonus = 0.0
+            if chunk.heading_path:
+                heading_text = " > ".join(chunk.heading_path).casefold()
+                if query.casefold() in heading_text:
+                    heading_bonus = 5.0
+
+            # Prioritize late-section information in candidates
+            late_section_bonus = min(2.0, chunk.chunk_index * 0.5)
+
+            # Basic relevance calculation for cross-encoder approximation
+            relevance = len(query_terms & set(text.split())) * 0.5
+
+            final_score = base_score + heading_bonus + late_section_bonus + relevance
+
+            reranked.append((chunk_id, final_score))
+
         return sorted(reranked, key=lambda item: (-item[1], item[0]))

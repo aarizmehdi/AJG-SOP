@@ -1,15 +1,26 @@
 {
-  "ks": [1, 3, 5, 10],
+  "ks": [
+    1,
+    3,
+    5,
+    10
+  ],
   "primary_k": 5,
   "configs": [
     {
       "name": "current-default",
-      "description": "Today's pipeline: section chunker, RRF 1:1, fixture reranker, stable hash embedding stand-in"
+      "description": "Production default: token-aware section chunker, RRF 1:1, preserve fused rank; stable hash stand-in",
+      "reranker": "none"
     },
     {
       "name": "no-reranker",
       "description": "Isolates what the fixture reranker contributes",
       "reranker": "none"
+    },
+    {
+      "name": "fixture-reranker",
+      "description": "Token-overlap heuristic ablation against preserved fused rank",
+      "reranker": "fixture"
     },
     {
       "name": "lexical-only",
