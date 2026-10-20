@@ -93,6 +93,10 @@ _ORDINAL_MAP = [
     (re.compile(r"\b(second|2nd|latter)\b", re.I), 1),
     (re.compile(r"\b(third|3rd)\b", re.I), 2),
     (re.compile(r"\b(fourth|4th)\b", re.I), 3),
+    (re.compile(r"\b(fifth|5th)\b", re.I), 4),
+    (re.compile(r"\b(sixth|6th)\b", re.I), 5),
+    (re.compile(r"\b(seventh|7th)\b", re.I), 6),
+    (re.compile(r"\b(eighth|8th)\b", re.I), 7),
 ]
 
 _THAT_RULE = re.compile(
@@ -167,14 +171,18 @@ def _clean_option_item(item: str) -> str | None:
     if _INJECTION_PATTERN.search(item):
         return None
     cleaned = item.replace("**", "").replace("*", "").strip()
-    parts = re.split(r"(?:\s*[:\-–—]\s+)", cleaned)
-    if parts and parts[0].strip():
-        cleaned = parts[0].strip()
+    if " → " in cleaned:
+        # Mixed-policy canonical outlines retain both the policy and the heading.
+        cleaned = cleaned.replace(" → ", " ")
+    elif not re.match(r"Document\s+\d+\s*:", cleaned, re.I):
+        parts = re.split(r"(?:\s*[:\-–—]\s+)", cleaned)
+        if parts and parts[0].strip():
+            cleaned = parts[0].strip()
     cleaned = re.sub(r"[.!?,]+$", "", cleaned).strip()
     cleaned = re.sub(r"[^\w\s\-\(\)\/]", "", cleaned).strip()
     if not cleaned or len(cleaned) < 2 or _INJECTION_PATTERN.search(cleaned):
         return None
-    return cleaned[:60]
+    return cleaned[:250]
 
 
 def extract_topic_from_question(question: str) -> str:
@@ -190,7 +198,7 @@ def extract_topic_from_question(question: str) -> str:
     for pat in patterns:
         m = re.match(pat, q, re.I)
         if m:
-            topic = q[m.end():].strip()
+            topic = q[m.end() :].strip()
             topic = re.sub(
                 r"\s+be\s+(reported|handled|submitted|conducted|done)$", "", topic, flags=re.I
             ).strip()
@@ -257,7 +265,15 @@ def build_query_plan(question: str, history: Sequence[ConversationTurn]) -> Quer
     # 1. Check for ordinal option references ("the first one", "the second one", etc.)
     target_ordinal_index: int | None = None
     for regex, idx in _ORDINAL_MAP:
-        if regex.search(question):
+        if regex.search(question) and (
+            options
+            or re.search(
+                r"\b(?:first|second|third|fourth|fifth|sixth|seventh|eighth|[1-8](?:st|nd|rd|th))"
+                r"\s+(?:one|option|section|policy)\b|\b(?:former|latter)\b",
+                question,
+                re.I,
+            )
+        ):
             target_ordinal_index = idx
             break
 
@@ -352,7 +368,13 @@ def build_query_plan(question: str, history: Sequence[ConversationTurn]) -> Quer
         original_question=question,
         resolved_query=question[:500],
         is_follow_up=False,
-        answer_mode=InternalAnswerMode.ANSWER,
+        answer_mode=(
+            InternalAnswerMode.SYNTHESIZE_MULTIPLE_POLICIES
+            if re.search(
+                r"\b(compare|comparison|differences?|across|both policies)\b", question, re.I
+            )
+            else InternalAnswerMode.ANSWER
+        ),
     )
 
 

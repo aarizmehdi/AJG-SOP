@@ -87,10 +87,7 @@ class StubRetrieval:
         return self.evidence_list
 
     async def assistant_context(self, prof, evidence):
-        return [
-            AssistantEvidence(**item.model_dump(), full_text=item.excerpt)
-            for item in evidence
-        ]
+        return [AssistantEvidence(**item.model_dump(), full_text=item.excerpt) for item in evidence]
 
     async def revalidate_evidence(self, prof, context):
         return True
@@ -375,8 +372,9 @@ def test_app_wiring_live_vs_fixture_gate():
         deepseek_model="deepseek-flash",
     )
     live_gate = create_answerability_gate(live_settings)
-    assert isinstance(live_gate, DeepSeekAnswerabilityGate)
-    assert live_gate.model_id == "deepseek-flash"
+    from services.assistant.answerability import UnavailableAnswerabilityGate
+
+    assert isinstance(live_gate, UnavailableAnswerabilityGate)
 
     # Fixture mode
     fixture_settings = Settings.model_construct(
@@ -432,4 +430,3 @@ async def test_live_mode_missing_deepseek_key_fails_closed():
     res = await service.answer(make_profile(), "What is the capacity?", Language.ENGLISH)
     assert res.kind == ResponseKind.NO_ANSWER
     assert res.answerable is False
-

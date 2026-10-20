@@ -40,6 +40,19 @@ class ResponseKind(StrEnum):
     OUT_OF_SCOPE = "out_of_scope"
 
 
+class AssistantSectionOption(BaseModel):
+    """Authorized canonical navigation, independent of retrieval chunk citations."""
+
+    model_config = ConfigDict(extra="forbid")
+    policy_id: str
+    policy_title: str
+    version_id: str
+    section_id: str
+    heading: str
+    heading_path: tuple[str, ...]
+    source: SourceLocator
+
+
 class VerifiedAnswer(OrganizationOwned):
     kind: ResponseKind = ResponseKind.POLICY_ANSWER
     answerable: bool
@@ -47,6 +60,7 @@ class VerifiedAnswer(OrganizationOwned):
     language: Language
     citations: list[AssistantCitation]
     verified: bool
+    section_options: list[AssistantSectionOption] = Field(default_factory=list, max_length=8)
 
 
 class MessageRole(StrEnum):

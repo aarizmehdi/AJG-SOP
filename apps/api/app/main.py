@@ -138,7 +138,9 @@ def build_assistant_components(
     client: httpx.AsyncClient | None = None,
     metrics: MetricsRegistry | None = None,
 ) -> tuple[LLMProvider, SemanticVerifier, AnswerabilityGate]:
-    if settings.app_mode != "live" or settings.llm_provider == "fixture":
+    if settings.app_mode == "live" and settings.llm_provider == "fixture":
+        raise ValueError("Fixture LLM is prohibited in live mode")
+    if settings.app_mode != "live":
         return FixtureLLMProvider(), FixtureSemanticVerifier(), FixtureAnswerabilityGate()
     if client is None:
         raise ValueError("A caller-owned httpx.AsyncClient is required for cloud LLM providers")

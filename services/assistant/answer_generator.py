@@ -1,4 +1,3 @@
-import json
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import overload
@@ -211,79 +210,5 @@ class DeepSeekLLMProvider(LLMProvider):
             raise LLMUnavailableError("DeepSeek is unavailable") from error
         except (KeyError, IndexError, TypeError, ValueError, ValidationError) as error:
             raise LLMResponseError("DeepSeek response could not be validated") from error
-
-    async def plan_query(
-        self,
-        question: str,
-        history: Sequence[ConversationTurn],
-    ) -> QueryPlan:
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a Query Planner for the AJG SOP Assistant. "
-                    "Determine the intent of the user's question, whether it is a follow-up, "
-                    "and what exactly should be searched in the policy library. "
-                    "Return only a JSON object matching this schema:\n"
-                    "{\n"
-                    '  "intent": "question" | "smalltalk" | "out_of_scope" | "clarification",\n'
-                    '  "original_question": "<the user\'s current question>",\n'
-                    '  "resolved_query": "<the full search string resolving any conversational references like \'second one\', or the question itself>",\n'  # noqa: E501
-                    '  "is_follow_up": true | false,\n'
-                    '  "answer_mode": "answer" | "synthesize_multiple_policies" | "ask_clarification" | "no_answer"\n'  # noqa: E501
-                    "}\n"
-                    "Use 'synthesize_multiple_policies' if the user explicitly asks to compare across multiple policies. "  # noqa: E501
-                    "Use 'ask_clarification' if the question is completely ambiguous. "
-                    "Use 'no_answer' if the intent is out_of_scope or smalltalk. "
-                    "Use 'answer' for normal or follow-up factual questions. "
-                    "Crucially, if the user says 'second one' or similar, look at the assistant's previous response to resolve what that is in 'resolved_query'."  # noqa: E501
-                ),
-            },
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "question": question,
-                        "history": [
-                            {"role": t.role.value, "content": t.content} for t in history[-5:]
-                        ],
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ]
-        if self.transport is not None:
-            return await self.transport.complete(
-                messages=messages,
-                response_model=QueryPlan,
-                model=self.model_id,
-                temperature=0.0,
-            )
-        payload = {
-            "model": self.model_id,
-            "thinking": {"type": "disabled"},
-            "messages": messages,
-            "response_format": {"type": "json_object"},
-            "max_tokens": 500,
-            "temperature": 0.0,
-            "stream": False,
-        }
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                response = await client.post(
-                    f"{self._base_url}/chat/completions",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                    json=payload,
-                )
-            response.raise_for_status()
-            body = response.json()
-            content = body["choices"][0]["message"]["content"]
-            return QueryPlan.model_validate_json(content)
-        except httpx.HTTPError as error:
-            raise LLMUnavailableError("DeepSeek is unavailable for query planning") from error
-        except (KeyError, IndexError, TypeError, ValueError, ValidationError) as error:
-            raise LLMResponseError(
-                "DeepSeek query planning response could not be validated"
-            ) from error
 
     _system_prompt = staticmethod(answer_system_prompt)

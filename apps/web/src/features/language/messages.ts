@@ -121,6 +121,8 @@ const english = {
     'I answer from published policy sections available to you and show the original source.',
   assistantAnswer: 'Answer',
   assistantSources: 'Sources',
+  assistantAskSection: 'Ask about section',
+  assistantOpenFullPolicy: 'Open full SOP',
   assistantPending:
     'Finding available policy sections and checking the answer…',
   assistantStageRetrieving: 'Searching SOPs available to you…',
@@ -266,6 +268,8 @@ const urdu: Record<MessageKey, string> = {
     'میں آپ کے لیے دستیاب شائع شدہ پالیسی کے حصوں سے جواب دیتا ہوں اور اصل ماخذ دکھاتا ہوں۔',
   assistantAnswer: 'جواب',
   assistantSources: 'ماخذ',
+  assistantAskSection: 'اس سیکشن کے بارے میں پوچھیں',
+  assistantOpenFullPolicy: 'مکمل ایس او پی کھولیں',
   assistantPending: 'دستیاب پالیسی حصے تلاش کر کے جواب کی جانچ جاری ہے…',
   assistantStageRetrieving: 'آپ کے لیے دستیاب ایس او پیز تلاش ہو رہے ہیں…',
   assistantStageReading: 'متعلقہ پالیسی حصے پڑھے جا رہے ہیں…',
@@ -412,6 +416,8 @@ const romanUrdu: Record<MessageKey, string> = {
     'Main aap ke liye dastiyab published policy sections se jawab deta hun aur asal source dikhata hun.',
   assistantAnswer: 'Jawab',
   assistantSources: 'Sources',
+  assistantAskSection: 'Section ke bare mein poochhein',
+  assistantOpenFullPolicy: 'Poori SOP kholein',
   assistantPending:
     'Dastiyab policy sections talash karke jawab check ho raha hai…',
   assistantStageRetrieving: 'Aap ke liye dastiyab SOPs talash ho rahi hain…',

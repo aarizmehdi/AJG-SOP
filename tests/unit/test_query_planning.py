@@ -1,6 +1,6 @@
 """Unit tests for Phase 5: Query Planning and Follow-up Resolution."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -18,7 +18,7 @@ from packages.contracts.assistant import (
 from packages.contracts.canonical import SourceLocator
 from packages.contracts.common import Language
 from packages.contracts.retrieval import AssistantEvidence, SearchEvidence
-from services.assistant.answer_generator import DeepSeekLLMProvider, LLMProvider
+from services.assistant.answer_generator import LLMProvider
 from services.assistant.answerability import FixtureAnswerabilityGate
 from services.assistant.citations import CitationValidator
 from services.assistant.conversation import build_query_plan
@@ -83,10 +83,7 @@ class RecordingRetrieval:
         return self.evidence_list
 
     async def assistant_context(self, prof, evidence):
-        return [
-            AssistantEvidence(**item.model_dump(), full_text=item.excerpt)
-            for item in evidence
-        ]
+        return [AssistantEvidence(**item.model_dump(), full_text=item.excerpt) for item in evidence]
 
     async def revalidate_evidence(self, prof, context):
         return True
@@ -341,103 +338,37 @@ async def test_history_not_persisted_to_database():
 
 
 # ---------------------------------------------------------------------------
-# Tests 6-7: Mocked DeepSeek Planner Tests (Schema Validation, Provider Failures)
+# Tests 6-7: Cloud adapters use deterministic reference planning without model calls.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_malformed_planner_json_uses_conservative_fallback():
-    """Mock DeepSeek Planner: malformed JSON leads to conservative fallback, never crash."""
-    import json as json_lib
+@pytest.mark.parametrize("provider_id", ["deepseek", "openrouter"])
+async def test_cloud_planning_requires_no_model_request(provider_id):
+    from apps.api.app.config import Settings
+    from apps.api.app.services.llm_factory import build_llm_provider
+    from apps.api.app.services.metrics import MetricsRegistry
 
-    async def mock_post(url, headers=None, json=None):
-        messages = json.get("messages", []) if json else []
-        system_content = messages[0].get("content", "") if messages else ""
-        if "Query Planner" in system_content:
-            return httpx.Response(
-                200,
-                json={"choices": [{"message": {"role": "assistant", "content": "not-valid-json"}}]},
-                request=httpx.Request("POST", url),
-            )
-        ans_content = json_lib.dumps(
-            {
-                "answerable": True,
-                "answer": "Chemical storage details.",
-                "citations": [make_citation().model_dump(mode="json")],
-            }
-        )
-        return httpx.Response(
-            200,
-            json={"choices": [{"message": {"role": "assistant", "content": ans_content}}]},
-            request=httpx.Request("POST", url),
-        )
+    requests = []
 
-    provider = DeepSeekLLMProvider(FAKE_TEST_KEY, "https://api.deepseek.com")
-    service = build_service(provider=provider)
+    def handler(request):
+        requests.append(request)
+        raise AssertionError("Planning must not make a model request")
 
+    settings = Settings(
+        _env_file=None,
+        app_mode="fixture",
+        llm_provider=provider_id,
+        deepseek_api_key="test-only",
+        openrouter_api_key="test-only",
+    )
     history = [
         ConversationTurn(
-            role=MessageRole.USER,
-            content="What is the scrap disposal procedure?",
-        ),
-        ConversationTurn(
-            role=MessageRole.ASSISTANT,
-            content="1. Yarn Storage Policy\n2. Chemical Storage Policy",
-        ),
+            role=MessageRole.ASSISTANT, content="1. Yarn Storage Policy\n2. Chemical Storage Policy"
+        )
     ]
-
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=mock_post):
-        res = await service.answer(
-            make_profile(), "Tell me about the second one", Language.ENGLISH, history=history
-        )
-
-    # Conservative fallback succeeds and produces policy answer
-    assert res.kind == ResponseKind.POLICY_ANSWER
-    assert res.answerable is True
-
-
-@pytest.mark.asyncio
-async def test_planner_timeout_uses_conservative_fallback():
-    """Mock DeepSeek Planner: timeout leads to conservative fallback, never crash."""
-    import json as json_lib
-
-    async def mock_post(url, headers=None, json=None):
-        messages = json.get("messages", []) if json else []
-        system_content = messages[0].get("content", "") if messages else ""
-        if "Query Planner" in system_content:
-            raise httpx.ConnectTimeout("Connection timed out")
-        ans_content = json_lib.dumps(
-            {
-                "answerable": True,
-                "answer": "Chemical storage details.",
-                "citations": [make_citation().model_dump(mode="json")],
-            }
-        )
-        return httpx.Response(
-            200,
-            json={"choices": [{"message": {"role": "assistant", "content": ans_content}}]},
-            request=httpx.Request("POST", url),
-        )
-
-    provider = DeepSeekLLMProvider(FAKE_TEST_KEY, "https://api.deepseek.com")
-    service = build_service(provider=provider)
-
-    history = [
-        ConversationTurn(
-            role=MessageRole.USER,
-            content="What is the scrap disposal procedure?",
-        ),
-        ConversationTurn(
-            role=MessageRole.ASSISTANT,
-            content="1. Yarn Storage Policy\n2. Chemical Storage Policy",
-        ),
-    ]
-
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=mock_post):
-        res = await service.answer(
-            make_profile(), "Tell me about the second one", Language.ENGLISH, history=history
-        )
-
-    # Conservative fallback succeeds
-    assert res.kind == ResponseKind.POLICY_ANSWER
-    assert res.answerable is True
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = build_llm_provider(settings, client, MetricsRegistry())
+        plan = await provider.plan_query("Explain the second one", history)
+    assert plan.resolved_query == "Chemical Storage Policy"
+    assert plan.is_follow_up
+    assert requests == []

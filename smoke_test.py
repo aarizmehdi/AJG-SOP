@@ -100,7 +100,7 @@ async def smoke_test(service=None, settings=None, profile=None) -> int:
             return True
 
         async def execute_steps(srv) -> int:
-            print("Running end-to-end API smoke test against real OpenRouter DeepSeek...")
+            print("Running internal assistant-service smoke test (no Firebase/API authentication).")
 
             # 1. Standalone Question
             standalone_q = "What is the capacity of the yarn godown?"

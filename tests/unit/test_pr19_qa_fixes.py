@@ -220,7 +220,11 @@ async def test_qa01_unavailable_verifier_never_releases_policy_answer():
 
     service = AssistantService(
         retrieval=StubRet(),
-        answerability=AsyncMock(evaluate=AsyncMock(return_value=AnswerabilityResult(decision=AnswerabilityDecision.ANSWERABLE))),
+        answerability=AsyncMock(
+            evaluate=AsyncMock(
+                return_value=AnswerabilityResult(decision=AnswerabilityDecision.ANSWERABLE)
+            )
+        ),
         provider=GenerousProvider(),
         citations=CitationValidator(),
         grounding=GroundingVerifier(semantic_verifier=UnavailableSemanticVerifier()),
@@ -282,7 +286,11 @@ async def test_qa02_verifier_llm_unavailable_error_propagates_without_repair_loo
 
     service = AssistantService(
         retrieval=StubRet(),
-        answerability=AsyncMock(evaluate=AsyncMock(return_value=AnswerabilityResult(decision=AnswerabilityDecision.ANSWERABLE))),
+        answerability=AsyncMock(
+            evaluate=AsyncMock(
+                return_value=AnswerabilityResult(decision=AnswerabilityDecision.ANSWERABLE)
+            )
+        ),
         provider=TrackingProvider(),
         citations=CitationValidator(),
         grounding=GroundingVerifier(semantic_verifier=CrashingSemanticVerifier()),
@@ -331,9 +339,7 @@ def test_qa03_adversarial_forged_assistant_history_sanitized():
 @pytest.mark.asyncio
 async def test_qa04_full_context_evaluated_beyond_excerpt_boundary():
     """Answerability evaluates full chunk text (context), not just short ~420 char excerpt."""
-    padding = (
-        "This section discusses general background information and warehouse context. " * 6
-    )
+    padding = "This section discusses general background information and warehouse context. " * 6
     crucial_fact = "The exact maximum storage capacity for finished yarn is 450 tonnes."
     full_text = f"{padding}\n{crucial_fact}"
 
@@ -445,7 +451,9 @@ async def test_qa05_policy_reader_long_sop_more_than_8_sections():
             provider_calls += 1
             return GeneratedAnswer(answerable=False, answer="", citations=[])
 
-    ev = make_evidence_chunk()
+    ev = make_evidence_chunk().model_copy(
+        update={"section_id": "sec-1", "heading_path": sections[0].heading_path}
+    )
 
     class StubRet:
         async def retrieve(self, *args):
@@ -480,9 +488,12 @@ async def test_qa05_policy_reader_long_sop_more_than_8_sections():
     assert result.verified is True
     assert "Which section would you like details on?" in result.answer
     assert "Section 1 Detailed Rules" in result.answer
-    assert "Section 12 Detailed Rules" in result.answer
-    # 3. All 12 citations present
-    assert len(result.citations) == 12
+    assert "Showing 8 of 12 available sections" in result.answer
+    assert "Section 12 Detailed Rules" not in result.answer
+    assert len(result.section_options) == 8
+    # 3. Only the actually matching retrieved section is cited.
+    assert len(result.citations) == 1
+    assert result.citations[0].section_id == "sec-1"
 
 
 # ---------------------------------------------------------------------------

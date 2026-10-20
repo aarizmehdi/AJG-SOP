@@ -101,31 +101,13 @@ def build_answerability_gate(
         if settings.llm_provider == "openrouter"
         else settings.deepseek_model
     )
-    fallback = (
-        settings.openrouter_fallback_model if settings.llm_provider == "openrouter" else None
-    )
+    fallback = settings.openrouter_fallback_model if settings.llm_provider == "openrouter" else None
     if transport is not None:
         return DeepSeekAnswerabilityGate(
             transport, base_url_or_model=model, fallback_model=fallback
         )
 
-    secret = (
-        settings.openrouter_api_key
-        if settings.llm_provider == "openrouter"
-        else settings.deepseek_api_key
-    )
-    base_url = (
-        settings.openrouter_base_url
-        if settings.llm_provider == "openrouter"
-        else settings.deepseek_base_url
-    )
-    if secret and secret.get_secret_value().strip():
-        return DeepSeekAnswerabilityGate(
-            api_key=secret.get_secret_value(),
-            base_url=base_url,
-            model=model,
-            fallback_model=fallback,
-        )
+    # Never construct an independent client or lose the composition root's privacy options.
     return UnavailableAnswerabilityGate()
 
 
@@ -139,29 +121,8 @@ def build_semantic_verifier(
         if settings.llm_provider == "openrouter"
         else settings.deepseek_model
     )
-    fallback = (
-        settings.openrouter_fallback_model if settings.llm_provider == "openrouter" else None
-    )
+    fallback = settings.openrouter_fallback_model if settings.llm_provider == "openrouter" else None
     if transport is not None:
-        return DeepSeekSemanticVerifier(
-            transport, base_url_or_model=model, fallback_model=fallback
-        )
+        return DeepSeekSemanticVerifier(transport, base_url_or_model=model, fallback_model=fallback)
 
-    secret = (
-        settings.openrouter_api_key
-        if settings.llm_provider == "openrouter"
-        else settings.deepseek_api_key
-    )
-    base_url = (
-        settings.openrouter_base_url
-        if settings.llm_provider == "openrouter"
-        else settings.deepseek_base_url
-    )
-    if secret and secret.get_secret_value().strip():
-        return DeepSeekSemanticVerifier(
-            api_key=secret.get_secret_value(),
-            base_url=base_url,
-            model=model,
-            fallback_model=fallback,
-        )
     return UnavailableSemanticVerifier()

@@ -5,7 +5,7 @@ from enum import StrEnum
 
 import httpx
 import structlog
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from packages.contracts.assistant import ResponseKind
 from packages.contracts.retrieval import SearchEvidence
@@ -29,6 +29,7 @@ class AnswerabilityDecision(StrEnum):
 
 
 class AnswerabilityResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     decision: AnswerabilityDecision
     reason: str = ""
 
@@ -91,16 +92,24 @@ class DeepSeekAnswerabilityGate(AnswerabilityGate):
         base_url: str | None = None,
         transport: ChatCompletionTransport | None = None,
     ) -> None:
-        eff_transport = transport if transport is not None else (
-            transport_or_api_key
-            if isinstance(transport_or_api_key, ChatCompletionTransport)
-            else None
+        eff_transport = (
+            transport
+            if transport is not None
+            else (
+                transport_or_api_key
+                if isinstance(transport_or_api_key, ChatCompletionTransport)
+                else None
+            )
         )
-        eff_key = api_key if api_key is not None else (
-            transport_or_api_key if isinstance(transport_or_api_key, str) else None
+        eff_key = (
+            api_key
+            if api_key is not None
+            else (transport_or_api_key if isinstance(transport_or_api_key, str) else None)
         )
-        eff_url = base_url if base_url is not None else (
-            base_url_or_model if eff_transport is None else "https://api.deepseek.com"
+        eff_url = (
+            base_url
+            if base_url is not None
+            else (base_url_or_model if eff_transport is None else "https://api.deepseek.com")
         )
         eff_model = model if eff_transport is None else base_url_or_model
 
@@ -112,6 +121,8 @@ class DeepSeekAnswerabilityGate(AnswerabilityGate):
             self._base_url: str | None = None
             self._timeout = timeout
         else:
+            if httpx.URL(eff_url).host != "api.deepseek.com" or not eff_url.startswith("https://"):
+                raise ValueError("Cloud routing requires a caller-owned ChatCompletionTransport")
             self.transport = None
             self._api_key = eff_key
             self._base_url = eff_url.rstrip("/")
@@ -122,7 +133,7 @@ class DeepSeekAnswerabilityGate(AnswerabilityGate):
     async def evaluate(
         self, question: str, evidence: Sequence[SearchEvidence]
     ) -> AnswerabilityResult:
-        if not question.strip():
+        if not question.strip() or not evidence:
             return AnswerabilityResult(
                 decision=AnswerabilityDecision.INSUFFICIENT_EVIDENCE,
                 reason="Empty question",
@@ -254,10 +265,7 @@ class DeepSeekAnswerabilityGate(AnswerabilityGate):
                     reason="Gate content not a JSON object",
                 )
 
-            raw_decision = parsed.get("decision")
-            decision = AnswerabilityDecision(str(raw_decision))
-            reason = str(parsed.get("reason", ""))
-            return AnswerabilityResult(decision=decision, reason=reason)
+            return AnswerabilityResult.model_validate_json(raw_content, strict=True)
         except (ValueError, KeyError, json.JSONDecodeError, ValidationError) as e:
             logger.warning("answerability_gate_validation_failed", error_type=type(e).__name__)
             return AnswerabilityResult(
@@ -274,4 +282,3 @@ class DeepSeekAnswerabilityGate(AnswerabilityGate):
     def is_answerable(self, question: str, evidence: Sequence[SearchEvidence]) -> bool:
         """Synchronous presence check for backwards compatibility."""
         return bool(question.strip() and evidence)
-

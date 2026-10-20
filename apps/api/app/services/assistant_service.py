@@ -1,15 +1,17 @@
 """Ephemeral assistant orchestration with authorized, verified answer release."""
 
 import inspect
+import re
 from collections.abc import Callable, Sequence
 from time import perf_counter
-from typing import Any, Protocol
+from typing import Protocol
 
 from apps.api.app.models.organization import EmployeeProfile, MembershipStatus
 from apps.api.app.repositories.database import CanonicalDatabase
 from apps.api.app.services.metrics import MetricsRegistry
 from packages.contracts.assistant import (
     AssistantCitation,
+    AssistantSectionOption,
     ConversationTurn,
     GeneratedAnswer,
     InternalAnswerMode,
@@ -17,7 +19,7 @@ from packages.contracts.assistant import (
     VerifiedAnswer,
 )
 from packages.contracts.common import Language
-from packages.contracts.retrieval import AssistantEvidence, SearchEvidence
+from packages.contracts.retrieval import AssistantEvidence, PolicyReaderDocument, SearchEvidence
 from services.assistant.answer_generator import LLMProvider, LLMResponseError
 from services.assistant.answerability import (
     AnswerabilityDecision,
@@ -47,6 +49,12 @@ class VerificationError(RuntimeError):
     pass
 
 
+class AuthorizedPolicyReader(Protocol):
+    def read_policy(
+        self, profile: EmployeeProfile, policy_id: str
+    ) -> PolicyReaderDocument | None: ...
+
+
 class AssistantService:
     def __init__(
         self,
@@ -57,7 +65,7 @@ class AssistantService:
         grounding: GroundingVerifier,
         metrics: MetricsRegistry | None = None,
         database: CanonicalDatabase | None = None,
-        policy_reader: Any = None,
+        policy_reader: AuthorizedPolicyReader | None = None,
     ) -> None:
         self.retrieval = retrieval
         self.answerability = answerability
@@ -89,10 +97,8 @@ class AssistantService:
     ) -> tuple[VerifiedAnswer, list[AssistantEvidence]]:
         started = perf_counter()
 
-        try:
-            plan = await self.provider.plan_query(question, history)
-        except Exception:
-            plan = build_query_plan(question, history)
+        # Planning resolves references only. No model or client history supplies policy facts.
+        plan = build_query_plan(question, history)
 
         if plan.answer_mode in {InternalAnswerMode.NO_ANSWER, InternalAnswerMode.ASK_CLARIFICATION}:
             kind_map = {
@@ -109,11 +115,6 @@ class AssistantService:
             progress("retrieving")
         evidence = await self.retrieval.retrieve(profile, plan.resolved_query, 8)
         if not evidence:
-            gate_decision = await self._evaluate_answerability(question, [])
-            if gate_decision == AnswerabilityDecision.GREETING:
-                result = self._canned(profile, language, ResponseKind.SMALLTALK, question)
-                self._observe(result.kind, started)
-                return result, []
             result = self._canned(profile, language, ResponseKind.NO_ANSWER)
             self._observe(result.kind, started)
             return result, []
@@ -127,15 +128,21 @@ class AssistantService:
             return result, []
 
         # QA-05: Check broad policy question UPFRONT on identifiable large SOP
-        if self._is_broad_policy_question(question, context):
+        if (
+            not plan.is_follow_up
+            and plan.answer_mode == InternalAnswerMode.ANSWER
+            and self._is_broad_policy_question(question, context)
+        ):
             overview = self._build_sections_overview(profile, language, context)
             if overview is not None:
-                await self.assert_release_authorized(profile, context)
+                if progress:
+                    progress("verifying")
+                await self.assert_release_authorized(profile, context, overview.section_options)
                 self._observe(overview.kind, started)
                 return overview, context
 
         # QA-04: Evaluate answerability gate using the full authorized context
-        gate_decision = await self._evaluate_answerability(question, context)
+        gate_decision = await self._evaluate_answerability(plan.resolved_query, context)
         if gate_decision == AnswerabilityDecision.GREETING:
             result = self._canned(profile, language, ResponseKind.SMALLTALK, question)
             self._observe(result.kind, started)
@@ -163,7 +170,7 @@ class AssistantService:
             llm_started = perf_counter()
             try:
                 generated = await self.provider.generate(
-                    question,
+                    plan.resolved_query,
                     context,
                     language,
                     repair_feedback=feedback,
@@ -206,8 +213,7 @@ class AssistantService:
                 return result, context
             self._metric("grounding_verification", verification_started, failed=True)
             reason = (
-                getattr(self.grounding, "last_rejection_reason", None)
-                or "grounding verification"
+                getattr(self.grounding, "last_rejection_reason", None) or "grounding verification"
             )
             feedback = (
                 f"The previous answer failed {reason}. "
@@ -216,10 +222,14 @@ class AssistantService:
             if attempt == 0:
                 continue
 
-        if self._is_broad_policy_question(question, context):
+        if (
+            not plan.is_follow_up
+            and plan.answer_mode == InternalAnswerMode.ANSWER
+            and self._is_broad_policy_question(question, context)
+        ):
             overview = self._build_sections_overview(profile, language, context)
             if overview is not None:
-                await self.assert_release_authorized(profile, context)
+                await self.assert_release_authorized(profile, context, overview.section_options)
                 self._observe(overview.kind, started)
                 return overview, context
 
@@ -231,17 +241,50 @@ class AssistantService:
         q = question.strip().casefold()
 
         narrow_prefixes = (
-            "how ", "how's ", "when ", "who ", "where ", "why ",
-            "is ", "are ", "can ", "could ", "should ", "do ", "does ", "will ", "would ",
-            "kaise ", "kese ", "kab ", "kaun ", "kon ", "kahan ", "kyun ", "kiun ",
-            "کیسے ", "کب ", "کون ", "کہاں ", "کیوں ",
+            "how ",
+            "how's ",
+            "when ",
+            "who ",
+            "where ",
+            "why ",
+            "is ",
+            "are ",
+            "can ",
+            "could ",
+            "should ",
+            "do ",
+            "does ",
+            "will ",
+            "would ",
+            "kaise ",
+            "kese ",
+            "kab ",
+            "kaun ",
+            "kon ",
+            "kahan ",
+            "kyun ",
+            "kiun ",
+            "کیسے ",
+            "کب ",
+            "کون ",
+            "کہاں ",
+            "کیوں ",
         )
         if any(q.startswith(prefix) for prefix in narrow_prefixes):
             return False
 
         narrow_attributes = (
-            "deadline", "due date", "capacity", "quantity", "limit", "maximum",
-            "minimum", "fee", "penalty", "approval authority", "who approves",
+            "deadline",
+            "due date",
+            "capacity",
+            "quantity",
+            "limit",
+            "maximum",
+            "minimum",
+            "fee",
+            "penalty",
+            "approval authority",
+            "who approves",
         )
         if any(attr in q for attr in narrow_attributes):
             return False
@@ -253,9 +296,17 @@ class AssistantService:
                     return False
 
         broad_indicators = (
-            "sop", "policy", "policies", "procedure", "procedures",
-            "overview", "summary", "guideline", "guidelines",
-            "پالیسی", "ایس او پی",
+            "sop",
+            "policy",
+            "policies",
+            "procedure",
+            "procedures",
+            "overview",
+            "summary",
+            "guideline",
+            "guidelines",
+            "پالیسی",
+            "ایس او پی",
         )
         if any(ind in q for ind in broad_indicators):
             return True
@@ -275,97 +326,135 @@ class AssistantService:
         if not context:
             return None
 
-        # Check if an identifiable SOP exists with canonical sections from policy reader
-        policy_ids = list(dict.fromkeys(item.policy_id for item in context))
-        canonical_sections: list[tuple[str, str, SearchEvidence]] = []
-
-        if len(policy_ids) == 1 and getattr(self, "policy_reader", None) is not None:
-            policy_id = policy_ids[0]
-            try:
-                reader_doc = self.policy_reader.read_policy(profile, policy_id)
-                if reader_doc and len(reader_doc.sections) >= 2:
-                    context_by_sec = {item.section_id: item for item in context}
-                    fallback_chunk = context[0]
-                    for sec in reader_doc.sections:
-                        chunk_ref = context_by_sec.get(sec.section_id, fallback_chunk)
-                        sec_name = (
-                            sec.heading
-                            if sec.heading
-                            else sec.heading_path[-1]
-                            if sec.heading_path
-                            else reader_doc.title
+        # Canonical navigation is independent of retrieval chunk citations.
+        groups: list[list[AssistantSectionOption]] = []
+        for policy_id in dict.fromkeys(item.policy_id for item in context):
+            items = [item for item in context if item.policy_id == policy_id]
+            versions = {item.version_id for item in items}
+            options: list[AssistantSectionOption] = []
+            if self.policy_reader is not None:
+                doc = self.policy_reader.read_policy(profile, policy_id)
+                if not doc or doc.policy_id != policy_id:
+                    continue
+                for section in doc.sections:
+                    if (
+                        section.organization_id != profile.organization_id
+                        or section.policy_id != policy_id
+                        or section.version_id not in versions
+                    ):
+                        continue
+                    options.append(
+                        AssistantSectionOption(
+                            policy_id=policy_id,
+                            policy_title=doc.title,
+                            version_id=section.version_id,
+                            section_id=section.section_id,
+                            heading=section.heading,
+                            heading_path=section.heading_path,
+                            source=section.source,
                         )
-                        canonical_sections.append((reader_doc.title, sec_name, chunk_ref))
-            except Exception:
-                canonical_sections = []
+                    )
+            else:
+                # Fixture/service callers may only have already-authorized chunks.
+                for item in items:
+                    options.append(
+                        AssistantSectionOption(
+                            policy_id=item.policy_id,
+                            policy_title=item.policy_title,
+                            version_id=item.version_id,
+                            section_id=item.section_id,
+                            heading=item.heading_path[-1]
+                            if item.heading_path
+                            else item.policy_title,
+                            heading_path=item.heading_path,
+                            source=item.source,
+                        )
+                    )
+            unique = {option.section_id: option for option in options}
+            if unique:
+                groups.append(list(unique.values()))
 
-        if not canonical_sections:
-            seen_section_keys: set[tuple[str, str]] = set()
-            for item in context:
-                sec_key = (item.policy_id, item.section_id)
-                if sec_key not in seen_section_keys:
-                    seen_section_keys.add(sec_key)
-                    sec_name = item.heading_path[-1] if item.heading_path else item.policy_title
-                    canonical_sections.append((item.policy_title, sec_name, item))
-                    if len(canonical_sections) >= 8:
-                        break
-
-        if len(canonical_sections) < 2:
+        # Interleave policies so a mixed result cannot hide the second SOP.
+        total = sum(len(group) for group in groups)
+        selected = [
+            group[index]
+            for index in range(min(8, max((len(group) for group in groups), default=0)))
+            for group in groups
+            if index < len(group)
+        ][:8]
+        if len(selected) < 2:
             return None
 
-        unique_policy_titles = list(dict.fromkeys(pol for pol, _, _ in canonical_sections))
-        if len(unique_policy_titles) == 1:
-            policy_name = unique_policy_titles[0]
-            if language == Language.URDU:
-                header = f"{policy_name} میں آپ کی مجاز پالیسیوں سے یہ سیکشنز ملے ہیں:\n\n"
-                prompt_line = "\n\nآپ کس سیکشن کے بارے میں تفصیلات جاننا چاہتے ہیں؟"
-            elif language == Language.ROMAN_URDU:
-                header = (
-                    f"{policy_name} mein aap ki authorized policies se yeh sections miley hain:\n\n"
-                )
-                prompt_line = "\n\nKis section ke baare mein aap tafseelat jaanna chahte hain?"
-            else:
-                header = (
-                    f"{policy_name} covers these sections found in your authorized policies:\n\n"
-                )
-                prompt_line = "\n\nWhich section would you like details on?"
-            body = "\n".join(f"{i + 1}. {sec}" for i, (_, sec, _) in enumerate(canonical_sections))
+        citations: dict[str, AssistantCitation] = {}
+        for option in selected:
+            for item in context:
+                if (
+                    item.organization_id == profile.organization_id
+                    and item.policy_id == option.policy_id
+                    and item.version_id == option.version_id
+                    and item.section_id == option.section_id
+                    and item.policy_title == option.policy_title
+                    and item.heading_path == option.heading_path
+                    and item.source == option.source
+                ):
+                    citations.setdefault(
+                        item.chunk_id,
+                        AssistantCitation(
+                            chunk_id=item.chunk_id,
+                            policy_id=item.policy_id,
+                            policy_title=item.policy_title,
+                            section_id=item.section_id,
+                            heading_path=item.heading_path,
+                            document_id=item.source.source_document_id,
+                            source=item.source,
+                        ),
+                    )
+                    break
+
+        if language == Language.URDU:
+            header = "آپ کی مجاز، شائع شدہ پالیسیوں کے سیکشنز:\n\n"
+            prompt = "\n\nتفصیل کے لیے کوئی سیکشن منتخب کریں یا اس کا نام پوچھیں۔"
+            more = (
+                f"\n\nکل {total} دستیاب سیکشنز میں سے {len(selected)} دکھائے گئے ہیں۔ "
+                "مکمل پالیسی کھولیں۔"
+            )
+        elif language == Language.ROMAN_URDU:
+            header = "Aap ki authorized, published policies ke sections:\n\n"
+            prompt = "\n\nTafseel ke liye section chunein ya us ka naam poochhein."
+            more = (
+                f"\n\n{total} dastiyab sections mein se {len(selected)} dikhaye gaye hain. "
+                "Poori policy kholein."
+            )
         else:
-            if language == Language.URDU:
-                header = "آپ کی مجاز پالیسیوں میں یہ سیکشنز ملے ہیں:\n\n"
-                prompt_line = "\n\nآپ کس سیکشن کے بارے میں تفصیلات جاننا چاہتے ہیں؟"
-            elif language == Language.ROMAN_URDU:
-                header = "Aap ki authorized policies mein yeh sections miley hain:\n\n"
-                prompt_line = "\n\nKis section ke baare mein aap tafseelat jaanna chahte hain?"
-            else:
-                header = "The following sections were found in your authorized policies:\n\n"
-                prompt_line = "\n\nWhich section would you like details on?"
-            body = "\n".join(
-                f"{i + 1}. {pol} → {sec}" for i, (pol, sec, _) in enumerate(canonical_sections)
+            header = "Sections in your authorized, published policies:\n\n"
+            prompt = (
+                "\n\nWhich section would you like details on? "
+                "Select a heading or ask about a section by name or number."
+            )
+            more = (
+                f"\n\nShowing {len(selected)} of {total} available sections. "
+                "Open the policy reader for the full contents."
             )
 
-        overview_text = header + body + prompt_line
+        def plain(text: str) -> str:
+            # Source headings are data, not Markdown/HTML instructions.
+            return re.sub(r"([\\`*_{}\[\]<>|])", r"\\\1", " ".join(text.split()))
 
-        citations = [
-            AssistantCitation(
-                chunk_id=item.chunk_id,
-                policy_id=item.policy_id,
-                policy_title=item.policy_title,
-                section_id=item.section_id,
-                heading_path=item.heading_path,
-                document_id=item.source.source_document_id,
-                source=item.source,
-            )
-            for _, _, item in canonical_sections
-        ]
-
+        multiple = len({item.policy_id for item in selected}) > 1
+        if not multiple:
+            header = plain(selected[0].policy_title) + "\n\n" + header
+        body = "\n".join(
+            f"{index}. {plain(item.policy_title) + ' → ' if multiple else ''}{plain(item.heading)}"
+            for index, item in enumerate(selected, 1)
+        )
         return VerifiedAnswer(
             organization_id=profile.organization_id,
             kind=ResponseKind.CLARIFICATION,
             answerable=False,
-            answer=overview_text,
+            answer=header + body + (more if total > len(selected) else "") + prompt,
             language=language,
-            citations=citations,
+            citations=list(citations.values()),
+            section_options=selected,
             verified=True,
         )
 
@@ -383,7 +472,10 @@ class AssistantService:
         return await self.grounding.verify(generated, context)
 
     async def assert_release_authorized(
-        self, profile: EmployeeProfile, evidence: Sequence[SearchEvidence]
+        self,
+        profile: EmployeeProfile,
+        evidence: Sequence[SearchEvidence],
+        section_options: Sequence[AssistantSectionOption] = (),
     ) -> None:
         current = profile
         if self.database is not None:
@@ -401,6 +493,28 @@ class AssistantService:
                 raise VerificationError("Membership is no longer active")
         if evidence and not await self.retrieval.revalidate_evidence(current, evidence):
             raise VerificationError("Policy evidence is no longer available")
+        if section_options and self.policy_reader is not None:
+            documents = {
+                policy_id: self.policy_reader.read_policy(current, policy_id)
+                for policy_id in dict.fromkeys(item.policy_id for item in section_options)
+            }
+            for item in section_options:
+                doc = documents.get(item.policy_id)
+                if (
+                    not doc
+                    or doc.title != item.policy_title
+                    or not any(
+                        section.organization_id == current.organization_id
+                        and section.policy_id == item.policy_id
+                        and section.version_id == item.version_id
+                        and section.section_id == item.section_id
+                        and section.heading == item.heading
+                        and section.heading_path == item.heading_path
+                        and section.source == item.source
+                        for section in doc.sections
+                    )
+                ):
+                    raise VerificationError("Policy navigation is no longer authorized")
 
     @staticmethod
     def _canned(

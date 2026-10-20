@@ -93,7 +93,9 @@ async def answer_events(
                     break
                 result, context = cast(tuple[VerifiedAnswer, list[AssistantEvidence]], data)
                 try:
-                    await service.assert_release_authorized(profile, context)
+                    await service.assert_release_authorized(
+                        profile, context, result.section_options
+                    )
                     yield _event(
                         "answer_start",
                         {
@@ -104,14 +106,26 @@ async def answer_events(
                         },
                     )
                     for offset in range(0, len(result.answer), 160):
-                        await service.assert_release_authorized(profile, context)
+                        await service.assert_release_authorized(
+                            profile, context, result.section_options
+                        )
                         if offset == 0:
                             service._metric("assistant_first_verified_delta", started)
                         yield _event("answer_delta", {"text": result.answer[offset : offset + 160]})
                         await asyncio.sleep(0)
+                    await service.assert_release_authorized(
+                        profile, context, result.section_options
+                    )
                     yield _event(
                         "sources",
-                        {"citations": [item.model_dump(mode="json") for item in result.citations]},
+                        {
+                            "citations": [
+                                item.model_dump(mode="json") for item in result.citations
+                            ],
+                            "section_options": [
+                                item.model_dump(mode="json") for item in result.section_options
+                            ],
+                        },
                     )
                     yield _event("done", {"verified": True})
                     service._metric("assistant_response", started)
