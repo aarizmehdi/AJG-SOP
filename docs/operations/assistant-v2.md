@@ -1,6 +1,6 @@
 # AJG SOP Assistant v2 operations
 
-The Assistant uses the existing published-policy retrieval service. Search excerpts remain short; generation expands only the selected, currently authorized chunks to at most 5,000 characters each and 16,000 characters total. Retrieval authorization, lexical/semantic fusion, publication state, and source-file rules remain unchanged.
+The Assistant uses the existing published-policy retrieval service. Search excerpts remain short; generation expands only the selected, currently authorized chunks to at most 5,000 characters each and 16,000 characters total. The context budget reserves space for every authorized result, so earlier long chunks cannot silently exclude a later exact-match section. Short sections leave more space for subsequent results. Retrieval authorization, lexical/semantic fusion, publication state, and source-file rules remain unchanged.
 
 `LLM_PROVIDER=openrouter` selects the OpenRouter adapter with the approved primary and availability-only fallback. Configure `OPENROUTER_API_KEY` as a backend Railway secret. See [OpenRouter operations](openrouter.md) for model IDs, shared pooling, bounded retries, privacy, metrics, activation and rollback. `LLM_PROVIDER=deepseek` explicitly selects the retained direct DeepSeek adapter. Fixture tests use `LLM_PROVIDER=fixture`, which is prohibited in live mode. If the model provider is unavailable, employee search and policy reading remain usable.
 
