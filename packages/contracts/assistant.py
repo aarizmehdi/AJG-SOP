@@ -25,12 +25,32 @@ class GeneratedAnswer(BaseModel):
     citations: list[AssistantCitation]
 
 
+class InternalAnswerMode(StrEnum):
+    ANSWER = "answer"
+    SYNTHESIZE_MULTIPLE_POLICIES = "synthesize_multiple_policies"
+    ASK_CLARIFICATION = "ask_clarification"
+    NO_ANSWER = "no_answer"
+
+
 class ResponseKind(StrEnum):
     SMALLTALK = "smalltalk"
     POLICY_ANSWER = "policy_answer"
     CLARIFICATION = "clarification"
     NO_ANSWER = "no_answer"
     OUT_OF_SCOPE = "out_of_scope"
+
+
+class AssistantSectionOption(BaseModel):
+    """Authorized canonical navigation, independent of retrieval chunk citations."""
+
+    model_config = ConfigDict(extra="forbid")
+    policy_id: str
+    policy_title: str
+    version_id: str
+    section_id: str
+    heading: str
+    heading_path: tuple[str, ...]
+    source: SourceLocator
 
 
 class VerifiedAnswer(OrganizationOwned):
@@ -40,6 +60,7 @@ class VerifiedAnswer(OrganizationOwned):
     language: Language
     citations: list[AssistantCitation]
     verified: bool
+    section_options: list[AssistantSectionOption] = Field(default_factory=list, max_length=8)
 
 
 class MessageRole(StrEnum):
@@ -70,6 +91,7 @@ class AssistantRequest(BaseModel):
 
 class ChatSession(OrganizationOwned):
     """Legacy record shape retained only for historical purge compatibility."""
+
     id: str
     employee_id: str
     language: Language
@@ -78,6 +100,7 @@ class ChatSession(OrganizationOwned):
 
 class ChatMessage(OrganizationOwned):
     """Legacy record shape retained only for historical purge compatibility."""
+
     id: str
     session_id: str
     role: MessageRole

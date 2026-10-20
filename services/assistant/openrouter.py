@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from packages.contracts.assistant import GeneratedAnswer
+from packages.contracts.assistant import GeneratedAnswer, InternalAnswerMode
 from packages.contracts.common import Language
 from packages.contracts.retrieval import SearchEvidence
 from services.assistant.answer_generator import LLMProvider
@@ -31,9 +31,10 @@ class OpenRouterLLMProvider(LLMProvider):
         evidence: Sequence[SearchEvidence],
         language: Language,
         repair_feedback: str | None = None,
+        answer_mode: InternalAnswerMode | None = None,
     ) -> GeneratedAnswer:
         return await self.transport.complete(
-            messages=answer_messages(question, evidence, language, repair_feedback),
+            messages=answer_messages(question, evidence, language, repair_feedback, answer_mode),
             response_model=GeneratedAnswer,
             model=self.model_id,
             fallback_model=self.fallback_model,

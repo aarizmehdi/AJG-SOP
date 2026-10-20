@@ -1,9 +1,9 @@
 # OpenRouter provider and pooled LLM transport
 
-Scope: backend provider integration from `main` commit
-`929deeead5cb40ceea77ff9c8f71c4ef4fee1fd3`. Retrieval, chunking, indexing,
-publication, conversation memory, answerability, citations and grounding logic are unchanged.
-PR #18 and PR #19 are separate, unapproved work and are not incorporated here.
+The provider rollout below records PR #22 from baseline `929deeead5cb40ceea77ff9c8f71c4ef4fee1fd3`.
+PR #19 now integrates answerability and semantic verification with this same transport; see
+[Assistant operations](assistant-v2.md). Retrieval, chunking, indexing and publication remain
+unchanged. PR #18 remains separate and is not incorporated here.
 
 ## Configuration and activation
 
@@ -75,8 +75,12 @@ No transport/model fallback occurs for HTTP 400/401/402/403/404/408/422, moderat
 abstention or authorization failures. Provider errors are surfaced as sanitized typed failures;
 upstream error bodies are not exposed. The assistant's existing single repair remains unchanged.
 A malformed/ungrounded answer may therefore cause one new generation starting at the primary,
-but is never routed to the fallback because it failed validation. Worst case: two generations,
-two availability attempts each, four HTTP calls; there is no additional retry layer.
+but is never routed to the fallback because it failed validation. With PR #19, the maximum is
+one answerability call plus two generation/verification pairs, each with at most two availability
+attempts: ten HTTP calls in the longest repair/fallback path. Each logical call has its own 45s
+deadline; this is not a 45s deadline for the complete assistant turn. Normal supported answers
+use one gate, one generation and one semantic verification. Deterministic overviews/empty retrieval
+use no model calls. There is no paid planner or additional retry layer.
 
 ## Confidential-data routing and caching
 
@@ -183,16 +187,15 @@ per-tenant chargeback system. Export/durable aggregation is outside this task.
 
 ## Integration and rollback
 
-PR #19 adds `plan_query()` to `LLMProvider` and an `answer_mode` argument to generation, as well as
-changing DeepSeek construction, answer prompts, lifecycle wiring and async grounding. Its interface
-cannot be merged mechanically with this OpenRouter adapter: the approved integration must extend
-the adapter for the new method/argument or instantiation/calls will fail. It must be integrated
-manually after both PRs are reviewed: inject the lifespan-owned
-client/transport into its planner and verifier, supply their own response models to `complete`,
-retain this bounded failure/privacy policy, and do not reintroduce per-request AsyncClients.
-This transport does not implement query planning or semantic grounding. Its model-specific metrics
-must also be used for those extra calls. Existing error imports in `answer_generator` remain
-re-exported, but the DeepSeek constructor now requires a transport instead of raw credentials.
+PR #19's composition root injects one transport into generation, `AnswerabilityResult` evaluation
+and `SemanticVerificationResult` checks. All three therefore share pooling, privacy, selected
+models, schema validation, availability-only fallback and model-specific usage metrics. Factories
+without a shared transport return unavailable gate/verifier components rather than constructing
+an independent OpenRouter client. Legacy raw-credential gate/verifier compatibility accepts only
+the direct HTTPS DeepSeek host, and is not used by the live application composition root.
+Query planning/reference resolution is deterministic for both adapters and does not incur model
+calls. `answer_mode` reaches OpenRouter generation; planner/verifier logic remains outside the
+generic transport. Existing error imports in `answer_generator` remain re-exported.
 PR #18's unconditional `DEEPSEEK_API_KEY` guard must become selected-provider-aware if integrated.
 
 Controlled rollback uses `LLM_PROVIDER=deepseek`, existing `DEEPSEEK_API_KEY`,

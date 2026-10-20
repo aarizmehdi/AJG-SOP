@@ -1818,6 +1818,40 @@ a {
   padding-top: 15px;
   border-top: 1px solid var(--border);
 }
+
+.assistant-section-options ol {
+  padding-inline-start: 1.5rem;
+}
+.assistant-section-options li {
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.assistant-section-options li a {
+  display: inline-flex;
+  flex-direction: column;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.assistant-section-options small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.assistant-section-options button {
+  display: block;
+  margin-block-start: 0.35rem;
+  padding: 0.25rem 0;
+  color: var(--blue);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.assistant-section-options > a {
+  display: block;
+  margin-block: 0.5rem;
+  font-size: 0.85rem;
+}
 .answer-sources > strong {
   display: block;
   font-size: 0.68rem;
