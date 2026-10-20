@@ -1,4 +1,4 @@
-import { ArrowRight, MessageCircle, Search, ShieldCheck } from 'lucide-react';
+import { ArrowRight, MessageCircle, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../language/useLanguage';
 import { AvailablePolicies } from './AvailablePolicies';
@@ -32,16 +32,9 @@ export default function HomePage() {
           <ArrowRight />
         </Link>
       </div>
-      <div className="trust-note">
-        <ShieldCheck />
-        <span>
-          <strong>{t('homeTrustTitle')}</strong> {t('homeTrustDetail')}
-        </span>
-      </div>
       <section className="home-policies" aria-labelledby="available-sops-title">
         <div className="home-policies-heading">
           <div>
-            <span className="eyebrow">{t('availableToYou')}</span>
             <h2 id="available-sops-title">{t('mySops')}</h2>
           </div>
           <Link to="/policies" className="text-link">

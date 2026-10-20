@@ -1,7 +1,6 @@
 import {
   BookOpen,
   Building2,
-  ChevronDown,
   ClipboardList,
   FilePlus2,
   LayoutDashboard,
@@ -122,7 +121,6 @@ export function AdminSidebarNavigation({
               }}
             >
               <span>{group.label}</span>
-              <ChevronDown aria-hidden="true" />
             </button>
             {open && (
               <div id={`admin-nav-${group.id}`} className="admin-sidebar-links">

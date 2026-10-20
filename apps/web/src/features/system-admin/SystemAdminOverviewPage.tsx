@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  ArrowLeft,
   BookOpenCheck,
   Building2,
   MapPin,
@@ -83,7 +84,13 @@ export default function SystemAdminOverviewPage() {
     <section className="control-section">
       <div className="control-section-heading">
         <div>
-          <span className="eyebrow">Organization status</span>
+          <Link
+            to="/home"
+            className="eyebrow"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            <ArrowLeft size={12} /> Home
+          </Link>
           <h2>Overview</h2>
           <p>Live counts from AJG identity, access, and policy records.</p>
         </div>

@@ -2,6 +2,10 @@ import { useLanguage } from '../language/useLanguage';
 import { sourceLabel } from './policyPresentation';
 
 const english = {
+  backToHome: 'Back to Home',
+  livePortal: 'Live Portal',
+  allPolicies: 'All Policies',
+  filters: 'Filters',
   navLibrary: 'Policy Library',
   navUpload: 'Upload SOP',
   navReview: 'Review Queue',
@@ -185,6 +189,10 @@ const english = {
 };
 type Copy = { [K in keyof typeof english]: string };
 const urdu: Copy = {
+  backToHome: 'ہوم پر واپس جائیں',
+  livePortal: 'لائیو پورٹل',
+  allPolicies: 'تمام پالیسیاں',
+  filters: 'فلٹرز',
   navLibrary: 'پالیسی لائبریری',
   navUpload: 'ایس او پی اپ لوڈ کریں',
   navReview: 'نظرثانی کی فہرست',
@@ -365,6 +373,10 @@ const urdu: Copy = {
   unorderedList: 'بلٹ فہرست',
 };
 const roman_urdu: Copy = {
+  backToHome: 'Home par wapas jayein',
+  livePortal: 'Live Portal',
+  allPolicies: 'Tamam policies',
+  filters: 'Filters',
   navLibrary: 'Policy Library',
   navUpload: 'SOP upload karein',
   navReview: 'Review Queue',

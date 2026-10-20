@@ -22,7 +22,7 @@ describe('AppShell', () => {
     expect(
       screen.getByRole('navigation', { name: 'SOP Knowledge' }),
     ).toBeTruthy();
-    expect(screen.getByText('Search SOPs')).toBeTruthy();
-    expect(screen.getByText('SOP Assistant')).toBeTruthy();
+    expect(screen.getByText('Search')).toBeTruthy();
+    expect(screen.getByText('Assistant')).toBeTruthy();
   });
 });
