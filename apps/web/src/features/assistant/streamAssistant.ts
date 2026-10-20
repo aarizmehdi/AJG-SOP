@@ -42,6 +42,7 @@ export async function streamAssistant(
   let started: z.infer<typeof streamStartSchema> | null = null;
   let answer = '';
   let citations: StreamAnswer['citations'] = [];
+  let sectionOptions: StreamAnswer['section_options'] = [];
   const state = { finished: false };
 
   const processBlock = (block: string) => {
@@ -72,11 +73,11 @@ export async function streamAssistant(
     }
     if (name === 'sources') {
       if (!started) throw new Error('Sources arrived before verification');
+      const parsed = streamSourcesSchema.parse(data);
+      sectionOptions = parsed.section_options;
       citations = [
         ...new Map(
-          streamSourcesSchema
-            .parse(data)
-            .citations.map((citation) => [citation.chunk_id, citation]),
+          parsed.citations.map((citation) => [citation.chunk_id, citation]),
         ).values(),
       ];
     }
@@ -103,7 +104,12 @@ export async function streamAssistant(
     }
     if (!state.finished)
       throw new Error('Assistant stream ended before verification');
-    return { ...streamStartSchema.parse(started), answer, citations };
+    return {
+      ...streamStartSchema.parse(started),
+      answer,
+      citations,
+      section_options: sectionOptions,
+    };
   } finally {
     reader.releaseLock();
   }

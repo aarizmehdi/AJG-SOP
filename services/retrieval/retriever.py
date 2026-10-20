@@ -141,6 +141,7 @@ class RetrievalService:
         allowed = {chunk.id: chunk for chunk in self.authorization.eligible_chunks(profile)}
         remaining = 16000
         context: list[AssistantEvidence] = []
+        selected: list[tuple[SearchEvidence, RetrievalChunk]] = []
         for item in evidence:
             chunk = allowed.get(item.chunk_id)
             if (
@@ -150,7 +151,14 @@ class RetrievalService:
                 or not self.authorization.revalidate(profile, chunk)
             ):
                 continue
-            text = chunk.text[: min(5000, remaining)]
+            if chunk.text:
+                selected.append((item, chunk))
+        # Reserve a fair share for every authorized result. Otherwise several
+        # long early chunks can consume the budget and silently drop a later
+        # exact-match section before answerability ever sees it.
+        for index, (item, chunk) in enumerate(selected):
+            allowance = min(5000, remaining // (len(selected) - index))
+            text = chunk.text[:allowance]
             if not text:
                 break
             context.append(AssistantEvidence(**item.model_dump(), full_text=text))

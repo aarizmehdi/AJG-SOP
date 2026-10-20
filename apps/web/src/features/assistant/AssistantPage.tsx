@@ -15,6 +15,7 @@ import { type StreamAnswer } from '../../types/assistant';
 import { useLanguage } from '../language/useLanguage';
 import { streamAssistant } from './streamAssistant';
 import { useVoiceInput } from './useVoiceInput';
+import { AssistantSectionOptions } from './AssistantSectionOptions';
 
 type Turn = {
   id: string;
@@ -112,11 +113,15 @@ export default function AssistantPage() {
     const id = crypto.randomUUID();
     const history = turns
       .filter((turn) => turn.result)
-      .slice(-8)
-      .map((turn) => ({
-        role: 'user' as const,
-        content: turn.question.slice(0, 1000),
-      }));
+      .slice(-4)
+      .flatMap((turn) => [
+        { role: 'user' as const, content: turn.question.slice(0, 1000) },
+        {
+          role: 'assistant' as const,
+          // Reference resolution only; the server never treats history as SOP evidence.
+          content: turn.result?.answer.slice(0, 2000) ?? '',
+        },
+      ]);
     setTurns((current) => [...current, { id, question: trimmed }]);
     setPending(true);
     setQuestion('');
@@ -228,11 +233,19 @@ export default function AssistantPage() {
                       components={{
                         a: ({ children }) => <span>{children}</span>,
                         img: () => null,
+                        ol: ({ children }) =>
+                          turn.result?.section_options.length ? null : (
+                            <ol>{children}</ol>
+                          ),
                       }}
                     >
                       {turn.result.answer}
                     </ReactMarkdown>
                   </div>
+                  <AssistantSectionOptions
+                    sections={turn.result.section_options}
+                    onAsk={acceptTranscript}
+                  />
                   {turn.result.citations.length > 0 && (
                     <div className="answer-sources">
                       <strong>{t('assistantSources')}</strong>

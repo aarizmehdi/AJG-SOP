@@ -45,6 +45,88 @@ afterEach(() => {
 });
 
 describe('assistant response language', () => {
+  it('opens uncited canonical headings and sends bounded reference history for follow-ups', async () => {
+    window.localStorage.setItem('ajt-fixture-identity', 'employee');
+    let nextId = 0;
+    vi.stubGlobal('crypto', { randomUUID: () => `turn-${String(nextId++)}` });
+    const outline = '1. Document 1: Receiving\n2. Document 2: Dispatch';
+    const source = {
+      source_document_id: 'document-one',
+      page_start: 2,
+      page_end: 2,
+      sheet_name: null,
+      cell_range: null,
+      block_anchor: null,
+    };
+    const sections = ['Receiving', 'Dispatch'].map((heading, index) => ({
+      policy_id: 'policy-one',
+      policy_title: 'Store SOP',
+      version_id: 'version-one',
+      section_id: `section-${String(index + 1)}`,
+      heading: `Document ${String(index + 1)}: ${heading}`,
+      heading_path: [`Document ${String(index + 1)}: ${heading}`],
+      source,
+    }));
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (fetchMock.mock.calls.length === 2) {
+        expect(
+          JSON.parse(typeof init?.body === 'string' ? init.body : '{}'),
+        ).toMatchObject({
+          question: 'Store SOP — Document 2: Dispatch',
+          language: 'roman_urdu',
+          history: [
+            { role: 'user', content: 'Show the SOP overview' },
+            { role: 'assistant', content: outline },
+          ],
+        });
+      }
+      const first = fetchMock.mock.calls.length === 1;
+      return Promise.resolve(
+        eventStream([
+          [
+            'answer_start',
+            {
+              kind: first ? 'clarification' : 'policy_answer',
+              answerable: !first,
+              language: 'roman_urdu',
+              verified: true,
+            },
+          ],
+          [
+            'answer_delta',
+            { text: first ? outline : 'Verified follow-up answer' },
+          ],
+          [
+            'sources',
+            { citations: [], section_options: first ? sections : [] },
+          ],
+          ['done', { verified: true }],
+        ]),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderAssistant();
+    const field = screen.getByRole('textbox');
+    fireEvent.change(field, { target: { value: 'Show the SOP overview' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    const heading = await screen.findByRole('link', {
+      name: /Document 2: Dispatch/,
+    });
+    expect(heading).toHaveAttribute(
+      'href',
+      '/policies/policy-one?section=section-2',
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Section ke bare mein poochhein: Document 2: Dispatch',
+      }),
+    );
+    expect(field).toHaveValue('Store SOP — Document 2: Dispatch');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(await screen.findByText('Verified follow-up answer')).toBeVisible();
+  });
+
   it('uses selected Roman Urdu for an English question and withholds a mismatched response', async () => {
     window.localStorage.setItem('ajt-fixture-identity', 'employee');
     vi.stubGlobal('crypto', { randomUUID: () => 'turn-one' });
@@ -270,7 +352,7 @@ describe('assistant response language', () => {
     expect(requestSignal?.aborted).toBe(true);
   });
 
-  it('bounds twenty turns to eight prior user questions and resets on remount', async () => {
+  it('bounds twenty turns to four reference pairs and resets on remount', async () => {
     window.localStorage.setItem('ajt-fixture-identity', 'employee');
     vi.stubGlobal('crypto', { randomUUID: () => Math.random().toString(36) });
     const requests: { history: { role: string; content: string }[] }[] = [];
@@ -315,9 +397,23 @@ describe('assistant response language', () => {
     }
     expect(requests).toHaveLength(20);
     expect(requests[19]?.history).toHaveLength(8);
-    expect(requests[19]?.history.every((turn) => turn.role === 'user')).toBe(
-      true,
-    );
+    expect(requests[19]?.history.map((turn) => turn.role)).toEqual([
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+      'user',
+      'assistant',
+    ]);
+    expect(requests[19]?.history[0]?.content).toBe('What about step 15?');
+    expect(
+      requests[19]?.history.reduce(
+        (count, turn) => count + turn.content.length,
+        0,
+      ),
+    ).toBeLessThanOrEqual(12000);
     mounted.unmount();
     renderAssistant();
     expect(

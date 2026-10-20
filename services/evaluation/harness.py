@@ -385,7 +385,7 @@ async def _run_assistant(
             context_sections = [corpus.key_by_section_id[item.section_id] for item in context]
             if verified.kind is ResponseKind.POLICY_ANSWER:
                 valid_citations = citations.validate(verified.citations, context)
-                grounded_ok = grounding.verify(
+                grounded_ok = await grounding.verify(
                     GeneratedAnswer(
                         answerable=True, answer=verified.answer, citations=verified.citations
                     ),
