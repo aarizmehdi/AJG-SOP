@@ -215,7 +215,8 @@ class GroundingVerifier:
     )
     _iso_date = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
     _sop_number = re.compile(
-        r"\bsop(?:-(?:[a-z0-9]+-?)+|\s*#\s*[a-z0-9]+|\s+\d+[a-z0-9.-]*)\b",
+        r"\bsop(?:\s*[-#]\s*([a-z0-9]+(?:[./-][a-z0-9]+)*)"
+        r"|\s+(\d+[a-z0-9]*(?:[./-][a-z0-9]+)*))\b",
         re.I,
     )
     _deadline = re.compile(r"\b(?:deadline|due\s+date|submission\s+date)\b", re.I)
@@ -224,6 +225,15 @@ class GroundingVerifier:
         r"you are (chatgpt|an ai assistant)|reveal (hidden|secret) instructions)\b",
         re.I,
     )
+
+    @staticmethod
+    def _sop_references(text: str) -> set[str]:
+        # Prefix typography is not policy identity. Keep the complete identifier
+        # (including slash/dot/hyphen suffixes), not just its first numeric part.
+        return {
+            (prefixed or bare).casefold()
+            for prefixed, bare in GroundingVerifier._sop_number.findall(text)
+        }
 
     @staticmethod
     def _extract_numbers(text: str) -> set[str]:
@@ -265,9 +275,7 @@ class GroundingVerifier:
         prose = re.sub(r"(?m)^\s*(?:\(\d+\)|\d+(?:\.\d+)?[.)])\s+", "", answer_text)
 
         # SOP number check: all SOP references in answer must appear in cited evidence
-        unsupported_sops = set(self._sop_number.findall(answer_text)) - set(
-            self._sop_number.findall(cited_text)
-        )
+        unsupported_sops = self._sop_references(answer_text) - self._sop_references(cited_text)
         if unsupported_sops:
             self.last_rejection_reason = "SOP number"
             return False

@@ -646,3 +646,39 @@ async def test_paired_isolated_substring_number_rejected():
     verifier = GroundingVerifier()
     assert await verifier.verify(answer_sub, [ev]) is False
 
+
+@pytest.mark.parametrize(
+    "reference", ["SOP # 2024/Gat/002", "SOP#2024/Gat/002", "SOP 2024/Gat/002", "SOP-2024/GAT/002"]
+)
+@pytest.mark.asyncio
+async def test_sop_prefix_spacing_preserves_complete_identifier(reference):
+    semantic = AsyncMock()
+    semantic.verify_claims.return_value = True
+    verifier = GroundingVerifier(semantic)
+    evidence = make_evidence(text="Sop# 2024/Gat/002. Store must sign the RGP.")
+    answer = GeneratedAnswer(
+        answerable=True,
+        answer=f"{reference}: Store must sign the RGP.",
+        citations=[make_citation()],
+    )
+    assert await verifier.verify(answer, [evidence])
+    semantic.verify_claims.assert_awaited_once()
+
+
+@pytest.mark.parametrize("wrong", ["2024/Gat/003", "2024/Store/002", "2024/Gat/002-A"])
+@pytest.mark.asyncio
+async def test_sop_suffix_must_match_even_when_numbers_appear_elsewhere(wrong):
+    semantic = AsyncMock()
+    semantic.verify_claims.return_value = True
+    verifier = GroundingVerifier(semantic)
+    evidence = make_evidence(
+        text="Sop# 2024/Gat/002. Store must sign the RGP. Line 003, appendix A."
+    )
+    answer = GeneratedAnswer(
+        answerable=True,
+        answer=f"SOP # {wrong}: Store must sign the RGP.",
+        citations=[make_citation()],
+    )
+    assert not await verifier.verify(answer, [evidence])
+    assert verifier.last_rejection_reason == "SOP number"
+    semantic.verify_claims.assert_not_awaited()
