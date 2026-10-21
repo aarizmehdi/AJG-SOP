@@ -5,7 +5,7 @@ from uuid import uuid4
 from apps.api.app.services.audit_service import AuditService
 from apps.api.app.services.foundation_store import FoundationStore
 from packages.contracts.access import AccessScope
-from packages.contracts.canonical import BlockKind, CanonicalSection, CanonicalSOP, RetrievalChunk
+from packages.contracts.canonical import CanonicalSection, CanonicalSOP, RetrievalChunk
 from packages.contracts.common import utc_now
 from packages.contracts.policy import (
     DuplicateSectionGroup,
@@ -25,6 +25,8 @@ from services.ingestion.chunking.semantic_chunker import Chunker
 from services.ingestion.embeddings.base import EmbeddingProvider
 from services.ingestion.extractors.base import RawDocumentResult
 from services.ingestion.indexing.pinecone_index import DerivedRetrievalIndex
+from services.ingestion.structure.canonical_document import Canonicalizer
+from services.ingestion.structure.markdown import blocks_to_markdown
 
 
 class PublicationError(RuntimeError):
@@ -507,7 +509,9 @@ class PolicyService:
                 old_section
                 and new_section
                 and (
-                    old_section.content_hash != new_section.content_hash
+                    Canonicalizer.content_signature(old_section.blocks)
+                    != Canonicalizer.content_signature(new_section.blocks)
+                    or old_section.content_role != new_section.content_role
                     or old_section.access != new_section.access
                 )
             ):
@@ -548,15 +552,9 @@ class PolicyService:
     def _section_text(section: CanonicalSection | None) -> str | None:
         if section is None:
             return None
-        values: list[str] = []
-        for block in section.blocks:
-            if block.text:
-                values.append(block.text)
-            elif block.list_items:
-                values.extend(item.text for item in block.list_items)
-            elif block.kind is BlockKind.TABLE and block.table:
-                values.extend(cell.text for cell in block.table.cells)
-        return "\n".join(values)
+        # The same serializer used by canonical export preserves markers,
+        # nested conditions and tables in old-versus-new inspection.
+        return blocks_to_markdown(section.blocks)
 
     def _policy(self, organization_id: str, policy_id: str) -> SOPPolicy:
         policy = self.store.policies.get(policy_id)

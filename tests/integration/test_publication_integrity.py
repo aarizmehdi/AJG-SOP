@@ -7,6 +7,7 @@ from apps.api.app.services.foundation_store import FoundationStore
 from apps.api.app.services.policy_service import PolicyService, PublicationError
 from apps.api.app.services.storage_service import LocalArtifactStore
 from packages.contracts.access import AccessDimension, AccessMode, AccessScope
+from packages.contracts.canonical import SectionContentRole
 from packages.contracts.policy import SectionChangeKind, VersionStatus
 from packages.contracts.source import SourceFormat
 from services.ingestion.chunking.semantic_chunker import SectionAwareFixtureChunker
@@ -129,6 +130,42 @@ async def test_version_diff_reports_changed_and_added_sections(tmp_path: Path) -
         SectionChangeKind.CHANGED,
         SectionChangeKind.ADDED,
     }
+
+
+@pytest.mark.asyncio
+async def test_diff_preserves_clause_markers_nested_conditions_and_ignores_new_source_ids(
+    tmp_path: Path,
+) -> None:
+    store = FoundationStore()
+    pipeline = IngestionPipeline(
+        FixtureDocumentParser(), Canonicalizer(), LocalArtifactStore(tmp_path), store
+    )
+    service = PolicyService(
+        store,
+        SectionAwareFixtureChunker(),
+        FixtureEmbeddingProvider(),
+        FixtureRetrievalIndex(),
+        AuditService(store),
+    )
+    policy = service.create_policy("ajt", "admin", "Synthetic policy", "Operations", None)
+    body = b"# Policy\n## Dispatch\n1. Obtain approval.\n  a. Required condition."
+    old_id = await build_version(tmp_path, service, pipeline, "ajt", policy.id, "old", body)
+    new_id = await build_version(
+        tmp_path, service, pipeline, "ajt", policy.id, "new", body + b"\n<!-- scan annotation -->"
+    )
+    assert service.diff("ajt", old_id, new_id) == []
+    new = store.canonicals[store.versions[new_id].source_document_ids[0]].sections[0]
+    # Same flattened words/hash; source numbering still materially changed.
+    new.blocks[0].list_items[0].marker = "7."
+    changes = service.diff("ajt", old_id, new_id)
+    assert len(changes) == 1
+    assert "1. Obtain approval." in changes[0].old_content
+    assert "7. Obtain approval." in changes[0].new_content
+    assert "a. Required condition." in changes[0].old_content
+    assert "a. Required condition." in changes[0].new_content
+    new.blocks[0].list_items[0].marker = "1."
+    new.content_role = SectionContentRole.SOURCE_ANNOTATION
+    assert len(service.diff("ajt", old_id, new_id)) == 1
 
 
 @pytest.mark.asyncio

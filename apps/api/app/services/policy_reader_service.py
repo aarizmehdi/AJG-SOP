@@ -2,13 +2,14 @@ from datetime import UTC, datetime, timedelta
 
 from apps.api.app.models.organization import EmployeeProfile
 from apps.api.app.services.foundation_store import FoundationStore
-from packages.contracts.canonical import BlockKind, CanonicalSection
+from packages.contracts.canonical import CanonicalSection
 from packages.contracts.policy import PolicyStatus, SOPPolicy, SOPVersion, VersionStatus
 from packages.contracts.retrieval import (
     AvailablePolicySummary,
     PolicyReaderDocument,
     PolicyReaderSection,
 )
+from services.ingestion.structure.markdown import blocks_to_markdown
 from services.retrieval.authorization_filter import AuthorizationFilter
 
 
@@ -115,6 +116,7 @@ class PolicyReaderService:
             version_id=version_id,
             section_id=section.id,
             heading=section.heading,
+            content_role=section.content_role,
             heading_path=section.heading_path,
             heading_level=section.heading_level,
             parent_section_id=section.parent_section_id,
@@ -127,12 +129,4 @@ class PolicyReaderService:
 
     @staticmethod
     def _section_text(section: CanonicalSection) -> str:
-        parts: list[str] = []
-        for block in section.blocks:
-            if block.text:
-                parts.append(block.text)
-            elif block.list_items:
-                parts.extend(item.text for item in block.list_items)
-            elif block.kind is BlockKind.TABLE and block.table:
-                parts.extend(cell.text for cell in block.table.cells)
-        return "\n".join(parts)
+        return blocks_to_markdown(section.blocks)

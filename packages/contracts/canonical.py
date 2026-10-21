@@ -14,6 +14,11 @@ class BlockKind(StrEnum):
     TABLE = "table"
 
 
+class SectionContentRole(StrEnum):
+    POLICY = "policy"
+    SOURCE_ANNOTATION = "source_annotation"
+
+
 class BoundingBox(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     x: float
@@ -86,6 +91,7 @@ class CanonicalSection(BaseModel):
     policy_number: str | None = None
     chapter: str | None = None
     heading: str
+    content_role: SectionContentRole = SectionContentRole.POLICY
     heading_level: int = Field(ge=1)
     parent_section_id: str | None = None
     heading_path: tuple[str, ...]

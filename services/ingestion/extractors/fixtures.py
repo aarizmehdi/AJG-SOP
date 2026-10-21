@@ -94,7 +94,13 @@ class FixtureDocumentParser(DocumentParser):
 
     @classmethod
     def _parse_markdown(cls, content: bytes, fallback_title: str) -> MarkdownParseResult:
-        lines = content.decode("utf-8-sig").splitlines()
+        # Editorial HTML comments are not policy text. Preserve their newlines so
+        # source line anchors still refer to the exact uploaded Markdown file.
+        decoded = content.decode("utf-8-sig")
+        decoded = re.sub(r"<!--.*?-->", lambda m: "\n" * m[0].count("\n"), decoded, flags=re.S)
+        if "<!--" in decoded:
+            raise ValueError("Unclosed Markdown comment; correct the source before extraction")
+        lines = decoded.splitlines()
         metadata, content_start, warnings = cls._front_matter(lines)
         title = metadata.get("title", "").strip() or None
         policy_number = (
@@ -115,6 +121,9 @@ class FixtureDocumentParser(DocumentParser):
             line = lines[index]
             stripped = line.strip()
             if not stripped:
+                index += 1
+                continue
+            if re.fullmatch(r"(?:-{3,}|\*{3,}|_{3,})", stripped):
                 index += 1
                 continue
 
@@ -169,7 +178,7 @@ class FixtureDocumentParser(DocumentParser):
                 index = next_index
                 continue
 
-            list_item = re.match(r"^((?:\d+[.)])|[-*+])\s+(.+)$", stripped)
+            list_item = cls._list_item(stripped)
             if list_item:
                 blocks.append(
                     RawBlock(
@@ -210,6 +219,16 @@ class FixtureDocumentParser(DocumentParser):
             title=title or fallback_title,
             policy_number=policy_number,
             effective_date=effective_date,
+        )
+
+    @staticmethod
+    def _list_item(line: str) -> re.Match[str] | None:
+        # SOPs use decimal, alphabetic and Roman clause markers in addition to
+        # CommonMark's decimal lists. A terminal delimiter is required: a time
+        # such as12.30pm or a sentence beginning 'I am' is not a list item.
+        return re.match(
+            r"^((?:\d+(?:\.\d+)*[.)])|(?:[A-Za-z][.)])|(?:[ivxlcdmIVXLCDM]+[.)])|[-*+])\s+(.+)$",
+            line,
         )
 
     @staticmethod
@@ -332,7 +351,7 @@ class FixtureDocumentParser(DocumentParser):
             if not stripped:
                 continue
             heading = re.match(r"^(#{1,6})\s+(.+)$", stripped)
-            list_item = re.match(r"^((?:\d+[.)])|[-*])\s+(.+)$", stripped)
+            list_item = FixtureDocumentParser._list_item(stripped)
             if heading:
                 blocks.append(
                     RawBlock(

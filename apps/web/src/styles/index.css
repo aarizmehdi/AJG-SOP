@@ -5532,6 +5532,16 @@ a.metric-card:hover {
   font-size: 0.94rem;
   line-height: 1.75;
 }
+
+.canonical-blocks .canonical-source-list-item {
+  list-style: none;
+}
+
+.canonical-source-list-marker {
+  margin-inline-start: -1.5rem;
+  margin-inline-end: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
 .canonical-blocks ol,
 .canonical-blocks ul {
   display: grid;

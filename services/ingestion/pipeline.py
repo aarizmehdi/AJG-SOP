@@ -293,7 +293,7 @@ class IngestionPipeline:
             if sources != {source_id}:
                 raise PermissionError("Review content must retain its original source mapping")
             content = "\n".join(self.canonicalizer.block_text(block) for block in section.blocks)
-            section.content_hash = hashlib.sha256(content.encode()).hexdigest()
+            section.content_hash = self.canonicalizer.content_hash(content, section.content_role)
         canonical.approved = False
         canonical.approved_at = None
         canonical.review_revisions = [
