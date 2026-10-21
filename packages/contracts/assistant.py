@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -54,6 +55,7 @@ class AssistantSectionOption(BaseModel):
 
 
 class VerifiedAnswer(OrganizationOwned):
+    conversation_id: UUID | None = None
     kind: ResponseKind = ResponseKind.POLICY_ANSWER
     answerable: bool
     answer: str
@@ -78,6 +80,7 @@ class AssistantRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question: str = Field(min_length=2, max_length=1000)
     language: Language
+    conversation_id: UUID | None = None
     history: list[ConversationTurn] = Field(default_factory=list, max_length=16)
 
     @model_validator(mode="after")

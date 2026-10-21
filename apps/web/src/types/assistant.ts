@@ -14,6 +14,7 @@ export const sectionOptionSchema = citationSchema
   .omit({ chunk_id: true, document_id: true })
   .extend({ version_id: z.string(), heading: z.string() });
 export const verifiedAnswerSchema = z.object({
+  conversation_id: z.uuid().nullable().optional(),
   organization_id: z.string(),
   kind: z
     .enum([
@@ -34,6 +35,7 @@ export const verifiedAnswerSchema = z.object({
 export type VerifiedAnswer = z.infer<typeof verifiedAnswerSchema>;
 
 export const streamStartSchema = verifiedAnswerSchema.pick({
+  conversation_id: true,
   kind: true,
   answerable: true,
   language: true,

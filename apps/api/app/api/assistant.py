@@ -27,9 +27,10 @@ async def answer(
     request: Request, payload: AssistantRequest, profile: CurrentProfile
 ) -> VerifiedAnswer:
     try:
-        return await _service(request).answer(
-            profile, payload.question, payload.language, payload.history
+        result, _ = await _service(request).answer_conversation_with_context(
+            profile, payload.question, payload.language, payload.conversation_id
         )
+        return result
     except LLMUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -60,11 +61,11 @@ async def answer_events(
 
         async def work() -> None:
             try:
-                result, context = await service.answer_with_context(
+                result, context = await service.answer_conversation_with_context(
                     profile,
                     payload.question,
                     payload.language,
-                    payload.history,
+                    payload.conversation_id,
                     lambda stage: queue.put_nowait(("status", {"stage": stage})),
                 )
                 await queue.put(("result", (result, context)))
@@ -103,6 +104,9 @@ async def answer_events(
                             "answerable": result.answerable,
                             "language": result.language,
                             "verified": result.verified,
+                            "conversation_id": str(result.conversation_id)
+                            if result.conversation_id
+                            else None,
                         },
                     )
                     for offset in range(0, len(result.answer), 160):

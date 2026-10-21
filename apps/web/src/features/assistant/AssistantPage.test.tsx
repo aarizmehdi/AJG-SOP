@@ -18,13 +18,14 @@ function eventStream(events: [string, unknown][]) {
 }
 
 function renderAssistant() {
-  return render(
-    <QueryClientProvider client={new QueryClient()}>
+  const client = new QueryClient();
+  const tree = (profileId: string) => (
+    <QueryClientProvider client={client}>
       <LanguageContext
         value={{
           language: 'roman_urdu',
           hasPreference: true,
-          profileId: 'employee-one',
+          profileId,
           bindProfile: () => {},
           setLanguage: async () => {},
           t: (key) => messages.roman_urdu[key],
@@ -34,8 +35,15 @@ function renderAssistant() {
           <AssistantPage />
         </MemoryRouter>
       </LanguageContext>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const mounted = render(tree('employee-one'));
+  return {
+    ...mounted,
+    switchProfile: (profileId: string) => {
+      mounted.rerender(tree(profileId));
+    },
+  };
 }
 
 afterEach(() => {
@@ -45,7 +53,7 @@ afterEach(() => {
 });
 
 describe('assistant response language', () => {
-  it('opens uncited canonical headings and sends bounded reference history for follow-ups', async () => {
+  it('opens canonical headings and sends a server conversation ID without answer history', async () => {
     window.localStorage.setItem('ajt-fixture-identity', 'employee');
     let nextId = 0;
     vi.stubGlobal('crypto', { randomUUID: () => `turn-${String(nextId++)}` });
@@ -74,11 +82,9 @@ describe('assistant response language', () => {
         ).toMatchObject({
           question: 'Store SOP — Document 2: Dispatch',
           language: 'roman_urdu',
-          history: [
-            { role: 'user', content: 'Show the SOP overview' },
-            { role: 'assistant', content: outline },
-          ],
+          conversation_id: '9f8fbc65-f153-4b8c-a348-1438d9813786',
         });
+        expect(JSON.parse(init?.body as string)).not.toHaveProperty('history');
       }
       const first = fetchMock.mock.calls.length === 1;
       return Promise.resolve(
@@ -90,6 +96,7 @@ describe('assistant response language', () => {
               answerable: !first,
               language: 'roman_urdu',
               verified: true,
+              conversation_id: '9f8fbc65-f153-4b8c-a348-1438d9813786',
             },
           ],
           [
@@ -352,16 +359,16 @@ describe('assistant response language', () => {
     expect(requestSignal?.aborted).toBe(true);
   });
 
-  it('bounds twenty turns to four reference pairs and resets on remount', async () => {
+  it('keeps twenty turns local and resets the server reference when identity changes', async () => {
     window.localStorage.setItem('ajt-fixture-identity', 'employee');
     vi.stubGlobal('crypto', { randomUUID: () => Math.random().toString(36) });
-    const requests: { history: { role: string; content: string }[] }[] = [];
+    const requests: { conversation_id?: string }[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
         requests.push(
           JSON.parse(init?.body as string) as {
-            history: { role: string; content: string }[];
+            conversation_id?: string;
           },
         );
         return Promise.resolve(
@@ -373,6 +380,7 @@ describe('assistant response language', () => {
                 answerable: false,
                 language: 'roman_urdu',
                 verified: true,
+                conversation_id: '9f8fbc65-f153-4b8c-a348-1438d9813786',
               },
             ],
             ['answer_delta', { text: 'SOP detail available nahin.' }],
@@ -396,30 +404,24 @@ describe('assistant response language', () => {
       });
     }
     expect(requests).toHaveLength(20);
-    expect(requests[19]?.history).toHaveLength(8);
-    expect(requests[19]?.history.map((turn) => turn.role)).toEqual([
-      'user',
-      'assistant',
-      'user',
-      'assistant',
-      'user',
-      'assistant',
-      'user',
-      'assistant',
-    ]);
-    expect(requests[19]?.history[0]?.content).toBe('What about step 15?');
-    expect(
-      requests[19]?.history.reduce(
-        (count, turn) => count + turn.content.length,
-        0,
-      ),
-    ).toBeLessThanOrEqual(12000);
-    mounted.unmount();
-    renderAssistant();
+    expect(requests[0]).not.toHaveProperty('conversation_id');
+    expect(requests[19]?.conversation_id).toBe(
+      '9f8fbc65-f153-4b8c-a348-1438d9813786',
+    );
+    expect(requests.every((request) => !('history' in request))).toBe(true);
+    mounted.switchProfile('employee-two');
     expect(
       screen.getByText('SOP ke bare mein kaise madad karun?'),
     ).toBeInTheDocument();
     expect(screen.queryByText('What about step 19?')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'New employee question' },
+    });
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+    await waitFor(() => {
+      expect(requests).toHaveLength(21);
+    });
+    expect(requests[20]).not.toHaveProperty('conversation_id');
   });
 });
 

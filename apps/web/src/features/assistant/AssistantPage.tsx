@@ -40,10 +40,16 @@ const stageKeys = {
 } as const;
 
 export default function AssistantPage() {
+  const { profileId } = useLanguage();
+  return <AssistantConversation key={profileId ?? 'anonymous'} />;
+}
+
+function AssistantConversation() {
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [pending, setPending] = useState(false);
   const { language, t } = useLanguage();
+  const conversationId = useRef<string | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const conversation = useRef<HTMLElement>(null);
@@ -118,17 +124,6 @@ export default function AssistantPage() {
     inFlight.current = true;
     followBottom.current = true;
     const id = crypto.randomUUID();
-    const history = turns
-      .filter((turn) => turn.result)
-      .slice(-4)
-      .flatMap((turn) => [
-        { role: 'user' as const, content: turn.question.slice(0, 1000) },
-        {
-          role: 'assistant' as const,
-          // Reference resolution only; the server never treats history as SOP evidence.
-          content: turn.result?.answer.slice(0, 2000) ?? '',
-        },
-      ]);
     setTurns((current) => [...current, { id, question: trimmed }]);
     setPending(true);
     setQuestion('');
@@ -138,24 +133,31 @@ export default function AssistantPage() {
     }
     const controller = new AbortController();
     abort.current = controller;
-    void streamAssistant(trimmed, language, history, controller.signal, {
-      onStatus: (stage) => {
-        setTurns((current) =>
-          current.map((turn) => (turn.id === id ? { ...turn, stage } : turn)),
-        );
+    void streamAssistant(
+      trimmed,
+      language,
+      conversationId.current,
+      controller.signal,
+      {
+        onStatus: (stage) => {
+          setTurns((current) =>
+            current.map((turn) => (turn.id === id ? { ...turn, stage } : turn)),
+          );
+        },
+        onDelta: (text) => {
+          setTurns((current) =>
+            current.map((turn) =>
+              turn.id === id
+                ? { ...turn, streaming: (turn.streaming ?? '') + text }
+                : turn,
+            ),
+          );
+        },
       },
-      onDelta: (text) => {
-        setTurns((current) =>
-          current.map((turn) =>
-            turn.id === id
-              ? { ...turn, streaming: (turn.streaming ?? '') + text }
-              : turn,
-          ),
-        );
-      },
-    })
+    )
       .then((result) => {
         if (controller.signal.aborted) return;
+        conversationId.current = result.conversation_id ?? null;
         setTurns((current) =>
           current.map((turn) =>
             turn.id === id

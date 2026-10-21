@@ -26,13 +26,17 @@ type Callbacks = {
 export async function streamAssistant(
   question: string,
   language: 'english' | 'urdu' | 'roman_urdu',
-  history: { role: 'user' | 'assistant'; content: string }[],
+  conversationId: string | null,
   signal: AbortSignal,
   callbacks: Callbacks,
 ): Promise<StreamAnswer> {
   const response = await apiStream('/assistant/answer/events', {
     method: 'POST',
-    body: JSON.stringify({ question, language, history: history.slice(-16) }),
+    body: JSON.stringify({
+      question,
+      language,
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+    }),
     signal,
   });
   if (!response.body) throw new Error('Assistant stream is unavailable');
