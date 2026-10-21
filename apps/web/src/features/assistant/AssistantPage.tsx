@@ -46,6 +46,7 @@ export default function AssistantPage() {
   const { language, t } = useLanguage();
   const textarea = useRef<HTMLTextAreaElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const conversation = useRef<HTMLElement>(null);
   const composing = useRef(false);
   const inFlight = useRef(false);
   const abort = useRef<AbortController | null>(null);
@@ -74,12 +75,18 @@ export default function AssistantPage() {
   }, []);
   useEffect(() => {
     const updateFollow = () => {
+      const panel = conversation.current;
       followBottom.current =
-        window.innerHeight + window.scrollY >=
-        document.documentElement.scrollHeight - 260;
+        panel && panel.scrollHeight > panel.clientHeight
+          ? panel.scrollHeight - panel.scrollTop - panel.clientHeight < 260
+          : window.innerHeight + window.scrollY >=
+            document.documentElement.scrollHeight - 260;
     };
+    const panel = conversation.current;
+    panel?.addEventListener('scroll', updateFollow, { passive: true });
     window.addEventListener('scroll', updateFollow, { passive: true });
     return () => {
+      panel?.removeEventListener('scroll', updateFollow);
       window.removeEventListener('scroll', updateFollow);
     };
   }, []);
@@ -205,7 +212,7 @@ export default function AssistantPage() {
           <p>{t('assistantLead')}</p>
         </div>
       </header>
-      <section className="conversation" aria-live="polite">
+      <section className="conversation" ref={conversation} aria-live="polite">
         {!turns.length && (
           <div className="assistant-welcome">
             <BrandMark />
@@ -388,6 +395,7 @@ export default function AssistantPage() {
                 : t('assistantComposerNote')}
         </small>
       </form>
+      <p className="assistant-disclaimer">{t('assistantDisclaimer')}</p>
     </main>
   );
 }

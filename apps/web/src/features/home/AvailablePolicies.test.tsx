@@ -68,5 +68,9 @@ describe('available policies', () => {
       name: /Store returns procedure/,
     });
     expect(link).toHaveAttribute('href', '/policies/policy-76');
+    expect(screen.getByText(/SOP-76/)).toBeVisible();
+    expect(screen.getByText(/Operations · Version 1.0/)).toBeVisible();
+    expect(screen.getByText(/2026-09-20/)).toBeVisible();
+    expect(screen.getByText(/Recently updated/)).toBeVisible();
   });
 });

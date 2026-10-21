@@ -53,6 +53,18 @@ export function AvailablePolicies({ limit }: { limit?: number }) {
           {/* Content block */}
           <span className="sop-card-info">
             <strong dir="auto">{policy.title}</strong>
+            <span>
+              {policy.policy_number ? `${policy.policy_number} · ` : ''}
+              {policy.category} · {t('availableVersion')} {policy.version_label}
+            </span>
+            {(policy.effective_date || policy.recently_updated) && (
+              <small>
+                {policy.effective_date &&
+                  `${t('availableEffective')} ${policy.effective_date}`}
+                {policy.effective_date && policy.recently_updated ? ' · ' : ''}
+                {policy.recently_updated ? t('availableRecent') : ''}
+              </small>
+            )}
           </span>
 
           {/* Right arrow button */}

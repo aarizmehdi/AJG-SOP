@@ -422,3 +422,10 @@ describe('assistant response language', () => {
     expect(screen.queryByText('What about step 19?')).not.toBeInTheDocument();
   });
 });
+
+it('shows the official-source disclaimer in the selected response language', () => {
+  renderAssistant();
+  expect(
+    screen.getByText(messages.roman_urdu.assistantDisclaimer),
+  ).toBeVisible();
+});

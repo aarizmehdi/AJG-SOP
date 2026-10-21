@@ -31,7 +31,7 @@
 }
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100vh;
   background: var(--canvas);
 }
@@ -1773,20 +1773,7 @@ a {
   flex-direction: column;
   gap: 22px;
   overflow-y: auto;
-  scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    black calc(100% - 36px),
-    transparent calc(100% - 12px)
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    black calc(100% - 36px),
-    transparent calc(100% - 12px)
-  );
-}
-.conversation::-webkit-scrollbar {
-  display: none;
+  scrollbar-width: thin;
 }
 .assistant-welcome {
   text-align: center;
@@ -2044,7 +2031,20 @@ a {
   cursor: not-allowed;
 }
 .composer small {
-  display: none;
+  display: block;
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.65rem;
+  padding-top: 4px;
+}
+.assistant-disclaimer {
+  width: 100%;
+  max-width: 800px;
+  margin: 8px auto 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  text-align: center;
 }
 [data-locale='urdu'] .assistant-message p,
 [data-locale='urdu'] .composer textarea {
@@ -2520,7 +2520,7 @@ a {
 }
 .sop-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   gap: 16px;
 }
 .sop-card {
@@ -2578,13 +2578,20 @@ a {
   display: flex;
   flex-direction: column;
 }
+.sop-card-info > span,
+.sop-card-info small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+.sop-card-info {
+  gap: 4px;
+}
 .sop-card-info strong {
   font-size: 0.938rem;
   font-weight: 600;
   color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   transition: color 200ms ease;
 }
 
@@ -3007,12 +3014,12 @@ a {
   }
   .assistant-page .composer textarea {
     font-size: 0.85rem;
-    text-align: left;
+    text-align: start;
     margin-top: 4px;
   }
   .assistant-page .composer textarea::placeholder {
     font-size: 0.85rem;
-    text-align: left;
+    text-align: start;
   }
   .assistant-page .composer .send-button,
   .assistant-page .composer button {

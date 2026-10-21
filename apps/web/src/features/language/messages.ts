@@ -136,6 +136,8 @@ const english = {
   assistantInput: 'Ask the SOP Assistant',
   assistantSend: 'Send question',
   assistantComposerNote: 'Enter to send · Shift + Enter for a new line',
+  assistantDisclaimer:
+    'AI may make mistakes. Check the cited SOP for official guidance.',
   assistantSourcePage: 'Page',
   voiceStart: 'Start voice input',
   voiceStop: 'Stop recording',
@@ -282,6 +284,8 @@ const urdu: Record<MessageKey, string> = {
   assistantInput: 'ایس او پی معاون سے پوچھیں',
   assistantSend: 'سوال بھیجیں',
   assistantComposerNote: 'بھیجنے کے لیے Enter · نئی سطر کے لیے Shift + Enter',
+  assistantDisclaimer:
+    'اے آئی سے غلطی ہو سکتی ہے۔ سرکاری رہنمائی کے لیے حوالہ دی گئی ایس او پی دیکھیں۔',
   assistantSourcePage: 'صفحہ',
   voiceStart: 'آواز سے سوال شروع کریں',
   voiceStop: 'ریکارڈنگ روکیں',
@@ -429,6 +433,8 @@ const romanUrdu: Record<MessageKey, string> = {
   assistantPlaceholder: 'SOP Assistant se poochein...',
   assistantInput: 'SOP Assistant se poochein',
   assistantSend: 'Sawal bhejein',
+  assistantDisclaimer:
+    'AI se ghalti ho sakti hai. Official rehnumai ke liye cited SOP dekhein.',
   assistantComposerNote:
     'Bhejne ke liye Enter · nai line ke liye Shift + Enter',
   assistantSourcePage: 'Page',

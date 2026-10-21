@@ -48,9 +48,10 @@ export default function AdminLibraryPage() {
   const { copy, language } = useAdminCopy();
   const location = useLocation();
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState(
-    location.pathname.endsWith('/review-queue') ? 'Review Required' : 'current',
-  );
+  const defaultStatus = location.pathname.endsWith('/review-queue')
+    ? 'Review Required'
+    : 'current';
+  const [status, setStatus] = useState(defaultStatus);
   const [department, setDepartment] = useState('all');
   const [sourceType, setSourceType] = useState('all');
   const [updated, setUpdated] = useState('all');
@@ -144,7 +145,7 @@ export default function AdminLibraryPage() {
     });
   const hasActiveFilters = Boolean(
     search.trim() ||
-    status !== 'current' ||
+    status !== defaultStatus ||
     department !== 'all' ||
     sourceType !== 'all' ||
     updated !== 'all' ||
@@ -152,7 +153,7 @@ export default function AdminLibraryPage() {
   );
   const handleResetFilters = () => {
     setSearch('');
-    setStatus('current');
+    setStatus(defaultStatus);
     setDepartment('all');
     setSourceType('all');
     setUpdated('all');
@@ -212,7 +213,7 @@ export default function AdminLibraryPage() {
               <button
                 type="button"
                 className="library-search-clear"
-                aria-label="Clear search"
+                aria-label={copy.clearSearch}
                 onClick={() => {
                   setSearch('');
                 }}
@@ -247,11 +248,11 @@ export default function AdminLibraryPage() {
         </div>
         <div className="library-selects">
           <label
-            className={`library-select-label${status !== 'current' ? ' active-filter' : ''}`}
+            className={`library-select-label${status !== defaultStatus ? ' active-filter' : ''}`}
           >
             <span className="library-select-title">
               {copy.status}
-              {status !== 'current' && (
+              {status !== defaultStatus && (
                 <span className="active-dot" aria-hidden="true" />
               )}
             </span>
@@ -389,7 +390,8 @@ export default function AdminLibraryPage() {
                   onClick={() => {
                     setSearch('');
                   }}
-                  title="Remove search filter"
+                  title={copy.resetSearch}
+                  aria-label={copy.resetSearch}
                 >
                   <span>"{search.trim()}"</span>
                   <X size={11} aria-hidden="true" />
@@ -402,22 +404,30 @@ export default function AdminLibraryPage() {
                   onClick={() => {
                     setDepartment('all');
                   }}
-                  title="Reset department filter"
+                  title={copy.resetDepartment}
+                  aria-label={copy.resetDepartment}
                 >
                   <span>{department}</span>
                   <X size={11} aria-hidden="true" />
                 </button>
               )}
-              {status !== 'current' && (
+              {status !== defaultStatus && (
                 <button
                   type="button"
                   className="library-active-chip"
                   onClick={() => {
-                    setStatus('current');
+                    setStatus(defaultStatus);
                   }}
-                  title="Reset status filter"
+                  title={copy.resetStatus}
+                  aria-label={copy.resetStatus}
                 >
-                  <span>{localizedStatus(status, copy)}</span>
+                  <span>
+                    {status === 'all'
+                      ? copy.allStatuses
+                      : status === 'current'
+                        ? copy.currentPolicies
+                        : localizedStatus(status, copy)}
+                  </span>
                   <X size={11} aria-hidden="true" />
                 </button>
               )}
@@ -428,7 +438,8 @@ export default function AdminLibraryPage() {
                   onClick={() => {
                     setSourceType('all');
                   }}
-                  title="Reset source filter"
+                  title={copy.resetSource}
+                  aria-label={copy.resetSource}
                 >
                   <span>{localizedSource(sourceType, copy)}</span>
                   <X size={11} aria-hidden="true" />
@@ -441,9 +452,24 @@ export default function AdminLibraryPage() {
                   onClick={() => {
                     setUpdated('all');
                   }}
-                  title="Reset update filter"
+                  title={copy.resetUpdated}
+                  aria-label={copy.resetUpdated}
                 >
                   <span>{updated === '30' ? copy.past30 : copy.past90}</span>
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+              {sort !== 'Recently Updated' && (
+                <button
+                  type="button"
+                  className="library-active-chip"
+                  title={copy.resetSort}
+                  aria-label={copy.resetSort}
+                  onClick={() => {
+                    setSort('Recently Updated');
+                  }}
+                >
+                  <span>{localizedSort(sort, copy)}</span>
                   <X size={11} aria-hidden="true" />
                 </button>
               )}
@@ -599,13 +625,7 @@ export default function AdminLibraryPage() {
               <button
                 type="button"
                 className="library-clear"
-                onClick={() => {
-                  setSearch('');
-                  setStatus('all');
-                  setDepartment('all');
-                  setSourceType('all');
-                  setUpdated('all');
-                }}
+                onClick={handleResetFilters}
               >
                 {copy.clearFilters}
               </button>

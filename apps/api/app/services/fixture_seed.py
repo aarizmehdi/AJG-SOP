@@ -56,7 +56,7 @@ async def seed_fixture_data(app: FastAPI) -> None:
     policy = service.create_policy(
         "ajt",
         "fixture-system",
-        "Procedure for Store Returns",
+        "SYNTHETIC FIXTURE — Store Operations SOP",
         "Store Operations",
         "FIXTURE-SOP-001",
     )
