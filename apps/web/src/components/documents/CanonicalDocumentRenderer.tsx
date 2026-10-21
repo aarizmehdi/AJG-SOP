@@ -73,14 +73,22 @@ function CanonicalList({
   return (
     <List>
       {items.filter(isListItem).map((item, index) => (
-        <li key={`${item.text}-${String(index)}`} dir="auto">
+        <li
+          key={`${item.text}-${String(index)}`}
+          dir="auto"
+          className={item.marker ? 'canonical-source-list-item' : undefined}
+        >
+          {item.marker && (
+            <span className="canonical-source-list-marker">{item.marker} </span>
+          )}
           <span>{renderCanonicalInline(item.text)}</span>
           {item.children?.length ? (
             <CanonicalList
               items={item.children}
               ordered={
                 isListItem(item.children[0]) &&
-                /^\d/.test(item.children[0].marker ?? '')
+                !!item.children[0].marker &&
+                !/^[-*+•]$/.test(item.children[0].marker)
               }
             />
           ) : null}

@@ -13,6 +13,7 @@ from packages.contracts.canonical import (
     CanonicalSOP,
     CanonicalTable,
     RetrievalChunk,
+    SectionContentRole,
 )
 
 
@@ -234,6 +235,10 @@ class SemanticChunker(Chunker):
     def chunk(self, document: CanonicalSOP, publication_status: str) -> list[RetrievalChunk]:
         chunks: list[RetrievalChunk] = []
         for section in document.sections:
+            # Non-normative marginal notes remain readable in the canonical
+            # document but must not become evidence of organizational rules.
+            if section.content_role is SectionContentRole.SOURCE_ANNOTATION:
+                continue
             chunks.extend(self._chunk_section(document, section, publication_status))
         return chunks
 

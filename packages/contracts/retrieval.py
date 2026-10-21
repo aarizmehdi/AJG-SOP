@@ -3,7 +3,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from packages.contracts.canonical import CanonicalBlock, SourceLocator
+from packages.contracts.canonical import CanonicalBlock, SectionContentRole, SourceLocator
 from packages.contracts.common import Language, OrganizationOwned
 
 
@@ -68,6 +68,7 @@ class PolicyReaderSection(AccessControlled):
     version_id: str
     section_id: str
     heading: str
+    content_role: SectionContentRole = SectionContentRole.POLICY
     heading_path: tuple[str, ...]
     heading_level: int = Field(default=1, ge=1, le=6)
     parent_section_id: str | None = None
