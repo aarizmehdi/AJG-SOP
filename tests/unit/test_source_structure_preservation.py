@@ -48,7 +48,9 @@ async def test_unclosed_comment_fails_instead_of_silently_dropping_trailing_poli
     import pytest
 
     with pytest.raises(ValueError, match="Unclosed Markdown comment"):
-        await parse("# Policy\n<!-- unfinished reviewer note\n1. Must not silently lose this clause.")
+        await parse(
+            "# Policy\n<!-- unfinished reviewer note\n1. Must not silently lose this clause."
+        )
 
 
 async def test_clause_markers_and_nested_approval_roles_survive_canonical_round_trip():
