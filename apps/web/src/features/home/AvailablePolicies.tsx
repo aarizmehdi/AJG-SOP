@@ -16,12 +16,9 @@ export function AvailablePolicies({ limit }: { limit?: number }) {
 
   if (policies.isPending)
     return (
-      <div
-        className="available-policy-list"
-        aria-label={t('availableSopsLoading')}
-      >
+      <div className="sop-card-grid" aria-label={t('availableSopsLoading')}>
         {[1, 2, 3].map((item) => (
-          <div className="available-policy-skeleton skeleton" key={item} />
+          <div className="sop-card-skeleton skeleton" key={item} />
         ))}
       </div>
     );
@@ -41,30 +38,43 @@ export function AvailablePolicies({ limit }: { limit?: number }) {
     );
 
   return (
-    <div className="available-policy-list">
+    <div className="sop-card-grid">
       {visible.map((policy) => (
         <Link
-          className="available-policy-card"
+          className="sop-card"
           key={policy.policy_id}
           to={`/policies/${policy.policy_id}`}
         >
-          <span className="available-policy-icon">
-            <BookOpenText aria-hidden="true" />
+          {/* Left icon badge */}
+          <span className="sop-card-icon">
+            <BookOpenText aria-hidden="true" size={20} />
           </span>
-          <span className="available-policy-copy">
+
+          {/* Content block */}
+          <span className="sop-card-info">
             <strong dir="auto">{policy.title}</strong>
             <span>
               {policy.policy_number ? `${policy.policy_number} · ` : ''}
               {policy.category} · {t('availableVersion')} {policy.version_label}
             </span>
-            {policy.effective_date && (
+            {(policy.effective_date || policy.recently_updated) && (
               <small>
-                {t('availableEffective')} {policy.effective_date}
-                {policy.recently_updated ? ` · ${t('availableRecent')}` : ''}
+                {policy.effective_date &&
+                  `${t('availableEffective')} ${policy.effective_date}`}
+                {policy.effective_date && policy.recently_updated ? ' · ' : ''}
+                {policy.recently_updated ? t('availableRecent') : ''}
               </small>
             )}
           </span>
-          <ArrowRight aria-hidden="true" />
+
+          {/* Right arrow button */}
+          <span className="sop-card-arrow-btn">
+            <ArrowRight
+              size={16}
+              aria-hidden="true"
+              className="sop-card-arrow"
+            />
+          </span>
         </Link>
       ))}
     </div>

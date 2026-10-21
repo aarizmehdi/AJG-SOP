@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  ArrowLeft,
   BookOpenCheck,
   Building2,
   MapPin,
@@ -12,10 +13,12 @@ import { Link } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { ErrorState } from '../../components/feedback/StatePanel';
 import { RouteSkeleton } from '../../components/feedback/RouteSkeleton';
+import { useLanguage } from '../language/useLanguage';
 import { overviewSchema } from '../../types/admin';
 import { systemAdminErrorDetail } from './errorDetail';
 
 export default function SystemAdminOverviewPage() {
+  const { t } = useLanguage();
   const overview = useQuery({
     queryKey: ['system-admin-overview'],
     queryFn: () => apiRequest('/admin/overview', overviewSchema),
@@ -83,7 +86,13 @@ export default function SystemAdminOverviewPage() {
     <section className="control-section">
       <div className="control-section-heading">
         <div>
-          <span className="eyebrow">Organization status</span>
+          <Link
+            to="/home"
+            className="eyebrow"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+          >
+            <ArrowLeft size={12} aria-hidden="true" /> {t('home')}
+          </Link>
           <h2>Overview</h2>
           <p>Live counts from AJG identity, access, and policy records.</p>
         </div>

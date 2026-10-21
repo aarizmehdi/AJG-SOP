@@ -1,7 +1,17 @@
 import { useState } from 'react';
 import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, FileText, Search } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  ChevronDown,
+  FileText,
+  Filter,
+  Plus,
+  RotateCcw,
+  Search,
+  X,
+} from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { apiRequest, ApiError } from '../../api/client';
 import { EmptyState, ErrorState } from '../../components/feedback/StatePanel';
@@ -38,9 +48,10 @@ export default function AdminLibraryPage() {
   const { copy, language } = useAdminCopy();
   const location = useLocation();
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState(
-    location.pathname.endsWith('/review-queue') ? 'Review Required' : 'current',
-  );
+  const defaultStatus = location.pathname.endsWith('/review-queue')
+    ? 'Review Required'
+    : 'current';
+  const [status, setStatus] = useState(defaultStatus);
   const [department, setDepartment] = useState('all');
   const [sourceType, setSourceType] = useState('all');
   const [updated, setUpdated] = useState('all');
@@ -132,6 +143,22 @@ export default function AdminLibraryPage() {
         );
       return Date.parse(b.updated_at) - Date.parse(a.updated_at);
     });
+  const hasActiveFilters = Boolean(
+    search.trim() ||
+    status !== defaultStatus ||
+    department !== 'all' ||
+    sourceType !== 'all' ||
+    updated !== 'all' ||
+    sort !== 'Recently Updated',
+  );
+  const handleResetFilters = () => {
+    setSearch('');
+    setStatus(defaultStatus);
+    setDepartment('all');
+    setSourceType('all');
+    setUpdated('all');
+    setSort('Recently Updated');
+  };
   return (
     <section
       className="admin-content library-page"
@@ -140,30 +167,62 @@ export default function AdminLibraryPage() {
       {z.object({ purged: z.literal(true) }).safeParse(location.state)
         .success && <p role="status">{purgeCopy[language].success}</p>}
       <div className="library-toolbar">
-        <div>
-          <span className="eyebrow">{copy.management}</span>
-          <h2 id="library-title">{copy.navLibrary}</h2>
-          <p>{copy.libraryIntro}</p>
+        <div className="library-toolbar-content">
+          <Link
+            to="/home"
+            className="library-back-link"
+            aria-label={copy.backToHome}
+          >
+            <ArrowLeft size={15} aria-hidden="true" />
+            <span>{copy.backToHome}</span>
+          </Link>
+          <div className="library-heading-group">
+            <span className="eyebrow eyebrow--pill">{copy.management}</span>
+            <h2 id="library-title">{copy.navLibrary}</h2>
+            <p>{copy.libraryIntro}</p>
+          </div>
         </div>
         {canIngest && (
-          <Link className="button button--primary" to="/admin/add">
-            + {copy.addSop}
+          <Link
+            className="button button--primary library-add-btn"
+            to="/admin/add"
+          >
+            <Plus size={16} aria-hidden="true" />
+            <span>{copy.addSop}</span>
           </Link>
         )}
       </div>
       <div className="library-filter surface">
-        <label className="library-search">
-          <Search size={18} />
-          <span className="sr-only">{copy.search}</span>
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-            }}
-            placeholder={copy.search}
-          />
-        </label>
+        <div className="library-search-wrapper">
+          <label className="library-search">
+            <Search
+              size={18}
+              className="library-search-icon"
+              aria-hidden="true"
+            />
+            <span className="sr-only">{copy.search}</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+              }}
+              placeholder={copy.search}
+            />
+            {search && (
+              <button
+                type="button"
+                className="library-search-clear"
+                aria-label={copy.clearSearch}
+                onClick={() => {
+                  setSearch('');
+                }}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </label>
+        </div>
         <div className="library-departments" aria-label={copy.department}>
           <button
             type="button"
@@ -188,79 +247,243 @@ export default function AdminLibraryPage() {
           ))}
         </div>
         <div className="library-selects">
-          <label>
-            {copy.status}{' '}
-            <select
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-              }}
-            >
-              <option value="current">{copy.currentPolicies}</option>
-              <option value="all">{copy.allStatuses}</option>
-              {[
-                'Published',
-                'Draft',
-                'Processing',
-                'Review Required',
-                'Ready for Review',
-                'Approved',
-                'Ready to Publish',
-                'Failed',
-                'Superseded',
-                'Inactive / Archived',
-              ].map((item) => (
-                <option key={item} value={item}>
-                  {localizedStatus(item, copy)}
-                </option>
-              ))}
-            </select>
+          <label
+            className={`library-select-label${status !== defaultStatus ? ' active-filter' : ''}`}
+          >
+            <span className="library-select-title">
+              {copy.status}
+              {status !== defaultStatus && (
+                <span className="active-dot" aria-hidden="true" />
+              )}
+            </span>
+            <div className="library-select-container">
+              <select
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                }}
+              >
+                <option value="current">{copy.currentPolicies}</option>
+                <option value="all">{copy.allStatuses}</option>
+                {[
+                  'Published',
+                  'Draft',
+                  'Processing',
+                  'Review Required',
+                  'Ready for Review',
+                  'Approved',
+                  'Ready to Publish',
+                  'Failed',
+                  'Superseded',
+                  'Inactive / Archived',
+                ].map((item) => (
+                  <option key={item} value={item}>
+                    {localizedStatus(item, copy)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="library-select-chevron"
+                aria-hidden="true"
+              />
+            </div>
           </label>
-          <label>
-            {copy.sourceType}{' '}
-            <select
-              value={sourceType}
-              onChange={(event) => {
-                setSourceType(event.target.value);
-              }}
-            >
-              <option value="all">{copy.allTypes}</option>
-              {sourceTypes.map((item) => (
-                <option key={item} value={item}>
-                  {localizedSource(item, copy)}
-                </option>
-              ))}
-            </select>
+          <label
+            className={`library-select-label${sourceType !== 'all' ? ' active-filter' : ''}`}
+          >
+            <span className="library-select-title">
+              {copy.sourceType}
+              {sourceType !== 'all' && (
+                <span className="active-dot" aria-hidden="true" />
+              )}
+            </span>
+            <div className="library-select-container">
+              <select
+                value={sourceType}
+                onChange={(event) => {
+                  setSourceType(event.target.value);
+                }}
+              >
+                <option value="all">{copy.allTypes}</option>
+                {sourceTypes.map((item) => (
+                  <option key={item} value={item}>
+                    {localizedSource(item, copy)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="library-select-chevron"
+                aria-hidden="true"
+              />
+            </div>
           </label>
-          <label>
-            {copy.updated}{' '}
-            <select
-              value={updated}
-              onChange={(event) => {
-                setUpdated(event.target.value);
-              }}
-            >
-              <option value="all">{copy.anyTime}</option>
-              <option value="30">{copy.past30}</option>
-              <option value="90">{copy.past90}</option>
-            </select>
+          <label
+            className={`library-select-label${updated !== 'all' ? ' active-filter' : ''}`}
+          >
+            <span className="library-select-title">
+              {copy.updated}
+              {updated !== 'all' && (
+                <span className="active-dot" aria-hidden="true" />
+              )}
+            </span>
+            <div className="library-select-container">
+              <select
+                value={updated}
+                onChange={(event) => {
+                  setUpdated(event.target.value);
+                }}
+              >
+                <option value="all">{copy.anyTime}</option>
+                <option value="30">{copy.past30}</option>
+                <option value="90">{copy.past90}</option>
+              </select>
+              <ChevronDown
+                size={14}
+                className="library-select-chevron"
+                aria-hidden="true"
+              />
+            </div>
           </label>
-          <label>
-            {copy.sort}{' '}
-            <select
-              value={sort}
-              onChange={(event) => {
-                setSort(event.target.value as (typeof sorts)[number]);
-              }}
-            >
-              {sorts.map((item) => (
-                <option key={item} value={item}>
-                  {localizedSort(item, copy)}
-                </option>
-              ))}
-            </select>
+          <label
+            className={`library-select-label${sort !== 'Recently Updated' ? ' active-filter' : ''}`}
+          >
+            <span className="library-select-title">
+              {copy.sort}
+              {sort !== 'Recently Updated' && (
+                <span className="active-dot" aria-hidden="true" />
+              )}
+            </span>
+            <div className="library-select-container">
+              <select
+                value={sort}
+                onChange={(event) => {
+                  setSort(event.target.value as (typeof sorts)[number]);
+                }}
+              >
+                {sorts.map((item) => (
+                  <option key={item} value={item}>
+                    {localizedSort(item, copy)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown
+                size={14}
+                className="library-select-chevron"
+                aria-hidden="true"
+              />
+            </div>
           </label>
         </div>
+        {hasActiveFilters && (
+          <div className="library-active-filters-bar">
+            <span className="library-active-filters-label">
+              <Filter size={13} aria-hidden="true" />
+              <span>{copy.filters}:</span>
+            </span>
+            <div className="library-active-chips">
+              {search.trim() && (
+                <button
+                  type="button"
+                  className="library-active-chip"
+                  onClick={() => {
+                    setSearch('');
+                  }}
+                  title={copy.resetSearch}
+                  aria-label={copy.resetSearch}
+                >
+                  <span>"{search.trim()}"</span>
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+              {department !== 'all' && (
+                <button
+                  type="button"
+                  className="library-active-chip"
+                  onClick={() => {
+                    setDepartment('all');
+                  }}
+                  title={copy.resetDepartment}
+                  aria-label={copy.resetDepartment}
+                >
+                  <span>{department}</span>
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+              {status !== defaultStatus && (
+                <button
+                  type="button"
+                  className="library-active-chip"
+                  onClick={() => {
+                    setStatus(defaultStatus);
+                  }}
+                  title={copy.resetStatus}
+                  aria-label={copy.resetStatus}
+                >
+                  <span>
+                    {status === 'all'
+                      ? copy.allStatuses
+                      : status === 'current'
+                        ? copy.currentPolicies
+                        : localizedStatus(status, copy)}
+                  </span>
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+              {sourceType !== 'all' && (
+                <button
+                  type="button"
+                  className="library-active-chip"
+                  onClick={() => {
+                    setSourceType('all');
+                  }}
+                  title={copy.resetSource}
+                  aria-label={copy.resetSource}
+                >
+                  <span>{localizedSource(sourceType, copy)}</span>
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+              {updated !== 'all' && (
+                <button
+                  type="button"
+                  className="library-active-chip"
+                  onClick={() => {
+                    setUpdated('all');
+                  }}
+                  title={copy.resetUpdated}
+                  aria-label={copy.resetUpdated}
+                >
+                  <span>{updated === '30' ? copy.past30 : copy.past90}</span>
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+              {sort !== 'Recently Updated' && (
+                <button
+                  type="button"
+                  className="library-active-chip"
+                  title={copy.resetSort}
+                  aria-label={copy.resetSort}
+                  onClick={() => {
+                    setSort('Recently Updated');
+                  }}
+                >
+                  <span>{localizedSort(sort, copy)}</span>
+                  <X size={11} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              className="library-reset-all-btn"
+              onClick={handleResetFilters}
+            >
+              <RotateCcw size={12} aria-hidden="true" />
+              <span>{copy.clearFilters}</span>
+            </button>
+          </div>
+        )}
       </div>
       {policies.isPending && (
         <div className="library-results surface" aria-label={copy.loadingSops}>
@@ -402,13 +625,7 @@ export default function AdminLibraryPage() {
               <button
                 type="button"
                 className="library-clear"
-                onClick={() => {
-                  setSearch('');
-                  setStatus('all');
-                  setDepartment('all');
-                  setSourceType('all');
-                  setUpdated('all');
-                }}
+                onClick={handleResetFilters}
               >
                 {copy.clearFilters}
               </button>

@@ -2,6 +2,17 @@ import { useLanguage } from '../language/useLanguage';
 import { sourceLabel } from './policyPresentation';
 
 const english = {
+  backToHome: 'Back to Home',
+  livePortal: 'Live Portal',
+  allPolicies: 'All Policies',
+  filters: 'Filters',
+  clearSearch: 'Clear search',
+  resetSearch: 'Remove search filter',
+  resetDepartment: 'Reset department filter',
+  resetStatus: 'Reset status filter',
+  resetSource: 'Reset source type filter',
+  resetUpdated: 'Reset update filter',
+  resetSort: 'Reset sort',
   navLibrary: 'Policy Library',
   navUpload: 'Upload SOP',
   navReview: 'Review Queue',
@@ -185,6 +196,17 @@ const english = {
 };
 type Copy = { [K in keyof typeof english]: string };
 const urdu: Copy = {
+  backToHome: 'ہوم پر واپس جائیں',
+  livePortal: 'لائیو پورٹل',
+  allPolicies: 'تمام پالیسیاں',
+  filters: 'فلٹرز',
+  clearSearch: 'تلاش صاف کریں',
+  resetSearch: 'تلاش کا فلٹر ہٹائیں',
+  resetDepartment: 'شعبے کا فلٹر ری سیٹ کریں',
+  resetStatus: 'حیثیت کا فلٹر ری سیٹ کریں',
+  resetSource: 'ماخذ کی قسم کا فلٹر ری سیٹ کریں',
+  resetUpdated: 'تاریخ کا فلٹر ری سیٹ کریں',
+  resetSort: 'ترتیب ری سیٹ کریں',
   navLibrary: 'پالیسی لائبریری',
   navUpload: 'ایس او پی اپ لوڈ کریں',
   navReview: 'نظرثانی کی فہرست',
@@ -365,6 +387,17 @@ const urdu: Copy = {
   unorderedList: 'بلٹ فہرست',
 };
 const roman_urdu: Copy = {
+  backToHome: 'Home par wapas jayein',
+  livePortal: 'Live Portal',
+  allPolicies: 'Tamam policies',
+  filters: 'Filters',
+  clearSearch: 'Talash saaf karein',
+  resetSearch: 'Talash ka filter hatayein',
+  resetDepartment: 'Shobay ka filter reset karein',
+  resetStatus: 'Status ka filter reset karein',
+  resetSource: 'Source type ka filter reset karein',
+  resetUpdated: 'Tareekh ka filter reset karein',
+  resetSort: 'Tarteeb reset karein',
   navLibrary: 'Policy Library',
   navUpload: 'SOP upload karein',
   navReview: 'Review Queue',

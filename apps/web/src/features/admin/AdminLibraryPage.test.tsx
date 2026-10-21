@@ -6,7 +6,10 @@ import { LanguageContext } from '../language/language-context';
 import { messages } from '../language/messages';
 import AdminLibraryPage from './AdminLibraryPage';
 
-function renderLibrary() {
+function renderLibrary(
+  route = '/admin/policies',
+  language: 'english' | 'urdu' = 'english',
+) {
   return render(
     <QueryClientProvider
       client={
@@ -15,15 +18,15 @@ function renderLibrary() {
     >
       <LanguageContext
         value={{
-          language: 'english',
+          language,
           hasPreference: true,
           profileId: 'admin',
           bindProfile: () => {},
           setLanguage: async () => {},
-          t: (key) => messages.english[key],
+          t: (key) => messages[language][key],
         }}
       >
-        <MemoryRouter initialEntries={['/admin/policies']}>
+        <MemoryRouter initialEntries={[route]}>
           <AdminLibraryPage />
         </MemoryRouter>
       </LanguageContext>
@@ -152,4 +155,63 @@ describe('policy library role actions', () => {
     if (!policyCard) throw new Error('Policy card is missing');
     expect(within(policyCard).getByText('Archived')).toBeVisible();
   });
+});
+
+it('clears review filters back to the review queue, not all current policies', async () => {
+  window.localStorage.setItem('ajt-fixture-identity', 'system-admin');
+  stubLibrary('system_admin');
+  renderLibrary('/admin/review-queue');
+  const status = (await screen.findAllByRole('combobox')).at(0);
+  if (!status) throw new Error('Status filter missing');
+  expect(status).toHaveValue('Review Required');
+  fireEvent.change(screen.getByRole('searchbox'), {
+    target: { value: 'missing' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(status).toHaveValue('Review Required');
+  expect(screen.getByRole('searchbox')).toHaveValue('');
+});
+
+it('localizes icon-only filter controls and resets sort independently', async () => {
+  window.localStorage.setItem('ajt-fixture-identity', 'system-admin');
+  stubLibrary('system_admin');
+  renderLibrary('/admin/policies', 'urdu');
+  const selects = await screen.findAllByRole('combobox');
+  const sort = selects.at(3);
+  if (!sort) throw new Error('Sort filter missing');
+  fireEvent.change(sort, { target: { value: 'Title A–Z' } });
+  fireEvent.click(screen.getByRole('button', { name: 'ترتیب ری سیٹ کریں' }));
+  expect(sort).toHaveValue('Recently Updated');
+  fireEvent.change(screen.getByRole('searchbox'), {
+    target: { value: 'policy' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'تلاش صاف کریں' }));
+  expect(screen.getByRole('searchbox')).toHaveValue('');
+});
+
+it('keeps the review queue default when clearing the empty-results action', async () => {
+  window.localStorage.setItem('ajt-fixture-identity', 'system-admin');
+  stubLibrary('system_admin', [
+    {
+      id: 'published-synthetic',
+      policy_number: null,
+      organization_id: 'ajt',
+      title: 'Synthetic published SOP',
+      category: 'Operations',
+      status: 'active',
+      active_version_id: 'v1',
+      created_at: '2026-09-01T00:00:00Z',
+      updated_at: '2026-09-20T00:00:00Z',
+      versions: [],
+      sources: [],
+      section_count: 1,
+    },
+  ]);
+  renderLibrary('/admin/review-queue');
+  await screen.findByText('No matching SOPs');
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  const status = screen.getAllByRole('combobox').at(0);
+  if (!status) throw new Error('Status filter missing');
+  expect(status).toHaveValue('Review Required');
+  expect(screen.queryByText('Synthetic published SOP')).not.toBeInTheDocument();
 });
