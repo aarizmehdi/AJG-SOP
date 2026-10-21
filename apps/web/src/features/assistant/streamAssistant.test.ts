@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe('verified assistant stream', () => {
-  it('parses split UTF-8 events and sends bounded ephemeral context with auth', async () => {
+  it('parses split UTF-8 events and sends only a server reference ID with auth', async () => {
     window.localStorage.setItem('ajt-fixture-identity', 'employee');
     const stream = [
       event('status', { stage: 'retrieving' }),
@@ -20,6 +20,7 @@ describe('verified assistant stream', () => {
         answerable: true,
         language: 'urdu',
         verified: true,
+        conversation_id: '9f8fbc65-f153-4b8c-a348-1438d9813786',
       }),
       event('answer_delta', { text: '**جواب**' }),
       event('sources', { citations: [] }),
@@ -32,8 +33,11 @@ describe('verified assistant stream', () => {
       );
       expect(JSON.parse(init.body as string)).toMatchObject({
         language: 'urdu',
-        history: [],
       });
+      expect(JSON.parse(init.body as string)).not.toHaveProperty(
+        'conversation_id',
+      );
+      expect(JSON.parse(init.body as string)).not.toHaveProperty('history');
       return Promise.resolve(
         new Response(
           new ReadableStream({
@@ -54,7 +58,7 @@ describe('verified assistant stream', () => {
     const result = await streamAssistant(
       'سوال؟',
       'urdu',
-      [],
+      null,
       new AbortController().signal,
       {
         onStatus: (stage) => stages.push(stage),
@@ -64,6 +68,7 @@ describe('verified assistant stream', () => {
     expect(stages).toEqual(['retrieving']);
     expect(deltas).toEqual(['**جواب**']);
     expect(result.answer).toBe('**جواب**');
+    expect(result.conversation_id).toBe('9f8fbc65-f153-4b8c-a348-1438d9813786');
   });
 
   it('never displays a delta before verified start or accepts an incomplete stream', async () => {
@@ -83,7 +88,7 @@ describe('verified assistant stream', () => {
       streamAssistant(
         'Question?',
         'english',
-        [],
+        null,
         new AbortController().signal,
         {
           onStatus: vi.fn(),

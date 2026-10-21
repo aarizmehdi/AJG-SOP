@@ -5,6 +5,7 @@ import re
 from collections.abc import Callable, Sequence
 from time import perf_counter
 from typing import Protocol
+from uuid import UUID
 
 from apps.api.app.models.organization import EmployeeProfile, MembershipStatus
 from apps.api.app.repositories.database import CanonicalDatabase
@@ -32,8 +33,9 @@ from services.assistant.answerability import (
     AnswerabilityResult,
 )
 from services.assistant.citations import CitationValidator
-from services.assistant.conversation import build_query_plan, canned
+from services.assistant.conversation import QueryPlan, build_query_plan, canned
 from services.assistant.grounding import GroundingVerifier
+from services.assistant.reference_state import ConversationReferences, trusted_query_plan
 
 
 class EvidenceRetriever(Protocol):
@@ -73,6 +75,7 @@ class AssistantService:
         metrics: MetricsRegistry | None = None,
         database: CanonicalDatabase | None = None,
         policy_reader: AuthorizedPolicyReader | None = None,
+        references: ConversationReferences | None = None,
     ) -> None:
         self.retrieval = retrieval
         self.answerability = answerability
@@ -82,6 +85,53 @@ class AssistantService:
         self.metrics = metrics
         self.database = database
         self.policy_reader = policy_reader
+        self.references = references or ConversationReferences()
+
+    async def answer_conversation_with_context(
+        self,
+        profile: EmployeeProfile,
+        question: str,
+        language: Language,
+        conversation_id: UUID | None = None,
+        progress: Callable[[str], None] | None = None,
+    ) -> tuple[VerifiedAnswer, list[AssistantEvidence]]:
+        """Public transport path: client history is never trusted as conversation state."""
+        turn = self.references.begin(profile, conversation_id)
+        references = turn.references
+        if references:
+            try:
+                await self.assert_release_authorized(profile, (), references)
+            except VerificationError:
+                references = ()
+        plan = trusted_query_plan(question, references)
+        result, context = await self.answer_with_context(
+            profile, question, language, progress=progress, query_plan=plan
+        )
+        remembered = list(result.section_options)
+        if result.kind is ResponseKind.POLICY_ANSWER:
+            cited_ids = {citation.chunk_id for citation in result.citations}
+            for item in context:
+                if item.chunk_id not in cited_ids:
+                    continue
+                # Source identities/headings come from fresh authorized evidence,
+                # never from model prose, user text or client-provided history.
+                reference = AssistantSectionOption(
+                    policy_id=item.policy_id,
+                    policy_title=item.policy_title,
+                    version_id=item.version_id,
+                    section_id=item.section_id,
+                    heading=item.heading_path[-1] if item.heading_path else item.policy_title,
+                    heading_path=item.heading_path,
+                    source=item.source,
+                )
+                if reference not in remembered:
+                    remembered.append(reference)
+        elif result.kind is ResponseKind.SMALLTALK:
+            remembered = list(references)
+        if remembered:
+            await self.assert_release_authorized(profile, context, remembered)
+        self.references.remember(profile, turn, remembered)
+        return result.model_copy(update={"conversation_id": turn.conversation_id}), context
 
     async def answer(
         self,
@@ -101,11 +151,13 @@ class AssistantService:
         language: Language,
         history: Sequence[ConversationTurn] = (),
         progress: Callable[[str], None] | None = None,
+        *,
+        query_plan: QueryPlan | None = None,
     ) -> tuple[VerifiedAnswer, list[AssistantEvidence]]:
         started = perf_counter()
 
         # Planning resolves references only. No model or client history supplies policy facts.
-        plan = build_query_plan(question, history)
+        plan = query_plan or build_query_plan(question, history)
 
         if plan.answer_mode in {InternalAnswerMode.NO_ANSWER, InternalAnswerMode.ASK_CLARIFICATION}:
             kind_map = {
@@ -529,7 +581,9 @@ class AssistantService:
                 or current.status is not MembershipStatus.ACTIVE
             ):
                 raise VerificationError("Membership is no longer active")
-        if evidence and not await self.retrieval.revalidate_evidence(current, evidence):
+        if (evidence or section_options) and not await self.retrieval.revalidate_evidence(
+            current, evidence
+        ):
             raise VerificationError("Policy evidence is no longer available")
         if section_options and self.policy_reader is not None:
             documents = {
